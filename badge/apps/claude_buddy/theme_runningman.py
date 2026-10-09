@@ -72,8 +72,7 @@ class Theme(S.Theme):
         self.run = [gfx.to_image(g, rp) for g in F.cycle(RUNNER_SPEC, "run", 8)]
         self.sprint = [gfx.to_image(g, rp) for g in F.cycle(RUNNER_SPEC, "sprint", 8, mouth=True)]
         self.stalker = [gfx.to_image(g, sp) for g in F.cycle(STALKER_SPEC, "run", 8)]
-        self.hearts = gfx.heart_set(PINK, (70, 10, 40), BLACK, (255, 200, 230))
-        self.hearts_grey = gfx.heart_set((110, 110, 120), (50, 50, 60), BLACK)[2]
+        self.clock = gfx.clock_icon(YELLOW, BLACK)
         self.far = self._skyline()
         self.mid = self._fence()
         self.ground = self._ground()
@@ -263,10 +262,45 @@ class Theme(S.Theme):
             if S.blink(t, 500):
                 screen.pen = gfx.rgb(RED)
                 screen.shape(shape.circle(x - 5, 5, 3))
-        low = st.hearts is not None and st.hearts <= 4
-        gfx.draw_hearts(self.hearts, st.hearts, 2, 11, blink=low and S.blink(t, 300), unknown=self.hearts_grey)
-        gfx.text("WK", 88, 8, CYAN, font.sins)
-        gfx.meter(102, 13, 54, 4, st.week, CYAN, (30, 30, 60), (90, 90, 130))
+        self.draw_collar(st, t, 2, 10)
+        # the show's game clock: time until the collar recharges (5-hour reset)
+        gfx.box(94, 9, 64, 11, BLACK)
+        gfx.box(94, 9, 64, 1, PINK)
+        cd = gfx.countdown(st.left5)
+        w = gfx.width(cd, font.sins)
+        gfx.text(cd, 156 - w, 7, gfx.countdown_color(st.left5, YELLOW, (255, 150, 40), RED), font.sins)
+        screen.blit(self.clock, vec2(int(156 - w - 8), 12))
+
+    def draw_collar(self, st, t, x, y):
+        """The runner's explosive collar: 10 lights = the 5-hour budget.
+
+        Green = charge left, amber = half a light, dark red = spent. Under two
+        lights the rest flash red. The strip under the band is the weekly budget.
+        """
+        units = st.hearts
+        gfx.box(x, y + 1, 84, 7, (58, 62, 74))
+        gfx.box(x, y + 1, 84, 1, (110, 116, 132))
+        gfx.box(x, y, 4, 9, (120, 126, 142))
+        gfx.box(x + 80, y, 4, 9, (120, 126, 142))
+        low = units is not None and units <= 4
+        flash = low and S.blink(t, 250)
+        for i in range(10):
+            cx = x + 8 + i * 7
+            if units is None:
+                c = (40, 40, 48)
+            else:
+                left = units - i * 2
+                if left >= 2:
+                    c = (255, 50, 40) if flash else (70, 255, 140)
+                elif left == 1:
+                    c = (255, 50, 40) if flash else (255, 170, 0)
+                else:
+                    c = (72, 12, 16)
+            gfx.box(cx - 2, y + 2, 5, 5, c)
+            if units is not None and units - i * 2 >= 1 and not flash:
+                gfx.box(cx - 1, y + 3, 1, 1, (255, 255, 255))
+        # weekly budget: a thin charge strip under the collar
+        gfx.meter(x + 4, y + 10, 76, 1, st.week, CYAN, (30, 30, 60))
 
     def rtext(self, s, c):
         x = 158 - gfx.width(s, font.sins)
@@ -285,7 +319,7 @@ class Theme(S.Theme):
         if st.waiting and (t // 2500) % 2 == 0:
             return "AUDIENCE VOTE: YOUR MOVE!"
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
-            return "RUNNER WOUNDED! LOW HEARTS"
+            return "COLLAR LOW! RECHARGE " + gfx.countdown(st.left5)
         lv = st.level
         n = max(1, st.busy)
         if lv == S.SLEEP:
