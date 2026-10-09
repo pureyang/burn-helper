@@ -44,6 +44,16 @@ BEARD = F.Spec(torso_w=5, hair="long", hat="cap", beard=True, shins=F.SKIN)
 CROWD = F.Spec(torso_w=4, hair="short", shins=F.SKIN)
 
 
+# A box of chocolates is Forrest's life meter: 10 chocolates = the full
+# 5-hour budget, a bitten one = half, an empty paper cup = used up.
+CHOC_FULL = ("...dddd...", ".dMMMMMMd.", "dMHHMMMMMd", "dMMMMMMMMd", "CdMMMMMMdC", "CCddddddCC", ".CCCCCCCC.")
+CHOC_HALF = ("...ddd....", ".dMMMMd...", "dMHHMMMd..", "dMMMMMMFF.", "CdMMMMMMdC", "CCddddddCC", ".CCCCCCCC.")
+CHOC_GONE = ("..........", "..........", "..........", ".c......c.", "CccccccccC", "CCccccccCC", ".CCCCCCCC.")
+CHOC_KEYS = {"d": (52, 26, 12), "M": (124, 68, 34), "H": (214, 156, 104), "C": (200, 154, 64),
+             "c": (110, 82, 38), "F": (246, 176, 188)}
+SHOE = ("...WW..", "..WWWW.", "WWRRWWW", "WWWWRRW", "KKKKKKK")
+
+
 class Theme(S.Theme):
     name = "forrest"
     label = "FORREST"
@@ -80,8 +90,10 @@ class Theme(S.Theme):
             p[F.HAIR] = gfx.rgb(hairs[i])
             self.crowd.append([gfx.to_image(g, p) for g in F.cycle(CROWD, "run", 8)])
 
-        self.hearts = gfx.heart_set(RED, (234, 200, 190), INK)
-        self.hearts_grey = gfx.heart_set((170, 160, 150), (226, 218, 204), INK)[2]
+        self.chocs = (gfx.sprite(CHOC_FULL, CHOC_KEYS), gfx.sprite(CHOC_HALF, CHOC_KEYS),
+                      gfx.sprite(CHOC_GONE, CHOC_KEYS))
+        self.shoe = gfx.sprite(SHOE, {"W": (250, 250, 250), "R": RED, "K": (90, 80, 76)})
+        self.clock = gfx.clock_icon(INK, CREAM)
         self.feather = gfx.sprite(("....GWW", "..GWWW.", ".WWWG..", "WWG....", "G......"),
                                   {"W": (255, 255, 255), "G": (200, 200, 210)})
 
@@ -233,25 +245,43 @@ class Theme(S.Theme):
         if st.waiting:
             gfx.bubble(x + 30, foot - 54, "JENNY!", INK, WHITE, font.sins)
 
+    def draw_chocolates(self, units, x, y, blink):
+        # the box: gold trim, dark tray, 2 rows of 5
+        gfx.box(x, y, 65, 19, (214, 172, 76))
+        gfx.box(x + 1, y + 1, 63, 17, (66, 36, 22))
+        full, half, gone = self.chocs
+        for i in range(10):
+            if units is None:
+                img = gone
+            else:
+                left = units - i * 2
+                img = full if left >= 2 else (half if left == 1 else gone)
+                if blink and img is not gone:
+                    img = gone
+            screen.blit(img, vec2(x + 3 + (i % 5) * 12, y + 2 + (i // 5) * 8))
+
     def draw_hud(self, st, t):
         gfx.box(0, 0, 160, 22, CREAM)
         gfx.box(0, 21, 160, 1, (200, 180, 150))
         low = st.hearts is not None and st.hearts <= 4
-        gfx.draw_hearts(self.hearts, st.hearts, 2, 2, blink=low and S.blink(t, 300), unknown=self.hearts_grey)
+        self.draw_chocolates(st.hearts, 1, 1, low and S.blink(t, 300))
+        # time until the box refills (the 5-hour window resets)
+        screen.blit(self.clock, vec2(69, 2))
+        gfx.text(gfx.countdown(st.left5), 76, -2, gfx.countdown_color(st.left5, INK, (190, 120, 20), RED), font.sins)
         miles = str(min(st.tools, 99999))
         w = gfx.width(miles, font.sins)
         gfx.text(miles, 158 - w, -2, INK, font.sins)
-        gfx.text("MILES", 158 - w - 4 - gfx.width("MILES", font.sins), -2, (150, 110, 70), font.sins)
+        screen.blit(self.shoe, vec2(int(158 - w - 9), 2))
         # the weekly budget as a road from coast to coast
-        gfx.box(2, 13, 156, 6, (96, 92, 92))
+        gfx.box(69, 13, 88, 6, (96, 92, 92))
         if st.week is not None:
-            fw = int(156 * st.week)
-            gfx.box(2, 13, fw, 6, (76, 72, 72))
-            for x in range(4, 2 + fw - 4, 10):
+            fw = int(88 * st.week)
+            gfx.box(69, 13, fw, 6, (76, 72, 72))
+            for x in range(71, 69 + fw - 4, 10):
                 gfx.box(x, 15, 5, 2, (255, 224, 90))
-            gfx.box(2 + fw - 2, 12, 3, 8, RED)
+            gfx.box(69 + fw - 2, 12, 3, 8, RED)
         if not st.online and S.blink(t, 600):
-            gfx.text("?", 92, -2, RED, font.sins)
+            gfx.text("?", 62, -2, RED, font.sins)
 
     def draw_caption(self, st, t):
         gfx.box(0, 108, 160, 12, (30, 24, 20))
@@ -264,7 +294,7 @@ class Theme(S.Theme):
         if st.waiting and (t // 2500) % 2 == 0:
             return "%d SESSION%s NEED YOU" % (st.waiting, "" if st.waiting == 1 else "S")
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
-            return "I'M PRETTY TIRED..."
+            return "I'M PRETTY TIRED... %d CHOCOLATE%s LEFT" % ((st.hearts + 1) // 2, "" if (st.hearts + 1) // 2 == 1 else "S")
         lv = st.level
         alt = (t // 3500) % 2
         if lv == S.SLEEP:
