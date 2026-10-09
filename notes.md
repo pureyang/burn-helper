@@ -42,3 +42,15 @@ Flashed firmware/tufty-v3.1.1-micropython-with-filesystem.uf2 -> reports "tufty 
 - USB: product "Pimoroni Tufty 2350 MicroPython", serial = chip id; port /dev/cu.usbmodem<locationID>01.
 - Wi-Fi creds carried over from the conference secrets.py are for a network not in range here; the
   Mac's own network is not visible to the badge on 2.4 GHz (needs a 2.4 GHz SSID or phone hotspot).
+
+## Wi-Fi debugging (2026-10-09)
+- Phone portal saved the home network (2.4 GHz ch6, -56 dBm, 2-3 BSSIDs = mesh). Saved password had a
+  trailing space (phone keyboard). Joins with the password as saved AND trimmed, pinned to the
+  strongest BSSID, security WPA2/WPA3 / WPA3 / WPA-WPA2, country US, pm=PM_NONE, up to 35 s:
+  wlan.status() stays 1 (joining) forever, never -3. Conclusion so far: router never completes the
+  handshake for this badge (wrong password most likely; else WPA3-only or MAC filter).
+  Badge STA MAC: shown on the debug screen (Raspberry Pi OUI 28:cd:c1).
+- cyw43 here does not report -3 (wrong password) within 35 s; a stuck status 1 is the only signal.
+  claude_buddy calls this verdict STUCK after 20 s.
+- Debug: press B twice on the badge, or `python3 tools/netdebug.py` over USB. Log persists in
+  /state/claude_buddy_net.log on the badge.

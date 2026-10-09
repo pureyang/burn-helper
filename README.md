@@ -16,6 +16,42 @@ Real screenshots from the badge:
 
 ![Zelda on the badge](docs/img/device_zelda.png) ![Running Man on the badge](docs/img/device_runningman.png) ![Forrest on the badge](docs/img/device_forrest.png)
 
+## Hardware
+
+### The combination that works today
+
+This is the exact setup this repo was built and tested on:
+
+| Part | Tested with |
+|---|---|
+| Badge | Pimoroni **Tufty 2350**, the edition handed out at **Supabase Select 2026**. It has an RP2350 (rev A4) with 16 MB of flash and a 320×240 colour screen, which the app drives at 160×120 pixel-doubled. Its radio is a Raspberry Pi CYW43439 module (2.4 GHz only), with four case LEDs and a USB-C port |
+| Badge firmware | Stock Pimoroni Tufty 2350 MicroPython **v3.1.1** "with filesystem", from [pimoroni/tufty2350 releases](https://github.com/pimoroni/tufty2350/releases). It reports `tufty 3.4.0`, MicroPython bw-1.29.0-gc. This replaces the conference firmware |
+| Computer | **Mac mini (Mac18,5, Apple silicon), macOS 27.0** (build 26A428) |
+| Mac software | The Apple-supplied `/usr/bin/python3` 3.9.6 (no extra packages), `picotool` 2.3.1 from Homebrew, and **Claude Code 2.1.295 / 2.1.296** (native install) |
+| Link | **USB-C data cable from the badge to the Mac**: confirmed working end to end |
+
+**Wi-Fi status:** the Wi-Fi code path works in testing. Discovery and polling were tested
+against the live bridge, and the badge's setup hotspot works. A Wi-Fi network has not yet been
+confirmed end to end in the test environment. The home network tried so far never accepted the
+badge, which shows as STUCK on the debug screen. Use the
+[Wi-Fi troubleshooting](#wi-fi-troubleshooting) steps to find out why.
+
+### Compatibility
+
+| Device or setup | Status |
+|---|---|
+| Tufty 2350, Supabase Select 2026 edition | **Tested** (after reflashing to stock firmware, below) |
+| Tufty 2350, retail Pimoroni unit | Should work: same board and same stock firmware. Not tested |
+| Pimoroni firmware v4.0.0-ide.1 or later | Not tested. Stay on v3.1.1 unless you want to try |
+| Badger 2350 (e-ink), Blinky 2350 (LED matrix) | Not supported. They run the same framework, but the themes are drawn for the Tufty's colour screen |
+| Tufty 2040 (older badge) | Not supported: no Wi-Fi and a different firmware/API |
+| Other Macs on recent macOS with `/usr/bin/python3` 3.9+ | Should work. Only the Mac above is tested |
+| Linux / Windows as the bridge host | Not supported yet. The server is plain Python, but install, USB detection and the login item are macOS-specific (`launchd`, `ioreg`) |
+| Claude Code versions | Needs a version that writes `~/.claude/sessions/*.json` and puts `rate_limits` in the status-line JSON. 2.1.295+ does |
+| Wi-Fi: 2.4 GHz, WPA2 (or WPA2/WPA3 mixed) with a password | Supported |
+| Wi-Fi: 5 GHz only, WPA3 only, enterprise (802.1X, eduroam) or captive-portal hotel/conference networks | Not supported by the badge |
+| Phone hotspot | Supported. On iPhone turn on *Maximize Compatibility* so it runs at 2.4 GHz. The Mac must join the same hotspot |
+
 ## How it works
 
 ```
@@ -53,79 +89,161 @@ Hearts: 10 hearts = 100% of the 5-hour limit left; each half heart is 5%. They b
 2 hearts. Hearts stay grey until a Claude Code status line has reported usage. That only
 happens on Claude subscription accounts.
 
-## Setup
+## Installation
 
-### 1. Flash the badge (done once)
+You need the badge, a USB-C **data** cable, a Mac with Claude Code installed, and Homebrew.
 
-The badge was flashed with the stock Pimoroni Tufty 2350 v3.1.1 firmware, which replaces the
-SELECT 2026 conference layer. A verified full backup of the conference firmware is in
-`backup/2026-10-09/flash-full.bin` (git-ignored, contains credentials). To go back:
+### 1. Get the tools and the code
+
+```
+brew install picotool
+git clone https://github.com/pureyang/tufty-badge.git
+cd tufty-badge
+```
+
+Download `tufty-v3.1.1-micropython-with-filesystem.uf2` from the
+[Tufty 2350 v3.1.1 release](https://github.com/pimoroni/tufty2350/releases/tag/v3.1.1)
+into a `firmware/` folder (`mkdir -p firmware`).
+
+### 2. Back up the badge
+
+Plug the badge into the Mac. The conference build is running and shows up as
+`/dev/cu.usbmodem*`. Reboot it into its bootloader, then save and verify all 16 MB of flash:
 
 ```
 python3 scripts/badge.py bootloader
-picotool load -v -x backup/2026-10-09/flash-full.bin
+mkdir -p backup/$(date +%F)
+picotool save -a backup/$(date +%F)/flash-full.bin
+picotool verify -o 0x10000000 backup/$(date +%F)/flash-full.bin
 ```
 
-### 2. Install the bridge, hooks and status line on the Mac
+If `bootloader` cannot reach the badge, hold **HOME** while pressing **RESET** instead. The
+backup contains the conference Wi-Fi password and keys. `backup/` is git-ignored, so keep it
+that way.
+
+### 3. Flash the stock firmware
 
 ```
-python3 bridge/install.py --dry-run   # show the settings.json change
-python3 bridge/install.py             # install; --uninstall removes everything it added
+picotool load -v -x firmware/tufty-v3.1.1-micropython-with-filesystem.uf2
 ```
 
-This backs up `~/.claude/settings.json` and then adds async hooks. The hooks never block a
-session, and they send only the session id, event name, tool name and hostname. The installer
-sets the status line if you have none, and adds a LaunchAgent so the bridge starts at login.
-Its log is at `~/Library/Logs/tufty-bridge.log`. Open `http://<mac-ip>:8787/` on your phone for
-the status panel and theme picker.
+The badge restarts into Pimoroni's launcher. To go back to the conference firmware later, run
+`picotool load -v -x backup/<date>/flash-full.bin` from the bootloader.
 
-### 3. Put the badge on Wi-Fi
+### 4. Tell the badge your Wi-Fi (optional now, you can use your phone later)
 
-The badge radio is **2.4 GHz only**. Use one of these:
+```
+cp badge/secrets.example.py badge/secrets.py   # git-ignored
+# edit WIFI_SSID / WIFI_PASSWORD: a 2.4 GHz network the Mac is also on
+```
 
-- **From your phone:** on the badge, hold **B** for 2 seconds. It becomes a hotspot. Scan the
-  QR code, open `http://192.168.4.1` and add your network. The badge restarts and joins it.
-  This is also how to add your phone's own hotspot. On iPhone, turn on *Maximize
-  Compatibility* in Personal Hotspot so it runs at 2.4 GHz.
-- **From the Mac:** edit `badge/secrets.py` (git-ignored, see `badge/secrets.example.py`),
-  then run `python3 tools/deploy.py`.
+### 5. Install the app on the badge
 
-The badge must be on the same network as the Mac, so it can hear the bridge's beacon. To skip
-discovery, set a fixed `BRIDGE = "192.168.x.y:8787"`. While the badge is plugged into the Mac
-by USB it gets its data over the cable and needs no Wi-Fi at all.
+```
+python3 tools/deploy.py --all
+```
+
+This copies `badge/` onto the badge's `/system` over USB, which takes about 40 s, then
+restarts it. From now on the badge boots straight into the app. Later deploys only send
+changed files.
+
+### 6. Install the bridge on the Mac
+
+```
+python3 bridge/install.py --dry-run   # shows exactly what will change
+python3 bridge/install.py
+```
+
+This backs up `~/.claude/settings.json`, then adds the async hooks and the hearts status line,
+and starts the bridge as a login item. The log is at `~/Library/Logs/tufty-bridge.log`. Restart
+open Claude Code sessions so they pick up the hooks. To remove everything it added, run
+`python3 bridge/install.py --uninstall`.
+
+### 7. Check it
+
+```
+curl -s http://127.0.0.1:8787/status    # level, busy, hearts...
+```
+
+- With the badge on USB it should show your activity within a few seconds. Press **B** and the
+  first info line should read `DATA USB CABLE`.
+- Open `http://<your-mac-ip>:8787/` on your phone for the status panel and theme picker.
+- Unplug the badge to run on Wi-Fi. Press **B** twice for the Wi-Fi debug screen if it doesn't
+  connect.
+
+## Putting the badge on Wi-Fi
+
+The badge radio is **2.4 GHz only**, and the badge must be on the **same network as the Mac**
+so it can hear the bridge's beacon.
+
+- **From your phone:** hold **B** for 2 seconds. The badge becomes a hotspot and shows a QR
+  code. Scan it, open `http://192.168.4.1`, and tap one of the networks the badge can see. Then
+  type the password, using *Show password* to check it. The badge restarts and joins.
+- **From the Mac:** edit `badge/secrets.py`, then run `python3 tools/deploy.py`.
+- **No discovery?** If your network blocks broadcasts, set a fixed bridge address
+  (`BRIDGE = "192.168.x.y:8787"` in `secrets.py`, or the portal's bridge field).
+
+## Wi-Fi troubleshooting
+
+![Wi-Fi debug screen (simulator render, placeholder names)](docs/img/device_debug.png)
+
+**On the badge:** press **B** twice to open the Wi-Fi debug screen. Each saved network gets a
+line with its channel, signal strength and a verdict, and a plain-language hint sits at the
+bottom. Press **UP** there to rescan and retry immediately.
+
+**On the Mac:** with the badge plugged in and the app running, this prints the full diagnosis
+and the recent network log. It shows password lengths but never the passwords themselves.
+
+```
+python3 tools/netdebug.py
+```
+
+| Verdict | Meaning | What to do |
+|---|---|---|
+| `NOT SEEN` | The badge can't hear that network name | It is 5 GHz only, hidden, or out of range. Use the router's 2.4 GHz name, or a phone hotspot with *Maximize Compatibility* |
+| `STUCK` | The router never let the badge in. The join never completed and no error came back | Most often a wrong password. Re-enter it with *Show password*; the badge trims a stray trailing space automatically. Otherwise the router is WPA3-only (switch to WPA2/WPA3 mixed) or filters MAC addresses (allow the MAC shown on the debug screen) |
+| `BAD PW` | The router rejected the password | Re-enter it (hold **B**) |
+| `NO IP` | Joined but got no address | The router's DHCP is full or broken; restart the router |
+| `OK`, but `BEACON NEVER` | On Wi-Fi but can't hear the bridge | The Mac is on another network or a guest/isolated network, or broadcasts are blocked. Put both on the same network, or set a fixed `BRIDGE` address |
+| `OK`, bridge not answering | Found the bridge but the HTTP poll fails | Check `curl http://<mac-ip>:8787/status` from another device, and the macOS firewall |
+
+The network log is also kept on the badge in `/state/claude_buddy_net.log`.
 
 ## Buttons
 
 | Button | Action |
 |---|---|
 | A / C | previous / next theme |
-| B | info screen: data source, Wi-Fi, bridge, raw numbers, battery. Hold 2 s for phone setup |
-| UP | demo mode, which cycles every level (good for showing it off) |
+| B | info screen, then Wi-Fi debug screen, then back. Hold 2 s for phone setup |
+| UP | demo mode, which cycles every level (on the debug screen: rescan Wi-Fi) |
 | DOWN | brightness |
 | HOME | stock app menu; HOME again comes back |
 
 ## Development
 
 ```
-python3 tools/simulate.py                 # render every theme/level to tools/sim/out/*.png
-python3 tools/deploy.py                   # copy changed files to the badge over USB and restart
-python3 tools/deploy.py --shot-only x.png # grab what the badge is showing right now
-python3 tools/sim/test_net.py             # badge networking code against a live local bridge
-python3 tools/sim/test_portal.py          # phone setup portal form handling
-python3 scripts/badge.py exec "print(1)"  # raw REPL one-liner
+python3 tools/simulate.py                       # render every theme/level to tools/sim/out/*.png
+python3 tools/sim/preview_debug.py              # render the Wi-Fi debug screen states
+python3 tools/deploy.py                         # copy changed files to the badge and restart
+python3 tools/deploy.py --shot-only x.png [--view 2]   # screenshot the badge (2 = debug screen)
+python3 tools/netdebug.py                       # badge Wi-Fi diagnosis over USB
+python3 tools/sim/test_net.py                   # badge networking code against a live local bridge
+python3 tools/sim/test_portal.py                # phone setup portal form handling
+python3 scripts/badge.py exec "print(1)"        # raw REPL one-liner
 ```
 
 The simulator (`tools/sim/pvshim.py`) re-implements the badge's `picovector` drawing calls
 with the pixel rules measured on the device. These are nearest-neighbour blits and flips, and
 the ROM pixel fonts with the firmware's spacing. So the PNGs match the real screen.
 `tools/deploy.py` remounts the badge's read-only `/system` volume read-write over serial, so
-deploying doesn't need USB disk mode.
+deploying doesn't need USB disk mode. The badge tools take a lock file so the bridge's USB
+tether pauses while they use the port.
 
 ## Contents
 
 - `badge/` - everything that goes onto the badge's `/system` (app, `main.py`, secrets template)
 - `bridge/` - Mac-side bridge, hook, status line, installer ([details](bridge/README.md))
-- `tools/` - deploy, simulator, tests, icon generator
+- `tools/` - deploy, Wi-Fi debug, simulator, tests, icon generator
 - `scripts/badge.py` - stdlib serial/raw-REPL helper (also `bootloader`, `disk`, `reset`)
 - `scripts/probe_board.py`, `scripts/serial_template.py` - original probe scripts
 - `notes.md` - board facts, firmware findings, gotchas
