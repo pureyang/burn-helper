@@ -7,10 +7,38 @@
   within seconds -> scripts must finish quickly or feed machine.WDT(timeout=8000).
 - /system is read-only from the REPL (errno 30); edit secrets.py via disk mode (MSC).
 - Custom layer: /system/main.py installs BadgeLink (Supabase realtime/push client in /system/lib).
-- Wi-Fi: joining a network via network.WLAN reset the board 4/4 times (BadgeLink radio mgmt suspected, unproven).
+- Wi-Fi: joining a network via network.WLAN reset the board 4/4 times on the conference build (likely the
+  same watchdog as above: the join blocks longer than the WDT timeout). Not seen on stock firmware.
 
 ## Backup (2026-10-06)
 backup/2026-10-06/flash-full.bin  (picotool save -a, 16 MB, read twice, identical)
 sha256 1938cf165eececc6b0a75e61abd3399e4cf0fc70e5b0ffaf850799f076e69621
 CONTAINS CREDENTIALS (Wi-Fi password, Supabase keys, device token). Do not sync or commit.
 Restore: picotool load -v -x backup/2026-10-06/flash-full.bin   (board in BOOTSEL)
+
+## Stock firmware (flashed 2026-10-09)
+Fresh verified backup first: backup/2026-10-09/flash-full.bin
+sha256 08a8f3a75ae0f54e7d55211a67cff711ffe8b97341baeb4d4f8078da29dc6d05 (picotool verify: OK)
+Flashed firmware/tufty-v3.1.1-micropython-with-filesystem.uf2 -> reports "tufty 3.4.0", MicroPython bw-1.29.0-gc 2026-09-23.
+- Flash layout: 0x10000000 firmware, 0x10200000 ROMFS (/rom, fonts only), 0x10300000 FAT (/system,
+  4 KB sectors, FAT12), last 1 MB LittleFS (/ with /state, writable). Source of the frozen
+  modules: github.com/pimoroni/tufty2350 modules/common.
+- /system is FAT mounted readonly=True by _boot_fat. Safe to remount rw from the REPL outside disk
+  mode: vfs.umount('/system'); vfs.mount(vfs.VfsFat(rp2.Flash(start=0, len=size-1MB)), '/system').
+  tools/deploy.py does this.
+- Default display mode LORES 160x120 (pixel-doubled to the 320x240 panel); badge.mode(HIRES) = 320x240.
+- App globals (screen, badge, color, image, shape, font, rect, vec2, run, launch...) are injected
+  into builtins by the badgeware module, not visible from a bare REPL after Ctrl-C.
+- An exception inside run(update) -> fatal_error screen until a button press. HOME = IRQ -> app
+  on_exit -> machine.reset(). badge.caselights(v) drives the 4 case LEDs (0..1).
+- wifi.connect() (frozen) calls fatal_error on failure -> claude_buddy drives network.WLAN itself.
+- CYW43 radio is 2.4 GHz only. AP mode works: ap.config(ssid=..., key=...) -> 192.168.4.1, WPA2.
+- No loopback interface while Wi-Fi is down (sockets to 127.0.0.1 -> EHOSTUNREACH).
+- picovector facts measured: fresh image is transparent; blit(img, rect) scales nearest-neighbour;
+  negative rect width flips; image.qr(text, 0, 0, 1) returns a QR image; pixel fonts (.ppf):
+  46-byte header, (u32 codepoint, u16 width) table, 1bpp rows; advance = width + 1, space = (h+2)//4.
+- Performance (claude_buddy, LORES): theme draw 10-14 ms/frame, capped at 25 fps (11 fps asleep).
+  Building a theme's sprites takes ~1-2 s the first time it is shown.
+- USB: product "Pimoroni Tufty 2350 MicroPython", serial = chip id; port /dev/cu.usbmodem<locationID>01.
+- Wi-Fi creds carried over from the conference secrets.py are for a network not in range here; the
+  Mac's own network is not visible to the badge on 2.4 GHz (needs a 2.4 GHz SSID or phone hotspot).
