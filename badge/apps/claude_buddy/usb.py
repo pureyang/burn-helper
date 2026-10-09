@@ -21,6 +21,7 @@ class UsbLink:
         self.shot_req = False
         self.netlog_req = False
         self.view_req = None
+        self.demo_req = None
         try:
             self.poller = select.poll()
             self.poller.register(sys.stdin, select.POLLIN)
@@ -57,6 +58,12 @@ class UsbLink:
             return
         if line.startswith("@NETLOG"):
             self.netlog_req = True
+            return
+        if line.startswith("@DEMO "):
+            try:
+                self.demo_req = int(line[6:].strip())
+            except ValueError:
+                pass
             return
         if line.startswith("@VIEW "):
             try:

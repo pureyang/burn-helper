@@ -5,7 +5,8 @@
     python3 tools/deploy.py --all      copy everything
     python3 tools/deploy.py --no-reset leave the badge at the REPL afterwards
     python3 tools/deploy.py --shot out.png   restart, wait, then pull a screenshot
-    python3 tools/deploy.py --shot-only out.png [--view 0|1|2]   screenshot now (view 2 = Wi-Fi debug)
+    python3 tools/deploy.py --shot-only out.png [--view 0|1|2] [--demo 0|1|2]
+        screenshot now (view 2 = Wi-Fi debug; demo 1 = tagged demo, 2 = untagged)
 
 The stock firmware mounts /system read-only. Outside USB disk mode nothing else
 is using that FAT volume, so this remounts it read-write for the copy, then
@@ -106,11 +107,14 @@ def pull(b, remote, local):
     open(local, "wb").write(base64.b64decode(out.strip()))
 
 
-def screenshot(path, wait=12.0, view=None):
+def screenshot(path, wait=12.0, view=None, demo=None):
     """Ask the running app for its current frame over USB and save it as a PNG."""
     time.sleep(wait)
     b = Badge()
     try:
+        if demo is not None:
+            b.write(b"@DEMO %d\n" % demo)
+            time.sleep(0.3)
         if view is not None:
             b.write(b"@VIEW %d\n" % view)
             time.sleep(0.6)
@@ -138,8 +142,9 @@ def main(argv):
     if "--shot" in argv:
         shot = argv[argv.index("--shot") + 1]
     view = int(argv[argv.index("--view") + 1]) if "--view" in argv else None
+    demo = int(argv[argv.index("--demo") + 1]) if "--demo" in argv else None
     if "--shot-only" in argv:
-        print("screenshot:", screenshot(argv[argv.index("--shot-only") + 1], wait=0, view=view))
+        print("screenshot:", screenshot(argv[argv.index("--shot-only") + 1], wait=0, view=view, demo=demo))
         return
     files = local_files()
     b = Badge()

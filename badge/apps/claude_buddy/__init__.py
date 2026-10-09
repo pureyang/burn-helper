@@ -7,7 +7,7 @@
 #   A / C      previous / next theme
 #   B          info screen -> Wi-Fi debug screen -> close; hold 2 s for phone setup
 #              (on the debug screen UP rescans and retries Wi-Fi right away)
-#   UP         demo mode (cycles every level, for showing it off)
+#   hold UP    demo mode for 2 s (cycles every level, shows a DEMO tag)
 #   DOWN       brightness
 #   HOME       switch to the stock app menu (HOME again comes back here)
 
@@ -45,7 +45,14 @@ link = net.Net(config.networks(), config.bridge())
 tether = usb.UsbLink()
 themes = {}
 view = 0        # 0 theme, 1 info overlay, 2 Wi-Fi debug
-demo = False
+demo = 0            # 0 off, 1 demo with a DEMO tag, 2 demo with no tag
+DEMO_HOLD_MS = 2000      # hold UP alone
+HIDDEN_HOLD_MS = 3000    # hold UP + DOWN together
+PORTAL_HOLD_MS = 1800    # hold B alone
+SHORT_MS = 700           # longer than this is a hold, not a press
+down = {}                # button -> ticks when it went down
+fired = False            # a hold fired; ignore releases until every button is up
+wink_until = 0
 portal = None
 b_down_t = None
 seen = {"usb": 0, "net": 0}
@@ -129,20 +136,29 @@ def apply_bridge():
 
 
 def demo_status(t):
-    lv = (t // 4500) % 6
-    lv = (S.SLEEP, S.IDLE, S.WALK, S.RUN, S.SPRINT, S.WALK)[lv]
-    st.level = lv
-    st.busy = (0, 0, 1, 3, 6, 1)[(t // 4500) % 6]
-    st.waiting = 1 if (t // 4500) % 6 == 5 else 0
-    st.hearts = 20 - ((t // 900) % 21)
-    st.week = 0.6
-    st.tpm = (0, 0, 6, 22, 48, 4)[(t // 4500) % 6]
+    step = (t // 4500) % 6
+    st.level = (S.SLEEP, S.IDLE, S.WALK, S.RUN, S.SPRINT, S.WALK)[step]
+    st.busy = (0, 0, 1, 3, 6, 1)[step]
+    st.waiting = 1 if step == 5 else 0
+    st.tpm = (0, 0, 6, 22, 48, 4)[step]
     st.tools = 1234
     st.online = True
     st.net = ""
+    # a 90-second usage window: hearts drain for 75 s while the countdown runs
+    # down through minutes, milliseconds and microseconds, then it resets
+    into = (t % 90000) * 1000 + time.ticks_us() % 1000
+    st.left5 = 75 * 1000000 - into
+    st.hearts = 20 if st.left5 <= 0 else max(0, 20 - into // 3750000)
+    st.used5 = (20 - st.hearts) * 5
+    st.week = 0.6
+    st.used7 = 40
+    st.left7 = (3 * 86400 + 4 * 3600) * 1000000
 
 
 def lights(t):
+    if time.ticks_diff(wink_until, t) > 0:
+        badge.caselights(0.8)
+        return
     if not prefs.get("lights", True):
         return
     lv = st.level if st.online else S.SLEEP
@@ -168,10 +184,12 @@ def draw_info(t):
     screen.rectangle(0, 0, 160, 120)
     gfx.text("CLAUDE BUDDY", 4, -1, (217, 119, 87), font.sins)
     rows = []
-    rows.append("DATA %s" % ({"usb": "USB CABLE", "net": "WI-FI"}.get(source, "NONE") if st.online else "OFFLINE"))
+    if demo:
+        rows.append("DATA DEMO%s" % (" (NO TAG)" if demo == 2 else ""))
+    else:
+        rows.append("DATA %s" % ({"usb": "USB CABLE", "net": "WI-FI"}.get(source, "NONE") if st.online else "OFFLINE"))
     if link.state == "up":
-        rows.append("WIFI %s" % link.ssid[:12])
-        rows.append("IP   %s" % link.ip)
+        rows.append("WIFI %s  %s" % (link.ssid[:10], link.ip))
     else:
         rows.append("WIFI " + (link.label() or link.state)[:22])
     b = link.bridge
@@ -198,45 +216,78 @@ def draw_info(t):
     gfx.text("HOLD B: PHONE SETUP", 4, 107, (120, 120, 130), font.sins)
 
 
-def handle_buttons(t):
-    global view, demo, portal, b_down_t, last_input, dimmed
-    any_btn = badge.pressed() or badge.held()
-    if any_btn:
-        last_input = t
-        if dimmed:
-            dimmed = False
-            set_brightness(prefs["bright"])
-    if portal is not None:
-        if badge.pressed(BUTTON_B):
-            portal.close()
-            portal = None
-            link.stop()
-        return
-    if badge.pressed(BUTTON_A):
+def is_up(b, t):
+    """True once a button is physically released (they read 0 while pressed)."""
+    if badge.released(b):
+        return True
+    try:
+        return b.value() == 1 and time.ticks_diff(t, down[b]) > 100
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def short_press(b):
+    global view, dimmed
+    if b == BUTTON_A:
         switch(-1)
-    if badge.pressed(BUTTON_C):
+    elif b == BUTTON_C:
         switch(1)
-    if badge.pressed(BUTTON_UP) and view == 2:
+    elif b == BUTTON_B:
+        view = (view + 1) % 3
+    elif b == BUTTON_UP and view == 2:
         link.rescan()
         show_toast("RESCANNING")
-    elif badge.pressed(BUTTON_UP):
-        demo = not demo
-        show_toast("DEMO ON" if demo else "DEMO OFF")
-    if badge.pressed(BUTTON_DOWN):
+    elif b == BUTTON_DOWN:
         prefs["bright"] = (prefs["bright"] + 1) % len(BRIGHT)
         set_brightness(prefs["bright"])
         save_prefs()
         show_toast("BRIGHTNESS %d%%" % int(BRIGHT[prefs["bright"]] * 100))
-    if badge.pressed(BUTTON_B):
-        b_down_t = t
-    if b_down_t is not None and badge.held(BUTTON_B) and time.ticks_diff(t, b_down_t) > 1800:
-        b_down_t = None
-        view = 0
-        start_portal()
-    if badge.released(BUTTON_B):
-        if b_down_t is not None:
-            view = (view + 1) % 3
-        b_down_t = None
+
+
+def handle_buttons(t):
+    """Short presses act on release; holds act once while held."""
+    global view, demo, portal, last_input, dimmed, fired, wink_until
+    if badge.pressed() or badge.held():
+        last_input = t
+        if dimmed:
+            dimmed = False
+            set_brightness(prefs["bright"])
+    for b in (BUTTON_A, BUTTON_B, BUTTON_C, BUTTON_UP, BUTTON_DOWN):
+        if badge.pressed(b) and b not in down:
+            down[b] = t
+    if portal is not None:
+        if BUTTON_B in down and is_up(BUTTON_B, t):
+            down.clear()
+            portal.close()
+            portal = None
+            link.stop()
+        return
+
+    def held(b):
+        return time.ticks_diff(t, down[b]) if b in down else -1
+
+    if not fired:
+        if held(BUTTON_UP) >= HIDDEN_HOLD_MS and held(BUTTON_DOWN) >= HIDDEN_HOLD_MS:
+            # undocumented: demo with no on-screen tag, for videos and talks
+            fired = True
+            demo = 0 if demo else 2
+            wink_until = time.ticks_add(t, 350)
+        elif held(BUTTON_UP) >= DEMO_HOLD_MS and BUTTON_DOWN not in down:
+            fired = True
+            demo = 0 if demo else 1
+            show_toast("DEMO ON" if demo else "DEMO OFF")
+        elif held(BUTTON_B) >= PORTAL_HOLD_MS and len(down) == 1:
+            fired = True
+            view = 0
+            start_portal()
+            return
+    for b in list(down):
+        if is_up(b, t):
+            dur = time.ticks_diff(t, down.pop(b))
+            if not fired and dur <= SHORT_MS:
+                short_press(b)
+    if not down:
+        fired = False
 
 
 def start_portal():
@@ -309,7 +360,7 @@ def update():
         gfx.box(80 - w // 2, 48, w, 13, (0, 0, 0))
         gfx.box(80 - w // 2, 48, w, 1, (217, 119, 87))
         gfx.ctext(toast, 80, 48, (255, 255, 255), font.sins)
-    if demo:
+    if demo == 1:
         gfx.text("DEMO", 136, 96, (255, 255, 255), font.sins, shadow=(0, 0, 0))
     if view == 1:
         draw_info(t)
@@ -318,6 +369,9 @@ def update():
     lights(t)
     power_save(t)
     perf[0] = perf[0] * 0.9 + time.ticks_diff(time.ticks_ms(), t_start) * 0.1
+    if tether.demo_req is not None:
+        globals()["demo"] = tether.demo_req % 3
+        tether.demo_req = None
     if tether.view_req is not None:
         globals()["view"] = tether.view_req % 3
         tether.view_req = None
