@@ -54,3 +54,10 @@ Flashed firmware/tufty-v3.1.1-micropython-with-filesystem.uf2 -> reports "tufty 
   claude_buddy calls this verdict STUCK after 20 s.
 - Debug: press B twice on the badge, or `python3 tools/netdebug.py` over USB. Log persists in
   /state/claude_buddy_net.log on the badge.
+
+## Working conventions
+- Commits: small, logical steps, one purpose per commit (a tool, a module, a theme, a fix, docs),
+  never one giant commit. Write the subject as an imperative summary and say why in the body.
+  Split work before committing; if a big commit slips through on an unpushed branch, split it.
+- Keep private data out of tracked files: Wi-Fi names and passwords, the badge MAC, flash dumps,
+  badge/secrets.py. Use placeholder names in screenshots and docs.
