@@ -179,11 +179,11 @@ def draw_info(t):
     rows.append("BRDG %s%s" % ("%s:%d" % b if b else "searching", age))
     rows.append("BUSY %d  WAIT %d  IDLE %d" % (st.busy, st.waiting, st.idle))
     rows.append("TOOLS/MIN %d  TODAY %d" % (st.tpm, st.tools))
-    d = (tether.data if source == "usb" else link.data) or {}
-    fh = d.get("five_hour") or {}
-    sd = d.get("seven_day") or {}
-    rows.append("5H %s  7D %s" % ("%d%%" % int(fh["used"]) if "used" in fh else "--",
-                                  "%d%%" % int(sd["used"]) if "used" in sd else "--"))
+    for label, used, left in (("5H", st.used5, st.left5), ("7D", st.used7, st.left7)):
+        pct = "--" if used is None else "%d%%" % int(used)
+        when = gfx.countdown(left)
+        rows.append("%s %s USED%s" % (label, pct, "" if left is None else
+                                      (", RESET IN " + when if left > 0 else ", " + when)))
     try:
         bat = "USB" if badge.usb_connected() else "%d%%" % badge.battery_level()
     except Exception:  # noqa: BLE001
@@ -300,6 +300,8 @@ def update():
     st.net = "" if tether.fresh() else link.label()
     if demo:
         demo_status(t)
+    else:
+        st.tick()
     th = theme_obj(prefs["theme"])
     th.draw(st, t)
     if toast is not None and time.ticks_diff(t, toast_t) < 1500:

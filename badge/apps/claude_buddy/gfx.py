@@ -124,6 +124,42 @@ def wrap(s, max_w, fnt):
     return lines
 
 
+def countdown(us):
+    """Time left until a usage window resets, from microseconds (int).
+
+    Hours and minutes while it is far off, a ticking clock under an hour,
+    milliseconds in the last minute and microseconds in the last ten seconds.
+    """
+    if us is None:
+        return "--:--"
+    if us <= 0:
+        # the window has rolled over: usage is back to full
+        return "RESET!" if us > -60 * 1000000 else "FULL"
+    s = us // 1000000
+    if s >= 86400:
+        return "%dD%02dH" % (s // 86400, s % 86400 // 3600)
+    if s >= 3600:
+        return "%dH%02dM" % (s // 3600, s % 3600 // 60)
+    if s >= 60:
+        return "%d:%02d" % (s // 60, s % 60)
+    if s >= 10:
+        return "%d.%03d" % (s, us % 1000000 // 1000)
+    return "%d.%06d" % (s, us % 1000000)
+
+
+def countdown_color(us, normal, soon=(255, 214, 90), now=(255, 90, 80)):
+    if us is None or us > 600 * 1000000 or us <= -60 * 1000000:
+        return normal
+    return soon if us > 60 * 1000000 else now
+
+
+CLOCK_ICON = (".KKK.", "KWWWK", "KWKWK", "KWWKK", ".KKK.")
+
+
+def clock_icon(ink, face):
+    return sprite(CLOCK_ICON, {"K": ink, "W": face})
+
+
 # --------------------------------------------------------------- hearts
 
 HEART = (

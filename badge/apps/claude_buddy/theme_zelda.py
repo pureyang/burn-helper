@@ -59,6 +59,7 @@ RUPEE = ("..G..", ".GgG.", "GgWgG", "GgggG", "GgggG", "GgggG", ".GgG.", "..G..")
 KEY = (".YY.", "Y..Y", ".YY.", "..Y.", "..YY", "..Y.", "..YY")
 BOMB = ("....o", "...K.", ".BBB.", "BWBBB", "BBBBB", "BBBBB", ".BBB.")
 FAIRY = ("w...w", "ww.ww", ".wCw.", "ww.ww", "w...w")
+HOURGLASS = ("KKKKK", ".KSK.", "..S..", ".KSK.", "KKKKK")
 
 
 class Theme(S.Theme):
@@ -84,6 +85,7 @@ class Theme(S.Theme):
         self.key = gfx.sprite(KEY, {"Y": GOLD})
         self.bomb = gfx.sprite(BOMB, {"B": (40, 64, 200), "W": WHITE, "K": (160, 120, 80), "o": (252, 160, 40)})
         self.fairy = gfx.sprite(FAIRY, {"w": (200, 230, 255), "C": WHITE})
+        self.clock = gfx.sprite(HOURGLASS, {"K": (200, 160, 80), "S": GOLD})
 
         self.far = self._mountains()
         self.mid = self._trees()
@@ -223,7 +225,12 @@ class Theme(S.Theme):
         screen.blit(self.bomb, vec2(31, 12))
         gfx.text("x%d" % st.waiting, 39, 9, WHITE, font.sins)
 
-        gfx.ctext("-LIFE-", 117, -2, RED, font.sins)
+        gfx.text("-LIFE-", 76, -2, RED, font.sins)
+        # time until the hearts refill (the 5-hour window resets)
+        cd = gfx.countdown(st.left5)
+        w = gfx.width(cd, font.sins)
+        gfx.text(cd, 158 - w, -2, gfx.countdown_color(st.left5, WHITE), font.sins)
+        screen.blit(self.clock, vec2(int(158 - w - 8), 2))
         low = st.hearts is not None and st.hearts <= 4
         gfx.draw_hearts(self.hearts, st.hearts, 76, 9, blink=low and S.blink(t, 300), unknown=self.hearts_grey)
         # magic meter under the hearts = weekly budget
@@ -242,7 +249,7 @@ class Theme(S.Theme):
         if st.waiting and (t // 2500) % 2 == 0:
             return "%d QUEST%s NEED YOU!" % (st.waiting, "" if st.waiting == 1 else "S")
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
-            return "LOW ON HEARTS! REST SOON"
+            return "LOW HEARTS! REFILL IN " + gfx.countdown(st.left5)
         lv = st.level
         if lv == S.SLEEP:
             return "LINK IS ASLEEP... ZZZ"

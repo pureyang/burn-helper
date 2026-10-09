@@ -1,6 +1,7 @@
 # Shared scene machinery for the themes: status model, scrolling layers, timing.
 
 import math
+import time
 import gfx
 
 W = gfx.W
@@ -20,7 +21,7 @@ class Status:
 
     def __init__(self):
         self.level = SLEEP
-        self.hearts = None      # remaining 5-hour budget, half-hearts 0..20
+        self.hearts = None      # remaining 5-hour budget, half units 0..20
         self.week = None        # remaining 7-day budget, 0..1
         self.busy = 0
         self.waiting = 0
@@ -33,12 +34,28 @@ class Status:
         self.net = "BOOTING"    # short network state for overlays
         self.clock = ""
         self.demo = False
+        self.used5 = None       # percent used, as reported
+        self.used7 = None
+        self.reset5 = None      # epoch seconds when each window resets
+        self.reset7 = None
+        self.left5 = None       # MICROseconds until each reset; set by tick()
+        self.left7 = None
+        # Bridge clock anchor. Everything is whole numbers: the badge's floats
+        # are 32-bit and cannot hold an epoch time to the second.
+        self._now_ms = None     # bridge time (epoch ms) at the anchor
+        self._at_ms = 0         # time.ticks_ms() at the anchor
+        self._at_us = 0         # time.ticks_us() at the anchor
 
     def update(self, d):
         self.level = int(d.get("level") or 0)
         self.hearts = d.get("hearts")
         wk = d.get("seven_day")
         self.week = None if not wk else max(0.0, min(1.0, (100.0 - float(wk.get("used", 0))) / 100.0))
+        fh = d.get("five_hour") or {}
+        self.used5 = fh.get("used")
+        self.reset5 = fh.get("resets_at")
+        self.used7 = (wk or {}).get("used")
+        self.reset7 = (wk or {}).get("resets_at")
         self.busy = int(d.get("busy") or 0)
         self.waiting = int(d.get("waiting") or 0)
         self.idle = int(d.get("idle") or 0)
@@ -47,6 +64,39 @@ class Status:
         self.tpm = int(d.get("tpm") or 0)
         self.tools = int(d.get("tools_today") or 0)
         self.clock = d.get("clock") or ""
+        now_ms = d.get("now_ms")
+        if now_ms is None and d.get("ts") is not None:
+            now_ms = int(d.get("ts")) * 1000
+        if now_ms is not None:
+            self.anchor(int(now_ms))
+
+    def anchor(self, now_ms):
+        # Keep the running clock unless the bridge disagrees by over a second,
+        # so network jitter never makes the countdown jump backwards.
+        mine = self.now_ms()
+        if mine is None or abs(mine - now_ms) > 1000:
+            self._now_ms = now_ms
+            self._at_ms = time.ticks_ms()
+            self._at_us = time.ticks_us()
+
+    def now_ms(self):
+        if self._now_ms is None:
+            return None
+        return self._now_ms + time.ticks_diff(time.ticks_ms(), self._at_ms)
+
+    def _now_us(self):
+        if self._now_ms is None:
+            return None
+        ms = time.ticks_diff(time.ticks_ms(), self._at_ms)
+        # ticks_us wraps after about 9 minutes; use it only while it is valid
+        us = time.ticks_diff(time.ticks_us(), self._at_us) if ms < 500000 else ms * 1000
+        return self._now_ms * 1000 + us
+
+    def tick(self):
+        """Refresh the countdowns; call once per frame."""
+        now = self._now_us()
+        self.left5 = None if (now is None or not self.reset5) else int(self.reset5) * 1000000 - now
+        self.left7 = None if (now is None or not self.reset7) else int(self.reset7) * 1000000 - now
 
 
 class Layer:

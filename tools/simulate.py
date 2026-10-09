@@ -23,15 +23,16 @@ import scene  # noqa: E402
 OUT = os.path.join(HERE, "sim", "out")
 THEMES = ["zelda", "runningman", "forrest"]
 
+M = 1000000  # microseconds
 SCENARIOS = [
-    # label, t (ms), status fields
-    ("0 asleep", 1000, dict(level=0, hearts=20, week=0.92, busy=0, sessions=2, tools=0)),
-    ("1 idle", 2000, dict(level=1, hearts=17, week=0.8, busy=0, sessions=3, tools=14)),
-    ("2 walk", 3100, dict(level=2, hearts=13, week=0.7, busy=1, sessions=3, tools=128, tpm=6)),
-    ("3 run", 4200, dict(level=3, hearts=9, week=0.55, busy=3, sessions=5, tools=402, tpm=22)),
-    ("4 sprint", 5300, dict(level=4, hearts=5, week=0.3, busy=6, sessions=8, tools=1337, tpm=48, subagents=4)),
-    ("4 sprint (alt)", 7350, dict(level=4, hearts=3, week=0.2, busy=5, sessions=8, tools=2048, tpm=55, subagents=3)),
-    ("waiting", 6000, dict(level=2, hearts=11, week=0.6, busy=1, waiting=2, sessions=4, tools=250, tpm=4)),
+    # label, t (ms), status fields (left5/left7 = microseconds until the window resets)
+    ("0 asleep", 1000, dict(level=0, hearts=20, week=0.92, busy=0, sessions=2, tools=0, left5=-3600 * M)),
+    ("1 idle", 2000, dict(level=1, hearts=17, week=0.8, busy=0, sessions=3, tools=14, left5=(2 * 3600 + 13 * 60) * M)),
+    ("2 walk", 3100, dict(level=2, hearts=13, week=0.7, busy=1, sessions=3, tools=128, tpm=6, left5=(13 * 60 + 42) * M)),
+    ("3 run", 4200, dict(level=3, hearts=9, week=0.55, busy=3, sessions=5, tools=402, tpm=22, left5=42173000)),
+    ("4 sprint", 5300, dict(level=4, hearts=5, week=0.3, busy=6, sessions=8, tools=1337, tpm=48, subagents=4, left5=9173248)),
+    ("4 sprint (alt)", 7350, dict(level=4, hearts=3, week=0.2, busy=5, sessions=8, tools=2048, tpm=55, subagents=3, left5=4 * 60 * M)),
+    ("waiting", 6000, dict(level=2, hearts=11, week=0.6, busy=1, waiting=2, sessions=4, tools=250, tpm=4, left5=(65 * 60) * M)),
     ("offline", 6600, dict(level=0, hearts=None, week=None, online=False, net="SEARCHING FOR BRIDGE...")),
 ]
 
