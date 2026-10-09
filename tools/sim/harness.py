@@ -45,6 +45,12 @@ class FakeBadge:
 
 
 def install():
+    import time
+    if not hasattr(time, "ticks_ms"):
+        t0 = time.monotonic()
+        time.ticks_ms = lambda: int((time.monotonic() - t0) * 1000)
+        time.ticks_diff = lambda a, b: a - b
+        time.ticks_add = lambda a, b: a + b
     for name in ("color", "rect", "vec2", "image", "font", "shape"):
         setattr(builtins, name, getattr(pvshim, name))
     builtins.screen = pvshim.image(160, 120)

@@ -5,6 +5,7 @@
     python3 tools/deploy.py --all      copy everything
     python3 tools/deploy.py --no-reset leave the badge at the REPL afterwards
     python3 tools/deploy.py --shot out.png   restart, wait, then pull a screenshot
+    python3 tools/deploy.py --shot-only out.png [--view 0|1|2]   screenshot now (view 2 = Wi-Fi debug)
 
 The stock firmware mounts /system read-only. Outside USB disk mode nothing else
 is using that FAT volume, so this remounts it read-write for the copy, then
@@ -105,11 +106,14 @@ def pull(b, remote, local):
     open(local, "wb").write(base64.b64decode(out.strip()))
 
 
-def screenshot(path, wait=12.0):
+def screenshot(path, wait=12.0, view=None):
     """Ask the running app for its current frame over USB and save it as a PNG."""
     time.sleep(wait)
     b = Badge()
     try:
+        if view is not None:
+            b.write(b"@VIEW %d\n" % view)
+            time.sleep(0.6)
         for attempt in range(3):
             b.read(0.3)
             b.write(b"@SHOT\n")
@@ -133,8 +137,9 @@ def main(argv):
     shot = None
     if "--shot" in argv:
         shot = argv[argv.index("--shot") + 1]
+    view = int(argv[argv.index("--view") + 1]) if "--view" in argv else None
     if "--shot-only" in argv:
-        print("screenshot:", screenshot(argv[argv.index("--shot-only") + 1], wait=0))
+        print("screenshot:", screenshot(argv[argv.index("--shot-only") + 1], wait=0, view=view))
         return
     files = local_files()
     b = Badge()

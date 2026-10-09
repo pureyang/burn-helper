@@ -5,7 +5,8 @@
 #
 # Buttons
 #   A / C      previous / next theme
-#   B          info screen (Wi-Fi, bridge, raw numbers); hold 2 s for phone setup
+#   B          info screen -> Wi-Fi debug screen -> close; hold 2 s for phone setup
+#              (on the debug screen UP rescans and retries Wi-Fi right away)
 #   UP         demo mode (cycles every level, for showing it off)
 #   DOWN       brightness
 #   HOME       switch to the stock app menu (HOME again comes back here)
@@ -27,6 +28,7 @@ import gfx  # noqa: E402
 import net  # noqa: E402
 import scene as S  # noqa: E402
 import usb  # noqa: E402
+import debugview  # noqa: E402
 
 THEMES = ("zelda", "runningman", "forrest")
 LABELS = {"zelda": "HYRULE", "runningman": "THE RUNNING MAN", "forrest": "FORREST"}
@@ -42,7 +44,7 @@ st = S.Status()
 link = net.Net(config.networks(), config.bridge())
 tether = usb.UsbLink()
 themes = {}
-info = False
+view = 0        # 0 theme, 1 info overlay, 2 Wi-Fi debug
 demo = False
 portal = None
 b_down_t = None
@@ -197,7 +199,7 @@ def draw_info(t):
 
 
 def handle_buttons(t):
-    global info, demo, portal, b_down_t, last_input, dimmed
+    global view, demo, portal, b_down_t, last_input, dimmed
     any_btn = badge.pressed() or badge.held()
     if any_btn:
         last_input = t
@@ -214,7 +216,10 @@ def handle_buttons(t):
         switch(-1)
     if badge.pressed(BUTTON_C):
         switch(1)
-    if badge.pressed(BUTTON_UP):
+    if badge.pressed(BUTTON_UP) and view == 2:
+        link.rescan()
+        show_toast("RESCANNING")
+    elif badge.pressed(BUTTON_UP):
         demo = not demo
         show_toast("DEMO ON" if demo else "DEMO OFF")
     if badge.pressed(BUTTON_DOWN):
@@ -226,11 +231,11 @@ def handle_buttons(t):
         b_down_t = t
     if b_down_t is not None and badge.held(BUTTON_B) and time.ticks_diff(t, b_down_t) > 1800:
         b_down_t = None
-        info = False
+        view = 0
         start_portal()
     if badge.released(BUTTON_B):
         if b_down_t is not None:
-            info = not info
+            view = (view + 1) % 3
         b_down_t = None
 
 
@@ -239,7 +244,7 @@ def start_portal():
     link.stop()
     try:
         import portal as P
-        portal = P.Portal()
+        portal = P.Portal(link.results())
     except Exception as e:  # noqa: BLE001
         show_toast("SETUP FAILED")
         link.err = repr(e)[:40]
@@ -304,11 +309,22 @@ def update():
         gfx.ctext(toast, 80, 48, (255, 255, 255), font.sins)
     if demo:
         gfx.text("DEMO", 136, 96, (255, 255, 255), font.sins, shadow=(0, 0, 0))
-    if info:
+    if view == 1:
         draw_info(t)
+    elif view == 2:
+        debugview.draw(link, tether, source, t)
     lights(t)
     power_save(t)
     perf[0] = perf[0] * 0.9 + time.ticks_diff(time.ticks_ms(), t_start) * 0.1
+    if tether.view_req is not None:
+        globals()["view"] = tether.view_req % 3
+        tether.view_req = None
+    if tether.netlog_req:
+        tether.netlog_req = False
+        try:
+            usb.send_lines("NETLOG", link.dump() + ["-- log --"] + link.log)
+        except Exception as e:  # noqa: BLE001
+            print("@NETLOG-ERR", e)
     if tether.shot_req:
         tether.shot_req = False
         try:

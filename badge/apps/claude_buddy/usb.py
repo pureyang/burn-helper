@@ -19,6 +19,8 @@ class UsbLink:
         self.seq = 0
         self.err = ""
         self.shot_req = False
+        self.netlog_req = False
+        self.view_req = None
         try:
             self.poller = select.poll()
             self.poller.register(sys.stdin, select.POLLIN)
@@ -53,6 +55,15 @@ class UsbLink:
         if line.startswith("@SHOT"):
             self.shot_req = True
             return
+        if line.startswith("@NETLOG"):
+            self.netlog_req = True
+            return
+        if line.startswith("@VIEW "):
+            try:
+                self.view_req = int(line[6:].strip())
+            except ValueError:
+                pass
+            return
         i = line.find(MARK)
         if i < 0:
             return
@@ -78,3 +89,11 @@ def send_screenshot(info=""):
         sys.stdout.write(binascii.b2a_base64(data[i:i + 768]).decode().strip())
         sys.stdout.write(" ")
     sys.stdout.write("\n@END\n")
+
+
+def send_lines(tag, lines):
+    """Reply to a USB request with text lines between @TAG-BEGIN and @TAG-END."""
+    sys.stdout.write("\n@%s-BEGIN\n" % tag)
+    for ln in lines:
+        sys.stdout.write(str(ln) + "\n")
+    sys.stdout.write("@%s-END\n" % tag)
