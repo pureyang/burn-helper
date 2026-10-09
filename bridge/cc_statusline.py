@@ -2,7 +2,7 @@
 """Claude Code status line: show remaining usage as hearts and report it to the Tufty bridge.
 
 Prints one line such as:
-    ♥♥♥♥♥♥❥♡♡♡ 5h 38% (resets 3:10pm) · 7d 12% · ctx 45% · Opus 5.5
+    ♥♥♥♥♥♥❥♡♡♡ 5h 38% (resets in 1h23m) · 7d 12% (in 3d4h) · ctx 45% · Opus 5.5
 """
 import json
 import os
@@ -21,6 +21,24 @@ def hearts(used):
         r = half_units - i * 2
         out += FULL if r >= 2 else (HALF if r == 1 else EMPTY)
     return out
+
+
+def left(ts, now):
+    """Time until a reset: "2h13m", "13m", "42s". The status line only redraws
+    every few seconds, so finer ticking lives on the badge and the phone panel."""
+    try:
+        s = int(float(ts) - now)
+    except (TypeError, ValueError, OverflowError):
+        return ""
+    if s <= 0:
+        return "now"
+    if s >= 86400:
+        return "%dd%dh" % (s // 86400, s % 86400 // 3600)
+    if s >= 3600:
+        return "%dh%02dm" % (s // 3600, s % 3600 // 60)
+    if s >= 60:
+        return "%dm" % (s // 60)
+    return "%ds" % s
 
 
 def clock(ts):
@@ -73,17 +91,20 @@ def line(d):
         return u, r
 
     u5, r5 = used_of(five)
-    u7, _ = used_of(seven)
+    u7, r7 = used_of(seven)
     basis = u5 if u5 is not None else u7
     if basis is not None:
         parts.append(hearts(basis))
     if u5 is not None:
         s = "5h %d%%" % round(u5)
-        if r5:
-            s += " (resets %s)" % clock(r5)
+        if r5 and r5 > now:
+            s += " (resets in %s)" % left(r5, now)
         parts[-1] += " " + s
     if u7 is not None:
-        parts.append("7d %d%%" % round(u7))
+        s = "7d %d%%" % round(u7)
+        if r7 and r7 > now:
+            s += " (in %s)" % left(r7, now)
+        parts.append(s)
     cw = d.get("context_window") if isinstance(d.get("context_window"), dict) else {}
     ctx = num(cw.get("used_percentage"))
     if ctx is not None:
