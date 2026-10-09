@@ -85,9 +85,36 @@ Claude Code sessions ──hooks + status line──▶ bridge (Mac) ──Wi-Fi
 When any session is waiting for your input, Navi shouts "HEY! LISTEN!", the Running Man
 audience votes "YOUR MOVE!", or Forrest yells "JENNY!". The badge's four case LEDs blink too.
 
-Hearts: 10 hearts = 100% of the 5-hour limit left; each half heart is 5%. They blink below
-2 hearts. Hearts stay grey until a Claude Code status line has reported usage. That only
-happens on Claude subscription accounts.
+### Usage meters
+
+Every theme shows the 5-hour limit as ten icons, the weekly limit as a bar, and a countdown
+to the next 5-hour reset. Each icon is 10% of the limit left and a half icon is 5%. The icons
+flash once less than 20% is left.
+
+| Theme | 5-hour limit | Weekly limit | Countdown |
+|---|---|---|---|
+| Zelda | Hearts: full, half, empty | Green magic meter under the hearts | Hourglass beside "-LIFE-" |
+| Running Man | The runner's explosive collar: green light = charge left, amber = half, dark red = spent; the collar flashes red when low | Cyan charge strip under the collar | The show's game clock |
+| Forrest | A box of chocolates: whole, bitten (half), empty paper cup | The road from coast to coast | Clock beside the miles |
+
+![Zelda usage meter](docs/img/meter_zelda.png)
+![Running Man usage meter](docs/img/meter_runningman.png)
+![Forrest usage meter](docs/img/meter_forrest.png)
+
+The countdown shows hours and minutes while the reset is far off (`2H13M`). Under an hour it
+becomes a ticking clock (`13:42`), under a minute it shows milliseconds (`42.173`), and in the
+last ten seconds microseconds (`9.173248`). It turns yellow under 10 minutes and red under one.
+After the reset it shows `RESET!` for a minute, then `FULL`. The badge redraws 25 times a
+second, so the last digits blur by design. The countdown runs on the badge's own clock,
+synced to the bridge, so it ticks smoothly between updates.
+
+**How often the numbers update:** the usage percentages come from Claude Code's status line.
+The status line reruns after every Claude response and at least every 60 seconds in each
+open session (`refreshInterval` in `~/.claude/settings.json`), and the badge picks the new
+value up within 2 to 3 seconds. With no Claude Code session open, the last value stays. The
+meters stay grey until a status line has reported usage, which only happens on Claude
+subscription accounts. The terminal status line shows `resets in 1h23m`, and the phone panel
+runs the same live countdown as the badge.
 
 ## Installation
 
@@ -211,11 +238,16 @@ The network log is also kept on the badge in `/state/claude_buddy_net.log`.
 
 ## Buttons
 
+Short presses act when you let go, so holding a button never also triggers its press.
+
+![Demo mode on the badge](docs/img/device_demo.png)
+
 | Button | Action |
 |---|---|
 | A / C | previous / next theme |
 | B | info screen, then Wi-Fi debug screen, then back. Hold 2 s for phone setup |
-| UP | demo mode, which cycles every level (on the debug screen: rescan Wi-Fi) |
+| Hold UP 2 s | demo mode: cycles every level and a 90-second usage window with its countdown, with a DEMO tag. Hold again to stop |
+| UP | on the Wi-Fi debug screen: rescan |
 | DOWN | brightness |
 | HOME | stock app menu; HOME again comes back |
 
@@ -225,7 +257,7 @@ The network log is also kept on the badge in `/state/claude_buddy_net.log`.
 python3 tools/simulate.py                       # render every theme/level to tools/sim/out/*.png
 python3 tools/sim/preview_debug.py              # render the Wi-Fi debug screen states
 python3 tools/deploy.py                         # copy changed files to the badge and restart
-python3 tools/deploy.py --shot-only x.png [--view 2]   # screenshot the badge (2 = debug screen)
+python3 tools/deploy.py --shot-only x.png [--view 2] [--demo 1]   # screenshot the badge (2 = debug screen, demo 1 = demo)
 python3 tools/netdebug.py                       # badge Wi-Fi diagnosis over USB
 python3 tools/sim/test_net.py                   # badge networking code against a live local bridge
 python3 tools/sim/test_portal.py                # phone setup portal form handling
