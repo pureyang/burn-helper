@@ -1,3 +1,7 @@
 backup/
 *.uf2
 *.bin
+badge/secrets.py
+tools/sim/.cache/
+tools/sim/out/
+__pycache__/
