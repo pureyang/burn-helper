@@ -26,6 +26,20 @@ HTTP_TIMEOUT_MS = 4000
 JOIN_TIMEOUT_MS = 20000
 RETRY_ALL_MS = 15000
 FRESH_MS = 12000
+NO_BEACON_MS = 10000
+LOG_FILE = "/state/claude_buddy_net.log"
+LOG_MAX = 16384
+
+# wlan.status() codes (cyw43) and what they mean to a person
+STATUS_TEXT = {0: "idle", 1: "joining", 2: "linked, waiting for IP", 3: "connected",
+               -1: "connect failed", -2: "network not found", -3: "wrong password"}
+# per-network verdicts after an attempt
+OK = "connected"
+BAD_PW = "wrong password"
+STUCK = "never accepted the badge"
+NOT_SEEN = "not visible (5 GHz only / out of range?)"
+NO_IP = "joined but no IP address (DHCP)"
+FAILED = "connect failed"
 
 
 def ticks():
@@ -126,29 +140,78 @@ class HttpGet:
 
 
 class Net:
+    """Wi-Fi + bridge link with a diagnosis of every failure (see debug screen)."""
+
     def __init__(self, networks, bridge=None, hostname="tufty-claude"):
-        self.networks = [n for n in networks if n and n[0]]
-        self.fixed_bridge = bridge          # (host, port) or None
+        self.cands = []
+        for n in networks:
+            if not n or not n[0]:
+                continue
+            ssid, psk = n[0], n[1]
+            src = n[2] if len(n) > 2 else ""
+            self.cands.append({"ssid": ssid, "psk": psk, "src": src, "variant": "", "result": "", "tries": 0})
+            if psk != psk.strip():
+                # phone keyboards love adding a trailing space; also try without it
+                self.cands.append({"ssid": ssid, "psk": psk.strip(), "src": src, "variant": "trimmed",
+                                   "result": "", "tries": 0})
+        self.networks = self.cands            # truthy when anything is configured
+        self.fixed_bridge = bridge             # (host, port) or None
         self.bridge = bridge
         self.hostname = hostname
         self.wlan = None
-        self.state = "init"                 # init | joining | up | down | none
-        self.idx = 0
+        self.state = "init" if self.cands else "none"   # init|scan|joining|up|down|none
+        self.cur = None                        # index into cands
         self.join_t0 = 0
         self.down_t0 = 0
         self.ssid = ""
         self.ip = ""
+        self.gw = ""
+        self.mac = ""
+        self.seen = {}                         # ssid -> (best rssi, channel, access points)
+        self.scan_total = 0
+        self.scan_t = None
+        self.status = None
+        self.attempts = 0
+        self.up_t = None
         self.udp = None
         self.beacon_t = None
         self.http = None
         self.poll_t0 = None
         self.ok_t = None
         self.data = None
-        self.seq = 0                        # bumps on every fresh status
+        self.seq = 0
         self.err = ""
+        self.http_err = ""
         self.extra_query = ""
-        if not self.networks:
-            self.state = "none"
+        self.log = []
+        self.boot_t = ticks()
+        self._trim_logfile()
+        self.note("boot: %d network candidate(s)" % len(self.cands))
+
+    # -------------------------------------------------- logging
+    def note(self, msg):
+        line = "%5ds %s" % (since(self.boot_t) // 1000, msg)
+        self.log.append(line)
+        if len(self.log) > 40:
+            self.log.pop(0)
+        try:
+            with open(LOG_FILE, "a") as f:
+                f.write(line + "\n")
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _trim_logfile(self):
+        try:
+            import os
+            if os.stat(LOG_FILE)[6] > LOG_MAX:
+                with open(LOG_FILE) as f:
+                    keep = f.read()[-LOG_MAX // 2:]
+                with open(LOG_FILE, "w") as f:
+                    f.write(keep)
+            with open(LOG_FILE, "a") as f:
+                f.write("---- app start ----\n")
+        except Exception:  # noqa: BLE001
+            pass
 
     # -------------------------------------------------- public
     def tick(self):
@@ -159,17 +222,62 @@ class Net:
                 self._poll()
         except Exception as e:  # noqa: BLE001
             self.err = repr(e)[:40]
+            self.note("error: " + self.err)
 
     def fresh(self):
         return self.ok_t is not None and since(self.ok_t) < FRESH_MS
 
-    def label(self):
+    def results(self):
+        out = {}
+        for c in self.cands:
+            if c["result"]:
+                out[c["ssid"]] = c["result"]
+        return out
+
+    def hint(self):
+        """One plain-language diagnosis of what is wrong right now."""
         if self.state == "none":
-            return "NO WI-FI SET UP: HOLD B"
+            return "No Wi-Fi saved. Hold B for phone setup."
+        if self.state == "up":
+            if self.fixed_bridge is None and self.beacon_t is None and self.up_t is not None \
+                    and since(self.up_t) > NO_BEACON_MS:
+                return "On Wi-Fi but no bridge beacon: is the Mac on this same network?"
+            if self.bridge is not None and not self.fresh() and self.http_err:
+                return "Bridge %s:%d not answering (%s)" % (self.bridge[0], self.bridge[1], self.http_err)
+            if self.fresh():
+                return "All good."
+            return "Connected, waiting for the bridge..."
+        verdicts = [c for c in self.cands if c["result"]]
+        if self.seen is not None and self.scan_t is not None and not any(c["ssid"] in self.seen for c in self.cands):
+            return "None of your networks are visible. Badge is 2.4 GHz only."
+        for want in (BAD_PW, STUCK, NO_IP, FAILED):
+            for c in verdicts:
+                if c["result"] == want:
+                    if want == STUCK:
+                        return ("%s never let the badge in. Check the password (hold B). Router "
+                                "must allow WPA2 and not filter MACs." % c["ssid"])
+                    if want == BAD_PW:
+                        return "%s: wrong password. Hold B to re-enter it." % c["ssid"]
+                    if want == NO_IP:
+                        return "%s joined but gave no IP address (DHCP)" % c["ssid"]
+                    return "%s: connect failed" % c["ssid"]
+        if self.state == "scan":
+            return "Scanning for networks..."
+        return "Joining %s..." % self.ssid
+
+    def label(self):
+        """Short caption for the themes (about 26 characters)."""
+        if self.state == "none":
+            return "NO WI-FI: HOLD B TO SET UP"
+        if self.state == "scan":
+            return "SCANNING WI-FI..."
         if self.state in ("init", "joining"):
-            return "JOINING %s..." % self.ssid.upper()
+            bad = [c for c in self.cands if c["result"] in (BAD_PW, STUCK)]
+            if bad and (since(self.boot_t) // 3000) % 2:
+                return "WI-FI FAILING: PRESS B x2"
+            return "JOINING %s..." % self.ssid.upper()[:14]
         if self.state == "down":
-            return "WI-FI NOT FOUND, RETRYING"
+            return "WI-FI FAILING: PRESS B x2"
         if self.bridge is None:
             return "SEARCHING FOR BRIDGE..."
         if not self.fresh():
@@ -188,20 +296,83 @@ class Net:
             except Exception:  # noqa: BLE001
                 pass
         self.wlan = None
-        self.state = "init" if self.networks else "none"
+        self.state = "init" if self.cands else "none"
+        self.note("wifi stopped")
+
+    def rescan(self):
+        if self.state not in ("none", "up"):
+            self.state = "scan"
 
     # -------------------------------------------------- wifi
+    def _scan(self):
+        self.seen = {}
+        try:
+            res = self.wlan.scan()
+        except Exception as e:  # noqa: BLE001
+            self.note("scan failed: %r" % e)
+            res = []
+        self.scan_total = len(res)
+        for r in res:
+            try:
+                name = r[0].decode()
+            except Exception:  # noqa: BLE001
+                continue
+            if not name:
+                continue
+            old = self.seen.get(name)
+            if old is None:
+                self.seen[name] = (r[3], r[2], 1)
+            else:
+                best = old if old[0] >= r[3] else (r[3], r[2], 0)
+                self.seen[name] = (best[0], best[1], old[2] + 1)
+        self.scan_t = ticks()
+        mine = []
+        for c in self.cands:
+            info = self.seen.get(c["ssid"])
+            if c["variant"]:
+                continue
+            if info:
+                mine.append("%s ch%d %ddBm" % (c["ssid"], info[1], info[0]))
+            else:
+                mine.append("%s NOT VISIBLE" % c["ssid"])
+                c["result"] = NOT_SEEN
+        self.note("scan: %d networks; %s" % (self.scan_total, "; ".join(mine)))
+
+    def _next(self, start):
+        """Index of the next visible candidate at or after start, or None."""
+        for i in range(start, len(self.cands)):
+            if self.cands[i]["ssid"] in self.seen:
+                return i
+        return None
+
     def _join(self, i):
-        self.idx = i % len(self.networks)
-        ssid, psk = self.networks[self.idx]
-        self.ssid = ssid
+        c = self.cands[i]
+        self.cur = i
+        self.ssid = c["ssid"]
+        c["tries"] += 1
+        self.attempts += 1
         try:
             self.wlan.disconnect()
         except Exception:  # noqa: BLE001
             pass
-        self.wlan.connect(ssid, psk)
+        self.wlan.connect(c["ssid"], c["psk"])
         self.join_t0 = ticks()
+        self.status = None
         self.state = "joining"
+        self.note("join %s%s (password %d chars)" % (c["ssid"], " [trimmed]" if c["variant"] else "", len(c["psk"])))
+
+    def _verdict(self, st, timed_out):
+        if st == network.STAT_WRONG_PASSWORD:
+            return BAD_PW
+        if st == network.STAT_NO_AP_FOUND:
+            return NOT_SEEN
+        if st == network.STAT_CONNECT_FAIL:
+            return FAILED
+        if timed_out and st == 2:
+            return NO_IP
+        if timed_out:
+            return STUCK
+        return ""
 
     def _wifi(self):
         if self.state == "none" or network is None:
@@ -213,29 +384,54 @@ class Net:
                 pass
             self.wlan = network.WLAN(network.STA_IF)
             self.wlan.active(True)
+            try:
+                import binascii
+                self.mac = binascii.hexlify(self.wlan.config("mac"), ":").decode()
+            except Exception:  # noqa: BLE001
+                self.mac = "?"
             if self.wlan.isconnected():
                 self._up()
                 return
-            self._join(0)
+            self.state = "scan"        # scan on the next frame so "SCANNING" gets drawn first
+            return
+        if self.state == "scan":
+            self._scan()
+            i = self._next(0)
+            if i is None:
+                self.state = "down"
+                self.down_t0 = ticks()
+                self.note("none of the saved networks are visible; retry in %ds" % (RETRY_ALL_MS // 1000))
+            else:
+                self._join(i)
             return
         if self.state == "up":
             if not self.wlan.isconnected():
+                self.note("lost connection to %s" % self.ssid)
                 self._close_udp()
-                self._join(self.idx)
+                self.up_t = None
+                self.state = "scan"
             return
         if self.state == "down":
             if since(self.down_t0) > RETRY_ALL_MS:
-                self._join(0)
+                self.state = "scan"
             return
         # joining
         if self.wlan.isconnected():
             self._up()
             return
         st = self.wlan.status()
-        failed = st in (network.STAT_WRONG_PASSWORD, network.STAT_NO_AP_FOUND, network.STAT_CONNECT_FAIL)
-        if failed or since(self.join_t0) > JOIN_TIMEOUT_MS:
-            if self.idx + 1 < len(self.networks):
-                self._join(self.idx + 1)
+        if st != self.status:
+            self.note("status %d (%s) after %dms" % (st, STATUS_TEXT.get(st, "?"), since(self.join_t0)))
+            self.status = st
+        timed_out = since(self.join_t0) > JOIN_TIMEOUT_MS
+        verdict = self._verdict(st, timed_out)
+        if verdict:
+            c = self.cands[self.cur]
+            c["result"] = verdict
+            self.note("%s: %s" % (c["ssid"], verdict))
+            nxt = self._next(self.cur + 1)
+            if nxt is not None:
+                self._join(nxt)
             else:
                 self.state = "down"
                 self.down_t0 = ticks()
@@ -243,13 +439,46 @@ class Net:
                     self.wlan.disconnect()
                 except Exception:  # noqa: BLE001
                     pass
+                self.note("all networks failed; retry in %ds" % (RETRY_ALL_MS // 1000))
 
     def _up(self):
         self.state = "up"
+        self.up_t = ticks()
         try:
-            self.ip = self.wlan.ifconfig()[0]
+            cfg = self.wlan.ifconfig()
+            self.ip = cfg[0]
+            self.gw = cfg[2]
         except Exception:  # noqa: BLE001
             self.ip = "?"
+        if self.cur is not None:
+            self.cands[self.cur]["result"] = OK
+        self.note("connected to %s: ip %s gateway %s" % (self.ssid, self.ip, self.gw))
+
+    # -------------------------------------------------- diagnostics
+    def dump(self):
+        """Everything the debug screen knows, as text lines (also sent over USB)."""
+        out = ["state %s  attempts %d  mac %s" % (self.state, self.attempts, self.mac)]
+        if self.state == "up":
+            out.append("ssid %s  ip %s  gw %s" % (self.ssid, self.ip, self.gw))
+        elif self.status is not None:
+            out.append("%s %s: status %d (%s) for %ds" % (
+                "joining" if self.state == "joining" else "last join", self.ssid, self.status,
+                STATUS_TEXT.get(self.status, "?"), since(self.join_t0) // 1000))
+        for c in self.cands:
+            info = self.seen.get(c["ssid"])
+            vis = "ch%d %ddBm x%d" % (info[1], info[0], info[2]) if info else "not seen"
+            out.append("net %s%s [%s] pw %d chars%s | %s | tries %d | %s" % (
+                c["ssid"], " (trimmed)" if c["variant"] else "", c["src"] or "?", len(c["psk"]),
+                " ENDS WITH SPACE" if c["psk"] != c["psk"].rstrip() else "", vis, c["tries"], c["result"] or "-"))
+        out.append("scan: %d networks visible" % self.scan_total)
+        b = self.bridge
+        out.append("bridge %s  beacon %s  last ok %s  http %s" % (
+            "%s:%d" % b if b else "unknown",
+            "never" if self.beacon_t is None else "%ds ago" % (since(self.beacon_t) // 1000),
+            "never" if self.ok_t is None else "%ds ago" % (since(self.ok_t) // 1000),
+            self.http_err or "-"))
+        out.append("hint: " + self.hint())
+        return out
 
     # -------------------------------------------------- discovery
     def _close_udp(self):
@@ -284,6 +513,8 @@ class Net:
                     port = int(data.split()[2])
                 except Exception:  # noqa: BLE001
                     port = 8787
+                if self.beacon_t is None:
+                    self.note("heard bridge beacon from %r" % (addr,))
                 self.beacon_t = ticks()
                 if self.fixed_bridge is None:
                     host = addr[0] if isinstance(addr, tuple) else socket.inet_ntop(socket.AF_INET, addr[4:8])
@@ -295,12 +526,18 @@ class Net:
             self.http.step()
             if self.http.done:
                 if self.http.ok and isinstance(self.http.body, dict):
+                    if self.ok_t is None:
+                        self.note("first status from bridge %s:%d" % self.bridge)
                     self.data = self.http.body
                     self.ok_t = ticks()
                     self.seq += 1
                     self.err = ""
+                    self.http_err = ""
                 else:
-                    self.err = str(self.http.err)[:40]
+                    e = str(self.http.err)[:40]
+                    if e != self.http_err:
+                        self.note("bridge poll failed: " + e)
+                    self.http_err = e
                 self.http = None
             return
         if self.bridge is None:

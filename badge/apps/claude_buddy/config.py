@@ -45,18 +45,19 @@ def save_portal(d):
 
 
 def networks():
+    """[(ssid, password, source)] in the order to try: phone-added first, then secrets.py."""
     out = []
     for n in load_portal().get("networks", []):
         if isinstance(n, (list, tuple)) and len(n) == 2 and n[0]:
-            out.append((n[0], n[1]))
+            out.append((n[0], n[1], "phone"))
     s = _secrets()
     if s is not None:
         ssid = getattr(s, "WIFI_SSID", "")
         if ssid:
-            out.append((ssid, getattr(s, "WIFI_PASSWORD", "")))
+            out.append((ssid, getattr(s, "WIFI_PASSWORD", ""), "secrets"))
         for n in getattr(s, "WIFI_EXTRA", []) or []:
             if n and n[0]:
-                out.append((n[0], n[1]))
+                out.append((n[0], n[1], "secrets"))
     seen = []
     uniq = []
     for n in out:

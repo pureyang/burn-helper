@@ -107,6 +107,23 @@ def fit(s, max_w, fnt):
     return s + ".."
 
 
+def wrap(s, max_w, fnt):
+    """Greedy word wrap to max_w pixels."""
+    screen.font = fnt
+    lines = []
+    cur = ""
+    for word in s.split(" "):
+        test = word if not cur else cur + " " + word
+        if screen.measure_text(test)[0] <= max_w or not cur:
+            cur = test
+        else:
+            lines.append(cur)
+            cur = word
+    if cur:
+        lines.append(cur)
+    return lines
+
+
 # --------------------------------------------------------------- hearts
 
 HEART = (
