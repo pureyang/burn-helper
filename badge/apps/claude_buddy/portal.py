@@ -15,15 +15,21 @@ import config
 import gfx
 
 PAGE = """<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1">
-<title>Tufty setup</title><style>body{font-family:-apple-system,system-ui,sans-serif;max-width:420px;margin:24px auto;padding:0 16px;background:#111;color:#eee}
+<title>Tufty setup</title><style>body{font-family:-apple-system,system-ui,sans-serif;max-width:440px;margin:24px auto;padding:0 16px;background:#111;color:#eee}
 input,button{font-size:18px;width:100%;box-sizing:border-box;padding:10px;margin:6px 0 14px;border-radius:8px;border:1px solid #555;background:#222;color:#eee}
-button{background:#d97757;border:0;color:#111;font-weight:600}small{color:#999}li{margin:4px 0}</style></head><body>
-<h2>Tufty badge setup</h2><p>Add the Wi-Fi network the badge should join. It tries these first, then the one in secrets.py.</p>
-<form method=post action=/save><label>Wi-Fi name (SSID)<input name=ssid required></label>
-<label>Password<input name=psk type=password></label>
-<label>Bridge address <small>(optional, e.g. 192.168.1.20:8787; blank = auto-discover)</small><input name=bridge value="%BRIDGE%"></label>
+button{background:#d97757;border:0;color:#111;font-weight:600}small,.dim{color:#999}li{margin:6px 0}
+.net{display:flex;justify-content:space-between;padding:10px;margin:4px 0;border-radius:8px;background:#1d1d1d;cursor:pointer}
+.bad{color:#ff8a80}.ok{color:#8be38b}label.cb{display:flex;gap:8px;align-items:center;margin:-8px 0 14px}label.cb input{width:auto;margin:0}</style></head><body>
+<h2>Tufty badge setup</h2>
+<p class=dim>The badge only does <b>2.4 GHz</b> Wi-Fi with a WPA2 password. These are the networks it can hear right now; tap one to use it.</p>
+%SCAN%
+<form method=post action=/save><label>Wi-Fi name (SSID)<input id=ssid name=ssid required autocapitalize=none autocorrect=off spellcheck=false></label>
+<label>Password<input id=psk name=psk type=password autocapitalize=none autocorrect=off spellcheck=false></label>
+<label class=cb><input type=checkbox onclick="document.getElementById('psk').type=this.checked?'text':'password'">Show password (check it is exactly right)</label>
+<label>Bridge address <small>(optional, e.g. 192.168.1.20:8787; blank = auto-discover)</small><input name=bridge value="%BRIDGE%" autocapitalize=none autocorrect=off spellcheck=false></label>
 <button>Save and restart badge</button></form><h3>Saved networks</h3><ul>%LIST%</ul>
-<form method=post action=/forget><button style="background:#444;color:#eee">Forget saved networks</button></form></body></html>"""
+<form method=post action=/forget><button style="background:#444;color:#eee">Forget saved networks</button></form>
+<p class=dim>Badge MAC address: %MAC% (add it to your router's allow list if it filters devices).</p></body></html>"""
 
 DONE = """<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"></head>
 <body style="font-family:system-ui;background:#111;color:#eee;padding:24px"><h2>Saved.</h2><p>The badge restarts and joins the network. Reconnect your phone to your usual Wi-Fi.</p></body></html>"""
@@ -61,7 +67,23 @@ def _esc(s):
 
 
 class Portal:
-    def __init__(self):
+    def __init__(self, results=None):
+        self.results = results or {}
+        self.scan = []
+        self.mac = "?"
+        try:
+            import binascii
+            sta = network.WLAN(network.STA_IF)
+            sta.active(True)
+            self.mac = binascii.hexlify(sta.config("mac"), ":").decode()
+            best = {}
+            for r in sta.scan():
+                name = r[0].decode()
+                if name and (name not in best or r[3] > best[name][0]):
+                    best[name] = (r[3], r[2])
+            self.scan = sorted(best.items(), key=lambda kv: -kv[1][0])[:12]
+        except Exception:  # noqa: BLE001
+            pass
         uid = machine.unique_id()
         self.ssid = "Tufty-Claude-%02X%02X" % (uid[-2], uid[-1])
         self.psk = "buddy%02x%02x%02x" % (uid[-3], uid[-2], uid[-1])
@@ -130,7 +152,8 @@ class Portal:
             ssid = f.get("ssid", "").strip()
             if ssid:
                 nets = [n for n in d.get("networks", []) if n[0] != ssid]
-                d["networks"] = [[ssid, f.get("psk", "")]] + nets[:4]
+                # phone keyboards add trailing spaces; WPA passphrases never need them
+                d["networks"] = [[ssid, f.get("psk", "").strip()]] + nets[:4]
             d["bridge"] = f.get("bridge", "").strip()
             config.save_portal(d)
             self.saved = True
@@ -139,8 +162,22 @@ class Portal:
         if method == "POST" and path == "/forget":
             config.save_portal({"networks": [], "bridge": d.get("bridge", "")})
             d = config.load_portal()
-        items = "".join("<li>%s</li>" % _esc(n[0]) for n in d.get("networks", [])) or "<li><small>none</small></li>"
-        self.send(cl, PAGE.replace("%LIST%", items).replace("%BRIDGE%", _esc(d.get("bridge", ""))))
+        items = ""
+        for n in d.get("networks", []):
+            r = self.results.get(n[0], "")
+            cls = "ok" if r == "connected" else "bad"
+            items += "<li>%s <small>(password %d characters)</small>%s</li>" % (
+                _esc(n[0]), len(n[1]), " <span class=%s>last try: %s</span>" % (cls, _esc(r)) if r else "")
+        items = items or "<li><small>none</small></li>"
+        scan = ""
+        for name, (rssi, ch) in self.scan:
+            bars = "&#9679;" * (4 if rssi > -60 else 3 if rssi > -70 else 2 if rssi > -80 else 1)
+            scan += ("<div class=net onclick=\"document.getElementById('ssid').value=this.dataset.n;"
+                     "document.getElementById('psk').focus()\" data-n=\"%s\"><span>%s</span>"
+                     "<small>%s ch%d</small></div>") % (_esc(name), _esc(name), bars, ch)
+        scan = scan or "<p class=dim>(scan found nothing)</p>"
+        page = PAGE.replace("%LIST%", items).replace("%BRIDGE%", _esc(d.get("bridge", "")))
+        self.send(cl, page.replace("%SCAN%", scan).replace("%MAC%", _esc(self.mac)))
 
     def send(self, cl, html):
         data = html.encode()
