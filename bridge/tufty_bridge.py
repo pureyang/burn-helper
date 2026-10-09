@@ -341,6 +341,7 @@ class Bridge:
         return {
             "v": 1,
             "ts": int(now),
+            "now_ms": int(time.time() * 1000),
             "level": level,
             "busy": busy,
             "waiting": waiting,
@@ -632,6 +633,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 -apple-system,s
 h1{font-size:20px;margin:4px 0 12px}
 .card{background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:12px}
 .hearts{font-size:30px;letter-spacing:2px;color:var(--heart);line-height:1.1;word-break:break-all}
+.cd{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:6px}.cd.soon{color:var(--accent)}.cd.now{color:var(--heart)}
 .lvl{font-size:22px;font-weight:700}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
 .k{color:var(--dim);font-size:13px}.v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -646,6 +648,8 @@ button.on{border-color:var(--accent)}
   <div class="k">Remaining 5-hour budget</div>
   <div class="hearts" id="hearts">…</div>
   <div class="k" id="usage">waiting for status line data</div>
+  <div class="cd" id="cd5">--:--</div>
+  <div class="k">until the 5-hour window resets · weekly resets in <span id="cd7">--</span></div>
 </div>
 <div class="card">
   <div class="lvl" id="level">…</div>
@@ -672,7 +676,15 @@ button.on{border-color:var(--accent)}
 const LEVELS=["Asleep","Awake","Walking","Running","Sprinting"];
 function hearts(h){if(h===null||h===undefined)return"? ? ? ? ? ? ? ? ? ?";let s="";for(let i=0;i<10;i++){const r=h-i*2;s+=r>=2?"♥":r==1?"❥":"♡";}return s;}
 function when(t){if(!t)return"";const d=new Date(t*1000);return d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});}
-function pct(w,label){if(!w)return"";return label+" "+Math.round(w.used)+"% used"+(w.resets_at?" (resets "+when(w.resets_at)+")":"");}
+function pct(w,label){if(!w)return"";return label+" "+Math.round(w.used)+"% used";}
+let r5=null,r7=null,off=0;
+function fmt(ms){if(ms===null)return"--:--";if(ms<=0)return ms>-60000?"RESET!":"FULL";const s=Math.floor(ms/1000),p=n=>String(n).padStart(2,"0");
+if(s>=86400)return Math.floor(s/86400)+"d "+Math.floor(s%86400/3600)+"h";if(s>=3600)return Math.floor(s/3600)+"h "+p(Math.floor(s%3600/60))+"m";
+if(s>=60)return Math.floor(s/60)+":"+p(s%60);if(s>=10)return (ms/1000).toFixed(3);return (ms/1000).toFixed(6);}
+function frame(){const now=Date.now()+off+(performance.now()%1);const l5=r5?r5*1000-now:null,l7=r7?r7*1000-now:null;
+const e=document.getElementById("cd5");e.textContent=fmt(l5);e.className="cd"+(l5!==null&&l5>-60000&&l5<=600000?(l5<=60000?" now":" soon"):"");
+document.getElementById("cd7").textContent=fmt(l7);requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
 let theme=null;
 async function tick(){
   try{
@@ -683,7 +695,7 @@ async function tick(){
     document.getElementById("level").textContent="Level "+s.level+": "+LEVELS[s.level];
     for(const k of["busy","waiting","sessions","subagents","tpm"])document.getElementById(k).textContent=s[k];
     document.getElementById("today").textContent=s.tools_today;
-    theme=s.theme;
+    theme=s.theme;r5=s.five_hour?s.five_hour.resets_at:null;r7=s.seven_day?s.seven_day.resets_at:null;if(s.now_ms)off=s.now_ms-Date.now();
     document.querySelectorAll("button").forEach(b=>b.classList.toggle("on",(b.dataset.t==="auto"&&!theme)||b.dataset.t===theme));
     document.getElementById("foot").textContent="Updated "+s.clock;document.getElementById("foot").className="foot";
   }catch(e){const f=document.getElementById("foot");f.textContent="Bridge unreachable";f.className="foot err";}
