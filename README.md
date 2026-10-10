@@ -245,7 +245,11 @@ so it can hear the bridge's beacon.
 
 - **From your phone:** hold **B** for 2 seconds. The badge becomes a hotspot and shows a QR
   code. Scan it, open `http://192.168.4.1`, and tap one of the networks the badge can see. Then
-  type the password, using *Show password* to check it. The badge restarts and joins.
+  type the password, using *Show password* to check it. Setup stays open after you let go of B
+  (press B again to cancel). When you tap save, the badge leaves hotspot mode, joins the network
+  and shows the result on its screen: the network name and IP address with SUCCESS, then it
+  returns to the main screen by itself. If the join fails (wrong password, network not seen) it
+  says why and goes back to setup so you can retry.
 - **From the Mac:** edit `badge/secrets.py`, then run `python3 tools/deploy.py`.
 - **No discovery?** If your network blocks broadcasts, set a fixed bridge address
   (`BRIDGE = "192.168.x.y:8787"` in `secrets.py`, or the portal's bridge field).

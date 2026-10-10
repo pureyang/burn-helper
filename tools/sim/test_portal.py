@@ -33,7 +33,12 @@ class FakeSock:
 
 p = portal.Portal.__new__(portal.Portal)
 p.saved = False
-p.reboot_at = None
+p.phase = "serve"
+p.new_ssid = p.new_psk = ""
+p.srv = types.SimpleNamespace(close=lambda: None)
+p.ap = types.SimpleNamespace(active=lambda v: None)
+p.bssids = {}
+p.notice = ""
 p.results = {"My Phone's Hotspot": "never accepted the badge"}
 p.scan = [("home-wifi", (-56, 6)), ('Cafe "Guest"', (-80, 11))]
 p.mac = "28:cd:c1:00:00:00"
@@ -50,7 +55,7 @@ d = config.load_portal()
 assert d["networks"][0] == ["My Phone's Hotspot", "p@ss w&rd"], d
 assert config.bridge() == ("192.168.1.20", 8787)
 assert config.networks()[0] == ("My Phone's Hotspot", "p@ss w&rd", "phone")
-assert p.saved and p.reboot_at is not None
+assert p.saved and p.phase == "wait" and p.new_ssid == "My Phone's Hotspot" and p.new_psk == "p@ss w&rd"
 
 s = FakeSock(b"GET / HTTP/1.1\r\n\r\n")
 p.handle(s)
@@ -61,3 +66,54 @@ s = FakeSock(b"POST /forget HTTP/1.1\r\nContent-Length: 0\r\n\r\n")
 p.handle(s)
 assert config.load_portal()["networks"] == []
 print("PASS portal form parsing, trimming, scan list, save, list, forget")
+
+
+# --- after "Save": the badge leaves hotspot mode, joins, shows the result, then hands back
+class FakeSta:
+    def __init__(self, behaviour):
+        self.behaviour, self.connected, self.calls = behaviour, False, []
+
+    def active(self, v): pass
+    def connect(self, ssid, psk, **kw): self.calls.append((ssid, psk, kw))
+    def isconnected(self): return self.connected
+    def status(self): return {"ok": 3, "stuck": 1, "gone": -2}[self.behaviour] if not self.connected else 3
+    def ifconfig(self): return ("192.168.4.48", "255.255.252.0", "192.168.4.1", "8.8.8.8")
+    def disconnect(self): self.connected = False
+
+
+def run_join(behaviour, bssids=None):
+    q = portal.Portal.__new__(portal.Portal)
+    q.phase, q.saved, q.outcome, q.lines, q.bssids = "wait", True, None, [], bssids or {}
+    q.new_ssid, q.new_psk, q.due, q.j0 = "otter2", "secret-pw", 0, 0
+    q.srv = types.SimpleNamespace(close=lambda: None)
+    q.ap = types.SimpleNamespace(active=lambda v: None)
+    sta = FakeSta(behaviour)
+    portal.network.WLAN = lambda mode: sta
+    portal.network.STA_IF = 0
+    now = [1000]
+    time.ticks_ms = lambda: now[0]
+    q.tick()                                   # wait -> joining
+    assert q.phase == "joining" and sta.calls, q.phase
+    for _ in range(200):
+        now[0] += 100
+        if behaviour == "ok" and now[0] > 2500:
+            sta.connected = True
+        q.tick()
+        if q.phase != "joining":
+            break
+    return q, sta, now
+
+
+q, sta, now = run_join("ok", {"otter2": b"\xac\xec\x85\xf2\x3e\xe4"})
+assert q.outcome == "ok" and q.phase == "result" and "SUCCESS!" in q.lines and "IP 192.168.4.48" in q.lines, (q.phase, q.lines)
+assert sta.calls[0][2].get("bssid") == b"\xac\xec\x85\xf2\x3e\xe4", "should pin to the strongest access point"
+assert not any("secret-pw" in l for l in q.lines), "password must never be shown"
+now[0] += 4000; q.tick(); assert q.phase == "done", "should hand back to the main screen by itself"
+
+q, sta, now = run_join("stuck")
+assert q.outcome == "fail" and "WRONG PASSWORD?" in q.lines, q.lines
+now[0] += 5000; q.tick(); assert q.phase == "done"
+
+q, sta, now = run_join("gone")
+assert q.outcome == "fail" and "NETWORK NOT SEEN" in q.lines, q.lines
+print("PASS join after save: success, wrong password, network not seen; pinned BSSID; auto hand-back")

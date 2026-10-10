@@ -58,6 +58,7 @@ down = {}                # button -> ticks when it went down
 fired = False            # a hold fired; ignore releases until every button is up
 wink_until = 0
 portal = None
+portal_arm = False       # B is still down from the hold that opened setup; its release must not cancel
 b_down_t = None
 seen = {"usb": 0, "net": 0}
 source = None   # "usb" or "net": where the current numbers came from
@@ -250,7 +251,7 @@ def short_press(b):
 
 def handle_buttons(t):
     """Short presses act on release; holds act once while held."""
-    global view, demo, portal, last_input, dimmed, fired, wink_until
+    global view, demo, portal, portal_arm, last_input, dimmed, fired, wink_until
     if badge.pressed() or badge.held():
         last_input = t
         if dimmed:
@@ -260,7 +261,12 @@ def handle_buttons(t):
         if badge.pressed(b) and b not in down:
             down[b] = t
     if portal is not None:
-        if BUTTON_B in down and is_up(BUTTON_B, t):
+        if portal_arm:
+            # setup stays open after the hold: wait for that press to end, then a new B press cancels
+            if BUTTON_B not in down or is_up(BUTTON_B, t):
+                portal_arm = False
+                down.clear()
+        elif portal.phase == "serve" and BUTTON_B in down and is_up(BUTTON_B, t):
             down.clear()
             portal.close()
             portal = None
@@ -284,6 +290,7 @@ def handle_buttons(t):
             fired = True
             view = 0
             start_portal()
+            portal_arm = portal is not None
             return
     for b in list(down):
         if is_up(b, t):
@@ -304,6 +311,28 @@ def start_portal():
         show_toast("SETUP FAILED")
         link.err = repr(e)[:40]
         portal = None
+
+
+def finish_portal():
+    """The phone setup tried the new network. Success: back to the main screen on it.
+    Failure: back to setup with a note, so the password can be fixed."""
+    global portal, portal_arm, link
+    ok = portal.outcome == "ok"
+    ssid = portal.new_ssid
+    portal.close()
+    down.clear()
+    if ok:
+        portal = None
+        link = net.Net(config.networks(), config.bridge())
+        show_toast("WI-FI " + ssid[:14].upper())
+    else:
+        link.stop()
+        try:
+            import portal as P
+            portal = P.Portal(link.results(), notice="LAST TRY FAILED: CHECK PW")
+            portal_arm = False
+        except Exception:  # noqa: BLE001
+            portal = None
 
 
 def power_save(t):
@@ -346,6 +375,9 @@ def update():
     handle_buttons(t)
     if portal is not None:
         portal.tick()
+        if portal.phase == "done":
+            finish_portal()
+            return None
         portal.draw(t)
         return None
     link.tick()
