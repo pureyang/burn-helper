@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code hook: forward a minimal activity event to the Tufty bridge.
+"""Claude Code hook: forward a minimal activity event to the Hearts Left bridge.
 
 Only session_id, event name, tool name, agent id and hostname leave this
 machine. Tool inputs and outputs are never sent. Always exits 0.
@@ -9,6 +9,11 @@ import os
 import socket
 import sys
 import urllib.request
+
+
+def env(name, default=None):
+    """HEARTS_LEFT_<name>, or the older TUFTY_<name>, or default."""
+    return os.environ.get("HEARTS_LEFT_" + name) or os.environ.get("TUFTY_" + name) or default
 
 
 def main():
@@ -25,11 +30,11 @@ def main():
         }
         if d.get("agent_id"):
             event["agent_id"] = d.get("agent_id")
-        url = (os.environ.get("TUFTY_BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/hook"
+        url = (env("BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/hook"
         headers = {"Content-Type": "application/json"}
-        token = os.environ.get("TUFTY_TOKEN")
+        token = env("TOKEN")
         if token:
-            headers["X-Tufty-Token"] = token
+            headers["X-Hearts-Left-Token"] = token
         req = urllib.request.Request(url, data=json.dumps(event).encode(), headers=headers, method="POST")
         urllib.request.urlopen(req, timeout=0.5).close()
     except Exception:  # noqa: BLE001 - a hook must never fail the session

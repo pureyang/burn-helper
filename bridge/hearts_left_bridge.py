@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tufty bridge: aggregates Claude Code activity and usage for the badge.
+"""Hearts Left bridge: aggregates Claude Code activity and usage for the badge.
 
 Sources:
   * ~/.claude/sessions/*.json   live session registry written by Claude Code
@@ -11,6 +11,8 @@ Outputs:
   * GET /                       phone control panel
   * POST /theme                 pick the badge theme from a phone
   * UDP beacon                  "TUFTYBRIDGE 1 <port>" broadcast to port 47800 every 2 s
+                                (the TUFTY wire markers predate the Hearts Left name; kept so
+                                badges and bridges of either age still talk)
   * USB tether                  "@TUFTY <status json>" lines written to the badge's USB serial
                                 port every 2 s when it is plugged into this Mac (no Wi-Fi needed)
 
@@ -27,6 +29,11 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+def env(name, default=None):
+    """HEARTS_LEFT_<name>, or the older TUFTY_<name>, or default."""
+    return os.environ.get("HEARTS_LEFT_" + name) or os.environ.get("TUFTY_" + name) or default
 
 # ---------------------------------------------------------------- tunables
 DEFAULT_PORT = 8787
@@ -52,9 +59,10 @@ COUNTED_KINDS = ("interactive", "bg", "daemon-worker")
 BUSY_EVENTS = ("UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "SubagentStart", "SessionStart")
 TOOL_EVENTS = ("PostToolUse", "PostToolUseFailure")
 
-HOME = os.path.expanduser(os.environ.get("TUFTY_HOME") or "~")
+HOME = os.path.expanduser(env("HOME") or "~")
 SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
-STATE_DIR = os.path.expanduser(os.environ.get("TUFTY_STATE_DIR") or os.path.join(HOME, ".claude", "tufty-bridge"))
+STATE_DIR = os.path.expanduser(env("STATE_DIR") or os.path.join(HOME, ".claude", "hearts-left"))
+OLD_STATE_DIR = os.path.join(HOME, ".claude", "tufty-bridge")
 STATE_FILE = os.path.join(STATE_DIR, "state.json")
 USB_LOCK = os.path.join(STATE_DIR, "usb.lock")   # held by scripts/badge.py while it uses the port
 HOSTNAME = socket.gethostname()
@@ -63,7 +71,7 @@ VERBOSE = False
 
 
 def log(msg):
-    sys.stderr.write("[tufty-bridge %s] %s\n" % (time.strftime("%H:%M:%S"), msg))
+    sys.stderr.write("[hearts-left %s] %s\n" % (time.strftime("%H:%M:%S"), msg))
     sys.stderr.flush()
 
 
@@ -361,12 +369,12 @@ class Bridge:
 
 
 BRIDGE = None
-TOKEN = os.environ.get("TUFTY_TOKEN") or None
+TOKEN = env("TOKEN") or None
 START = time.time()
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "TuftyBridge/1"
+    server_version = "HeartsLeftBridge/1"
     protocol_version = "HTTP/1.0"     # badge client reads until close
 
     def log_message(self, fmt, *args):
@@ -413,7 +421,7 @@ class Handler(BaseHTTPRequestHandler):
             return True
         if self.client_address[0] in ("127.0.0.1", "::1"):
             return True
-        return self.headers.get("X-Tufty-Token") == TOKEN
+        return TOKEN in (self.headers.get("X-Hearts-Left-Token"), self.headers.get("X-Tufty-Token"))
 
     def do_GET(self):
         try:
@@ -595,14 +603,20 @@ def lan_ip():
 
 def main():
     global BRIDGE, VERBOSE
-    ap = argparse.ArgumentParser(description="Claude Code activity bridge for the Tufty badge")
-    ap.add_argument("--port", type=int, default=int(os.environ.get("TUFTY_PORT") or DEFAULT_PORT))
-    ap.add_argument("--bind", default=os.environ.get("TUFTY_BIND") or "0.0.0.0")
+    ap = argparse.ArgumentParser(description="Hearts Left: Claude Code activity bridge for the badge")
+    ap.add_argument("--port", type=int, default=int(env("PORT") or DEFAULT_PORT))
+    ap.add_argument("--bind", default=env("BIND") or "0.0.0.0")
     ap.add_argument("--no-beacon", action="store_true", help="do not broadcast the UDP discovery beacon")
     ap.add_argument("--no-usb", action="store_true", help="do not push status to a USB-connected badge")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
     VERBOSE = args.verbose
+    if not os.path.exists(STATE_DIR) and os.path.isdir(OLD_STATE_DIR) and not env("STATE_DIR"):
+        try:
+            os.rename(OLD_STATE_DIR, STATE_DIR)
+            log("moved state from %s to %s" % (OLD_STATE_DIR, STATE_DIR))
+        except OSError:
+            pass
     BRIDGE = Bridge()
     BRIDGE.scan()
     threading.Thread(target=scan_loop, daemon=True).start()
@@ -624,7 +638,7 @@ def main():
 PAGE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Tufty Bridge</title>
+<title>Hearts Left</title>
 <style>
 :root{--bg:#101418;--card:#1b2128;--fg:#e8edf2;--dim:#8a96a3;--heart:#e8384f;--accent:#f2c14e;--on:#3a7d44}
 @media (prefers-color-scheme: light){:root{--bg:#f4f1ea;--card:#fff;--fg:#1d232a;--dim:#5c6670;--on:#2f6b39}}
@@ -643,7 +657,7 @@ button.on{border-color:var(--accent)}
 .foot{color:var(--dim);font-size:12px;margin-top:8px}
 .err{color:var(--heart)}
 </style></head><body>
-<h1>Tufty Bridge</h1>
+<h1>Hearts Left</h1>
 <div class="card">
   <div class="k">Remaining 5-hour budget</div>
   <div class="hearts" id="hearts">…</div>

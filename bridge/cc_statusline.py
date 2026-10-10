@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code status line: show remaining usage as hearts and report it to the Tufty bridge.
+"""Claude Code status line: show remaining usage as hearts and report it to the Hearts Left bridge.
 
 Prints one line such as:
     ♥♥♥♥♥♥❥♡♡♡ 5h 38% (resets in 1h23m) · 7d 12% (in 3d4h) · ctx 45% · Opus 5.5
@@ -10,6 +10,11 @@ import socket
 import sys
 import time
 import urllib.request
+
+
+def env(name, default=None):
+    """HEARTS_LEFT_<name>, or the older TUFTY_<name>, or default."""
+    return os.environ.get("HEARTS_LEFT_" + name) or os.environ.get("TUFTY_" + name) or default
 
 FULL, HALF, EMPTY = "♥", "❥", "♡"
 
@@ -64,11 +69,11 @@ def report(d):
     if not isinstance(rl, dict) or not rl:
         return
     body = {"session_id": d.get("session_id"), "host": socket.gethostname(), "rate_limits": rl}
-    url = (os.environ.get("TUFTY_BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/usage"
+    url = (env("BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/usage"
     headers = {"Content-Type": "application/json"}
-    token = os.environ.get("TUFTY_TOKEN")
+    token = env("TOKEN")
     if token:
-        headers["X-Tufty-Token"] = token
+        headers["X-Hearts-Left-Token"] = token
     try:
         req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
         urllib.request.urlopen(req, timeout=0.3).close()

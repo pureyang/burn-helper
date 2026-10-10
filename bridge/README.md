@@ -1,4 +1,4 @@
-# Tufty bridge
+# Hearts Left bridge
 
 A small server on your Mac that tells the badge how busy your Claude Code agents
 are and how much of your usage budget is left. Python 3.9 standard library only.
@@ -18,7 +18,7 @@ are and how much of your usage budget is left. Python 3.9 standard library only.
 ## Run it
 
 ```sh
-python3 bridge/tufty_bridge.py            # port 8787, phone panel at http://<mac-ip>:8787/
+python3 bridge/hearts_left_bridge.py       # port 8787, phone panel at http://<mac-ip>:8787/
 python3 bridge/install.py --dry-run       # preview the settings.json change
 python3 bridge/install.py                 # add hooks + status line, start the bridge at login
 python3 bridge/install.py --uninstall     # remove exactly what install added
@@ -26,15 +26,15 @@ python3 bridge/install.py --uninstall     # remove exactly what install added
 
 `install.py` backs up `~/.claude/settings.json` first, adds one async hook per
 event (they never block a session), adds the status line only if you have none,
-and installs a LaunchAgent (`com.lexco.tufty-bridge`, log in
-`~/Library/Logs/tufty-bridge.log`).
+and installs a LaunchAgent (`com.heartsleft.bridge`, log in
+`~/Library/Logs/hearts-left.log`). It replaces the older `com.lexco.tufty-bridge` agent if present.
 
 Options: `--port`, `--bind`, `--no-beacon`, `--verbose`. Environment:
-`TUFTY_PORT`, `TUFTY_TOKEN`, `TUFTY_STATE_DIR`.
+`HEARTS_LEFT_PORT`, `HEARTS_LEFT_TOKEN`, `HEARTS_LEFT_STATE_DIR` (state defaults to `~/.claude/hearts-left`). The older `TUFTY_*` names still work.
 
 ## Badge discovery
 
-Every 2 seconds the bridge broadcasts `TUFTYBRIDGE 1 <port>` on UDP port 47800.
+Every 2 seconds the bridge broadcasts `TUFTYBRIDGE 1 <port>` on UDP port 47800 (the wire markers keep their original name so older badges still work).
 The badge takes the bridge address from the packet source, so the Mac's IP can
 change without reconfiguring anything.
 
@@ -64,8 +64,8 @@ Install the same hooks and status line on another computer and point them at
 this Mac:
 
 ```sh
-export TUFTY_BRIDGE_URL=http://<mac-ip>:8787
-export TUFTY_TOKEN=<shared secret>     # optional; set the same value for the bridge
+export HEARTS_LEFT_BRIDGE_URL=http://<mac-ip>:8787
+export HEARTS_LEFT_TOKEN=<shared secret>     # optional; set the same value for the bridge
 ```
 
 Events from another host count as remote sessions: busy for 90 seconds after
@@ -77,6 +77,6 @@ they only show up through the account-wide usage hearts.
 - The hook sends only the session id, event name, tool name, agent id and
   hostname. Tool inputs and outputs never leave the machine.
 - `/status` contains counts only: no session names, paths or prompts. Anyone on
-  your LAN can read it and change the theme. Set `TUFTY_TOKEN` to stop other LAN
+  your LAN can read it and change the theme. Set `HEARTS_LEFT_TOKEN` to stop other LAN
   devices from posting fake activity.
 - `.key` files in `~/.claude/sessions` are never opened.

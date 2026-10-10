@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Install or remove the Tufty bridge integration for Claude Code on this Mac.
+"""Install or remove the Hearts Left bridge integration for Claude Code on this Mac.
 
     python3 bridge/install.py              add hooks + status line, start the bridge at login
     python3 bridge/install.py --dry-run    show the settings.json diff and plist, change nothing
     python3 bridge/install.py --uninstall  remove only what this script added
 
-Set TUFTY_HOME to point at a different home directory (used for testing).
-With TUFTY_HOME set, launchctl is never called.
+Set HEARTS_LEFT_HOME to point at a different home directory (used for testing).
+With it set, launchctl is never called. Installs from an older version (the
+com.lexco.tufty-bridge login item) are replaced.
 """
 import argparse
 import difflib
@@ -21,21 +22,24 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PY = "/usr/bin/python3"
 HOOK_CMD = "%s %s" % (PY, os.path.join(HERE, "cc_hook.py"))
 STATUS_CMD = "%s %s" % (PY, os.path.join(HERE, "cc_statusline.py"))
-BRIDGE = os.path.join(HERE, "tufty_bridge.py")
-LABEL = "com.lexco.tufty-bridge"
+BRIDGE = os.path.join(HERE, "hearts_left_bridge.py")
+LABEL = "com.heartsleft.bridge"
+OLD_LABELS = ("com.lexco.tufty-bridge",)
 EVENTS = ("PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SubagentStart",
           "SubagentStop", "Notification", "SessionStart", "SessionEnd")
 TOOL_EVENTS = ("PostToolUse", "PostToolUseFailure")
 
-TEST_HOME = os.environ.get("TUFTY_HOME")
+TEST_HOME = os.environ.get("HEARTS_LEFT_HOME") or os.environ.get("TUFTY_HOME")
 HOME = os.path.expanduser(TEST_HOME or "~")
 SETTINGS = os.path.join(HOME, ".claude", "settings.json")
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
-LOGFILE = os.path.join(HOME, "Library", "Logs", "tufty-bridge.log")
+LOGFILE = os.path.join(HOME, "Library", "Logs", "hearts-left.log")
 
 
 def is_ours(cmd):
-    return isinstance(cmd, str) and ("cc_hook.py" in cmd or "cc_statusline.py" in cmd) and HERE in cmd
+    # Match by script name wherever the repo lives, so reinstalling from another
+    # clone (the one-line installer uses ~/hearts-left) replaces the old entries.
+    return isinstance(cmd, str) and ("/bridge/cc_hook.py" in cmd or "/bridge/cc_statusline.py" in cmd)
 
 
 def our_hook():
@@ -119,14 +123,14 @@ def plist_text():
 def write_settings(settings, old_text):
     os.makedirs(os.path.dirname(SETTINGS), exist_ok=True)
     if os.path.exists(SETTINGS):
-        bak = SETTINGS + ".bak-tufty-" + time.strftime("%Y%m%d-%H%M%S")
+        bak = SETTINGS + ".bak-hearts-left-" + time.strftime("%Y%m%d-%H%M%S")
         n = 1
         while os.path.exists(bak):
             n += 1
-            bak = SETTINGS + ".bak-tufty-" + time.strftime("%Y%m%d-%H%M%S") + "-%d" % n
+            bak = SETTINGS + ".bak-hearts-left-" + time.strftime("%Y%m%d-%H%M%S") + "-%d" % n
         shutil.copy2(SETTINGS, bak)
         print("Backed up settings to", bak)
-    tmp = SETTINGS + ".tmp-tufty"
+    tmp = SETTINGS + ".tmp-hearts-left"
     with open(tmp, "w") as f:
         f.write(json.dumps(settings, indent=2) + "\n")
     os.replace(tmp, SETTINGS)
@@ -135,10 +139,18 @@ def write_settings(settings, old_text):
 
 def launchctl(*args):
     if TEST_HOME:
-        print("(TUFTY_HOME set: skipping launchctl %s)" % " ".join(args))
+        print("(HEARTS_LEFT_HOME set: skipping launchctl %s)" % " ".join(args))
         return 0
     r = subprocess.run(["launchctl"] + list(args), capture_output=True, text=True)
     return r.returncode
+
+
+def remove_agent(domain, label):
+    plist = os.path.join(HOME, "Library", "LaunchAgents", label + ".plist")
+    launchctl("bootout", domain + "/" + label)
+    if os.path.exists(plist):
+        os.remove(plist)
+        print("Removed", plist)
 
 
 def diff(old_text, settings):
@@ -169,10 +181,8 @@ def main():
         else:
             print("settings.json: nothing of ours to remove")
         if not args.no_launchd:
-            launchctl("bootout", domain + "/" + LABEL)
-            if os.path.exists(PLIST):
-                os.remove(PLIST)
-                print("Removed", PLIST)
+            for label in (LABEL,) + OLD_LABELS:
+                remove_agent(domain, label)
         return 0
 
     new, notes = add_ours(settings)
@@ -195,6 +205,8 @@ def main():
         with open(PLIST, "w") as f:
             f.write(plist_text())
         print("Wrote", PLIST)
+        for label in OLD_LABELS:
+            remove_agent(domain, label)
         launchctl("bootout", domain + "/" + LABEL)
         rc = launchctl("bootstrap", domain, PLIST)
         if rc not in (0, None):
