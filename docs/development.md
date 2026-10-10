@@ -1,0 +1,35 @@
+# Development
+
+```
+python3 tools/simulate.py                       # render every theme/level to tools/sim/out/*.png
+python3 tools/sim/preview_debug.py              # render the Wi-Fi debug screen states
+python3 tools/deploy.py                         # copy changed files to the badge and restart
+python3 tools/deploy.py --shot-only x.png [--view 2] [--demo 1]   # screenshot the badge (2 = debug screen, demo 1 = demo)
+python3 tools/netdebug.py                       # badge Wi-Fi diagnosis over USB
+python3 tools/sim/test_net.py                   # badge networking code against a live local bridge
+python3 tools/sim/test_portal.py                # phone setup portal form handling
+python3 scripts/badge.py exec "print(1)"        # raw REPL one-liner
+```
+
+The simulator (`tools/sim/pvshim.py`) re-implements the badge's `picovector` drawing calls
+with the pixel rules measured on the device. These are nearest-neighbour blits and flips, and
+the ROM pixel fonts with the firmware's spacing. So the PNGs match the real screen.
+`tools/deploy.py` remounts the badge's read-only `/system` volume read-write over serial, so
+deploying doesn't need USB disk mode. The badge tools take a lock file so the bridge's USB
+tether pauses while they use the port.
+
+## Contents
+
+- `badge/` - everything that goes onto the badge's `/system` (app, `main.py`, secrets template)
+- `bridge/` - Mac-side bridge, hook, status line, installer ([details](../bridge/README.md))
+- `install.sh` - the one-line installer
+- `tools/` - badge setup, deploy, Wi-Fi debug, simulator, tests, icon generator
+- `scripts/badge.py` - stdlib serial/raw-REPL helper (also `bootloader`, `disk`, `reset`)
+- `scripts/probe_board.py`, `scripts/serial_template.py` - original probe scripts
+- `notes.md` - board facts, firmware findings, gotchas
+
+## Not included
+
+Flash backups (`backup/`), firmware images (`*.uf2`), raw dumps (`*.bin`) and
+`badge/secrets.py` are git-ignored. They contain Wi-Fi passwords, Supabase keys and device
+tokens, so never commit them.
