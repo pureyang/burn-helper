@@ -1,12 +1,19 @@
-# tufty-badge
+# Hearts Left
 
-Live Claude Code activity on a Pimoroni Tufty 2350 conference badge.
+Your Claude Code agents as a pixel game on a Pimoroni Tufty 2350 conference badge.
 
 A pixel-art character on the badge sleeps, idles, walks, runs or sprints depending on
-how many Claude Code agents are working across your sessions. A row of hearts shows how
-much of your 5-hour usage limit is left, and a second meter shows the weekly limit. There are
-three themes: a Zelda-style field, *The Running Man* game show, and Forrest Gump's run
-across America.
+how many Claude Code agents are working across your sessions. Ten hearts (or chocolates, or
+collar lights, depending on the theme) show how much of your 5-hour usage limit is left,
+with a countdown to the next reset; a second meter shows the weekly limit. There are three
+themes: a Zelda-style field, *The Running Man* game show, and Forrest Gump's run across
+America.
+
+Install everything with one line on a Mac, with the badge plugged in:
+
+```
+curl -fsSL https://raw.githubusercontent.com/pureyang/hearts-left/main/install.sh | bash
+```
 
 ![Zelda theme, every level](docs/img/sheet_zelda.png)
 ![Running Man theme, every level](docs/img/sheet_runningman.png)
@@ -67,7 +74,7 @@ Claude Code sessions ──hooks + status line──▶ bridge (Mac) ──Wi-Fi
   when the badge is plugged into the Mac it also pushes the same JSON down the USB cable.
 - **The status line** gets the official `rate_limits` numbers from Claude Code: 5-hour and
   7-day usage, account-wide. It prints hearts in your terminal too.
-- **The badge app** (`badge/apps/claude_buddy`) joins Wi-Fi, finds the bridge by its beacon,
+- **The badge app** (`badge/apps/hearts_left`) joins Wi-Fi, finds the bridge by its beacon,
   polls it every 2.5 s without blocking the animation, and draws the theme. All sprites are
   generated on the badge from a tiny posed skeleton (`figure.py`), so the walk, run and sprint
   cycles stay consistent across themes.
@@ -118,14 +125,47 @@ runs the same live countdown as the badge.
 
 ## Installation
 
-You need the badge, a USB-C **data** cable, a Mac with Claude Code installed, and Homebrew.
+You need the badge, a USB-C **data** cable, and a Mac with Claude Code and Homebrew installed.
+Plug the badge in, then run:
+
+```
+curl -fsSL https://raw.githubusercontent.com/pureyang/hearts-left/main/install.sh | bash
+```
+
+The installer does everything below and asks before each step that changes something:
+
+1. Downloads the code into `~/hearts-left` (or updates it).
+2. Installs the Mac bridge: async hooks and the status line in `~/.claude/settings.json`
+   (backed up first) and a login item.
+3. Finds the badge. If it runs a conference build or anything other than stock Pimoroni
+   firmware, it saves and verifies a full flash backup in `~/hearts-left/backup/`, then
+   flashes the stock Tufty 2350 v3.1.1 firmware, downloaded and checked against a pinned
+   checksum. It installs `picotool` with Homebrew if needed.
+4. Asks for a 2.4 GHz Wi-Fi network. Leave it blank to set it up from your phone later.
+5. Copies the Hearts Left app onto the badge and checks that it starts.
+
+Options go after `bash -s --`, for example `... | bash -s -- --yes`:
+
+| Option | Effect |
+|---|---|
+| `--yes` | accept every step without asking |
+| `--no-flash` | never replace the badge's firmware |
+| `--no-badge` / `--no-bridge` | set up only the Mac / only the badge |
+| `--dry-run` | show what would happen, change nothing |
+| `--uninstall` | remove the hooks, status line and login item |
+
+Rerunning the line updates an existing install.
+
+## Manual install
+
+The same steps by hand, from a clone:
 
 ### 1. Get the tools and the code
 
 ```
 brew install picotool
-git clone https://github.com/pureyang/tufty-badge.git
-cd tufty-badge
+git clone https://github.com/pureyang/hearts-left.git
+cd hearts-left
 ```
 
 Download `tufty-v3.1.1-micropython-with-filesystem.uf2` from the
@@ -182,7 +222,7 @@ python3 bridge/install.py
 ```
 
 This backs up `~/.claude/settings.json`, then adds the async hooks and the hearts status line,
-and starts the bridge as a login item. The log is at `~/Library/Logs/tufty-bridge.log`. Restart
+and starts the bridge as a login item. The log is at `~/Library/Logs/hearts-left.log`. Restart
 open Claude Code sessions so they pick up the hooks. To remove everything it added, run
 `python3 bridge/install.py --uninstall`.
 
@@ -234,7 +274,7 @@ python3 tools/netdebug.py
 | `OK`, but `BEACON NEVER` | On Wi-Fi but can't hear the bridge | The Mac is on another network or a guest/isolated network, or broadcasts are blocked. Put both on the same network, or set a fixed `BRIDGE` address |
 | `OK`, bridge not answering | Found the bridge but the HTTP poll fails | Check `curl http://<mac-ip>:8787/status` from another device, and the macOS firewall |
 
-The network log is also kept on the badge in `/state/claude_buddy_net.log`.
+The network log is also kept on the badge in `/state/hearts_left_net.log`.
 
 ## Buttons
 
@@ -275,7 +315,8 @@ tether pauses while they use the port.
 
 - `badge/` - everything that goes onto the badge's `/system` (app, `main.py`, secrets template)
 - `bridge/` - Mac-side bridge, hook, status line, installer ([details](bridge/README.md))
-- `tools/` - deploy, Wi-Fi debug, simulator, tests, icon generator
+- `install.sh` - the one-line installer
+- `tools/` - badge setup, deploy, Wi-Fi debug, simulator, tests, icon generator
 - `scripts/badge.py` - stdlib serial/raw-REPL helper (also `bootloader`, `disk`, `reset`)
 - `scripts/probe_board.py`, `scripts/serial_template.py` - original probe scripts
 - `notes.md` - board facts, firmware findings, gotchas
