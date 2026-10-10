@@ -12,7 +12,12 @@
    stock Tufty 2350 v3.1.1 firmware (downloaded from Pimoroni, checksum-pinned).
 3. Ask for a 2.4 GHz Wi-Fi network (or skip: hold B on the badge later to set
    it up from a phone) and write badge/secrets.py.
-4. Copy the Hearts Left app onto the badge and check that it starts.
+4. Test the Wi-Fi from the badge itself, over USB (a combined 2.4/5 GHz network is fine; the
+   badge joins its 2.4 GHz side). A wrong password is caught here, not after the install.
+5. Copy the Hearts Left app onto the badge and check that it starts.
+
+If the badge stops answering at any point the installer asks you to press its RESET button
+and keeps going once it hears the badge again.
 
 Questions are read from /dev/tty, so this also works under `curl ... | bash`.
 """
@@ -129,7 +134,7 @@ def wait_for_badge(timeout=120):
     sys.exit("No badge found. Check the cable (some only charge), then rerun.")
 
 
-def inspect(port):
+def inspect(port, quiet=False):
     import ast
     try:
         b = Badge(port)
@@ -141,7 +146,8 @@ def inspect(port):
             if line.startswith("{"):
                 return ast.literal_eval(line)
     except Exception as e:  # noqa: BLE001
-        say("Could not read the badge's files (%s)." % e.__class__.__name__)
+        if not quiet:
+            say("Could not read the badge's files (%s)." % e.__class__.__name__)
     return None
 
 
@@ -154,6 +160,127 @@ def needs_flash(info):
     if "menu" not in info["apps"]:
         return True, "it does not look like stock Tufty 2350 firmware"
     return False, "it already runs stock Pimoroni firmware"
+
+
+RESET_HELP = ("The badge is not answering. Press its RESET button once (and make sure the USB-C cable "
+              "carries data). I will carry on as soon as it responds...")
+
+
+def wait_for_response(port, what, patience=90):
+    """Return (port, info) once the badge answers over USB, asking for a RESET press if it does not.
+
+    The port can change when the badge re-enumerates after a reset, so look it up again each time.
+    """
+    said = False
+    end = time.time() + patience
+    while time.time() < end:
+        port = serial_port() or port
+        if port:
+            info = inspect(port, quiet=True)
+            if info is not None:
+                if said:
+                    say("The badge answered.")
+                return port, info
+        if not said:
+            say("%s %s" % (what, RESET_HELP))
+            said = True
+        time.sleep(2)
+    return port, None
+
+
+JOIN_TEST = """
+import network, time, binascii
+w = network.WLAN(network.STA_IF); w.active(False); time.sleep_ms(300); w.active(True)
+ssid, psk = %r, %r
+seen = [r for r in w.scan() if r[0].decode() == ssid]
+_w.feed()
+if not seen:
+    print('RESULT notfound')
+else:
+    best = max(seen, key=lambda r: r[3])
+    print('SEEN', len(seen), 'ch', best[2], 'rssi', best[3])
+    w.connect(ssid, psk, bssid=best[1])
+    t = time.ticks_ms()
+    while time.ticks_diff(time.ticks_ms(), t) < 15000:
+        _w.feed()
+        if w.isconnected():
+            print('RESULT ok', w.ifconfig()[0]); break
+        if w.status() < 0:
+            print('RESULT failed', w.status()); break
+        time.sleep_ms(100)
+    else:
+        print('RESULT stuck')
+    w.disconnect()
+"""
+
+
+def test_wifi(port, ssid, psk):
+    """Join the network from the badge. Returns (verdict, detail line)."""
+    b = Badge(port)
+    try:
+        out, err = b.exec("import machine\n_w = machine.WDT(timeout=8000)\n" + JOIN_TEST % (ssid, psk), timeout=40)
+    finally:
+        b.close()
+    seen = next((ln for ln in out.splitlines() if ln.startswith("SEEN")), "")
+    res = next((ln for ln in out.splitlines() if ln.startswith("RESULT")), "RESULT unknown " + err.strip()[-60:])
+    return res.split()[1], (seen + " " + " ".join(res.split()[2:])).strip()
+
+
+def read_secrets():
+    ns = {}
+    try:
+        with open(SECRETS) as f:
+            exec(f.read(), ns)  # noqa: S102 - our own git-ignored file
+    except OSError:
+        pass
+    return ns.get("WIFI_SSID", ""), ns.get("WIFI_PASSWORD", "")
+
+
+def write_secrets(ssid, psk):
+    offset = -time.timezone // 3600   # standard-time offset; REGION applies daylight saving
+    text = ('# Private: installed as /system/secrets.py by tools/deploy.py. Git-ignored.\n'
+            'WIFI_SSID = %r\nWIFI_PASSWORD = %r\nWIFI_EXTRA = []\nBRIDGE = ""\n'
+            'REGION = "us"\nTIMEZONE = %d\n') % (ssid or "", psk, offset)
+    fd = os.open(SECRETS, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.write(fd, text.encode())
+    os.close(fd)
+
+
+def verify_wifi(port):
+    """Test the saved Wi-Fi from the badge. A wrong password hangs this radio in 'joining' without an
+    error, so the only reliable check is an actual join. Returns the (possibly new) port."""
+    ssid, psk = read_secrets()
+    if not ssid:
+        return port
+    for attempt in range(3):
+        port, info = wait_for_response(port, "To test the Wi-Fi:")
+        if info is None:
+            say("Skipping the Wi-Fi test: the badge did not answer.")
+            return port
+        say("Testing %s from the badge (it joins the 2.4 GHz side of a combined network)..." % ssid)
+        verdict, detail = test_wifi(port, ssid, psk)
+        if verdict == "ok":
+            say("Wi-Fi works: %s." % detail)
+            time.sleep(10)   # the test leaves the badge on a watchdog; let it restart
+            return serial_port() or port
+        why = {"notfound": "the badge cannot see %s on 2.4 GHz. Is 2.4 GHz switched on for that name, "
+                           "and is the badge in range?" % ssid,
+               "stuck": "%s is in range but never accepted the badge: this is almost always a wrong "
+                        "password (or WPA3-only / a MAC filter)." % ssid,
+               "failed": "the join failed (%s)." % detail}.get(verdict, "the test gave no clear answer (%s)." % detail)
+        say("Wi-Fi test failed: " + why)
+        time.sleep(10)
+        port = serial_port() or port
+        if ARGS.yes or attempt == 2:
+            break
+        ssid_new = tty_line("  Wi-Fi name (SSID) [%s, Enter to keep, '-' to skip]: " % ssid)
+        if ssid_new == "-":
+            break
+        ssid = ssid_new or ssid
+        psk = (tty_line("  Wi-Fi password: ", secret=True) or "").strip()
+        write_secrets(ssid, psk)
+    say("Continuing without a working Wi-Fi: hold B on the badge later to set it up from your phone.")
+    return port
 
 
 def firmware():
@@ -240,13 +367,7 @@ def wifi():
     psk = ""
     if ssid:
         psk = (tty_line("  Wi-Fi password: ", secret=True) or "").strip()
-    offset = -time.timezone // 3600   # standard-time offset; REGION applies daylight saving
-    text = ('# Private: installed as /system/secrets.py by tools/deploy.py. Git-ignored.\n'
-            'WIFI_SSID = %r\nWIFI_PASSWORD = %r\nWIFI_EXTRA = []\nBRIDGE = ""\n'
-            'REGION = "us"\nTIMEZONE = %d\n') % (ssid or "", psk, offset)
-    fd = os.open(SECRETS, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    os.write(fd, text.encode())
-    os.close(fd)
+    write_secrets(ssid, psk)
     say("Saved badge/secrets.py%s." % (" for %s" % ssid if ssid else " (no network yet)"))
 
 
@@ -292,6 +413,8 @@ def main(argv):
         flash, why = True, "it is in bootloader mode"
     else:
         info = inspect(port)
+        if info is None:
+            port, info = wait_for_response(port, "Looking at the badge:", patience=60)
         flash, why = needs_flash(info)
         if info is not None and ("hearts_left" in info["apps"] or "claude_buddy" in info["apps"]):
             why += ", with Hearts Left installed"
@@ -310,13 +433,15 @@ def main(argv):
             say("Stock firmware installed.")
     wifi()
     if ARGS.dry_run:
-        say("Would copy the Hearts Left app onto the badge and restart it.")
+        say("Would test the Wi-Fi from the badge, copy the Hearts Left app onto it and restart it.")
         return 0
+    port = verify_wifi(port)
     deploy()
     if check_running():
         say("Hearts Left is running on the badge.")
     else:
-        say("The app was copied but did not answer yet; give it a minute, or press RESET.")
+        say("The app was copied but did not answer yet. Press the badge's RESET button, wait a minute, "
+            "then run: python3 tools/netdebug.py")
     return 0
 
 
