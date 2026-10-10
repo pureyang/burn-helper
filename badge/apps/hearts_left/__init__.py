@@ -8,7 +8,7 @@
 #   B          info screen -> Wi-Fi debug screen -> close; hold 2 s for phone setup
 #              (on the debug screen UP rescans and retries Wi-Fi right away)
 #   hold UP    demo mode for 2 s (cycles every level, shows a DEMO tag)
-#   DOWN       brightness
+#   DOWN       brightness (10 levels); hold 2 s to switch the case LEDs on or off (off by default)
 #   HOME       switch to the stock app menu (HOME again comes back here)
 
 import gc
@@ -37,7 +37,7 @@ BRIGHT = (1.0, 0.85, 0.7, 0.57, 0.46, 0.36, 0.28, 0.21, 0.15, 0.1)
 OLD_BRIGHT = (1.0, 0.7, 0.45, 0.25)   # the four levels used before
 MENU_FLAG = "/state/.hearts_left_menu"
 
-prefs = {"theme": "hero", "bright": 0, "levels": 4, "seq": -1, "lights": True}
+prefs = {"theme": "hero", "bright": 0, "levels": 4, "seq": -1, "case_leds": False}
 config.migrate()
 State.load("hearts_left", prefs)
 # theme ids used before the files were renamed
@@ -70,6 +70,7 @@ b_down_t = None
 seen = {"usb": 0, "net": 0}
 source = None   # "usb" or "net": where the current numbers came from
 last_input = time.ticks_ms()
+leds_lit = True          # LEDs may be lit (unknown at start): the first frame turns them off unless enabled
 dimmed = False
 frame_t = time.ticks_ms()
 toast = None
@@ -168,11 +169,18 @@ def demo_status(t):
 
 
 def lights(t):
+    """The four case LEDs. Off unless switched on (hold DOWN 2 s): the flashing is distracting."""
+    global leds_lit
     if time.ticks_diff(wink_until, t) > 0:
         badge.caselights(0.8)
+        leds_lit = True
         return
-    if not prefs.get("lights", True):
+    if not prefs.get("case_leds", False):
+        if leds_lit:                     # just switched off: do not leave them glowing
+            badge.caselights(0)
+            leds_lit = False
         return
+    leds_lit = True
     lv = st.level if st.online else S.SLEEP
     if st.waiting and st.online:
         v = 0.6 if (t // 300) % 2 == 0 else 0.0
@@ -289,6 +297,11 @@ def handle_buttons(t):
             fired = True
             demo = 0 if demo else 2
             wink_until = time.ticks_add(t, 350)
+        elif held(BUTTON_DOWN) >= DEMO_HOLD_MS and BUTTON_UP not in down and len(down) == 1:
+            fired = True
+            prefs["case_leds"] = not prefs.get("case_leds", False)
+            save_prefs()
+            show_toast("CASE LIGHTS ON" if prefs["case_leds"] else "CASE LIGHTS OFF")
         elif held(BUTTON_UP) >= DEMO_HOLD_MS and BUTTON_DOWN not in down:
             fired = True
             demo = 0 if demo else 1

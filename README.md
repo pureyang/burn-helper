@@ -105,7 +105,7 @@ Claude Code sessions ──hooks + status line──▶ bridge (Mac) ──Wi-Fi
 | 4 sprint | 4+ agents, or ≥40 tool calls/min | sword dash + spin attacks | explosions, searchlights | a crowd of followers, one per agent |
 
 When any session is waiting for your input, Navi shouts "HEY! LISTEN!", the Running Man
-audience votes "YOUR MOVE!", or Forrest yells "JENNY!". The badge's four case LEDs blink too.
+audience votes "YOUR MOVE!", or Forrest yells "JENNY!". The badge's four case LEDs can blink too, but they are off by default (hold DOWN for 2 s to switch them on).
 
 ### Usage meters
 
@@ -335,6 +335,7 @@ Short presses act when you let go, so holding a button never also triggers its p
 | Hold UP 2 s | demo mode: cycles every level and a 90-second usage window with its countdown, with a DEMO tag. Hold again to stop |
 | UP | on the Wi-Fi debug screen: rescan |
 | DOWN | brightness: each press steps through 10 levels, then wraps to full |
+| Hold DOWN 2 s | case LEDs on or off (off by default). When on, they pulse with activity and flash when a session is waiting for you |
 | HOME | stock app menu; HOME again comes back |
 
 ## Development
