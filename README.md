@@ -9,19 +9,34 @@ with a countdown to the next reset; a second meter shows the weekly limit. There
 themes: a Zelda-style field, *The Running Man* game show, and Forrest Gump's run across
 America.
 
-Install everything with one line on a Mac, with the badge plugged in:
+Real screenshots from the badge (Zelda, Running Man and Forrest themes):
+
+![Zelda on the badge](docs/img/device_hero.png) ![Running Man on the badge](docs/img/device_gameshow.png) ![Forrest on the badge](docs/img/device_chocolates.png)
+
+## Quick install
+
+You need a Mac, the badge, a USB-C **data** cable, and Claude Code already set up (run it once).
+Plug the badge in, then paste this into Terminal:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/pureyang/hearts-left/main/install.sh | bash
 ```
 
-![Zelda theme, every level](docs/img/sheet_hero.png)
-![Running Man theme, every level](docs/img/sheet_gameshow.png)
-![Forrest theme, every level](docs/img/sheet_chocolates.png)
+The installer asks before each change. It:
 
-Real screenshots from the badge:
+1. Installs the Mac bridge (async Claude Code hooks, a hearts status line, a login item;
+   `~/.claude/settings.json` is backed up first).
+2. If the badge isn't on stock firmware, backs up its whole flash and then flashes Pimoroni's.
+3. Asks for your Wi-Fi name and password and **tests the join from the badge itself**, so a
+   typo is caught now. A combined 2.4/5 GHz network is fine: use its normal name, because the
+   badge joins the 2.4 GHz side. Skip it and set Wi-Fi from your phone later (hold **B**).
+4. Copies the app onto the badge and checks that it starts.
 
-![Zelda on the badge](docs/img/device_hero.png) ![Running Man on the badge](docs/img/device_gameshow.png) ![Forrest on the badge](docs/img/device_chocolates.png)
+If the badge stops answering, the installer asks you to press its **RESET** button and carries
+on once it responds.
+
+Handy options (after `| bash -s --`): `--yes` (no questions), `--no-flash`, `--dry-run`,
+`--uninstall`. Wi-Fi not connecting? See [Wi-Fi troubleshooting](#wi-fi-troubleshooting).
 
 ## Hardware
 
@@ -253,6 +268,30 @@ so it can hear the bridge's beacon.
 - **From the Mac:** edit `badge/secrets.py`, then run `python3 tools/deploy.py`.
 - **No discovery?** If your network blocks broadcasts, set a fixed bridge address
   (`BRIDGE = "192.168.x.y:8787"` in `secrets.py`, or the portal's bridge field).
+- **Combined 2.4/5 GHz networks work.** Use the shared name (SSID) as is. The badge only hears
+  the 2.4 GHz side and joins that.
+
+### Shipping badges with a conference Wi-Fi pre-stored
+
+This repo ships no Wi-Fi credentials. To hand out badges that join an event network on first
+boot, put it in `badge/secrets.py` before deploying (the file is git-ignored; do not commit it):
+
+```python
+WIFI_SSID = "EventNetwork"        # must be 2.4 GHz capable (a combined 2.4/5 GHz SSID is fine)
+WIFI_PASSWORD = "event-password"
+WIFI_EXTRA = [("Backup", "pw")]   # optional, tried in order after the first
+BRIDGE = "192.168.x.y:8787"       # recommended at events: broadcast discovery is often blocked
+REGION = "us"
+TIMEZONE = -8
+```
+
+Then run `python3 tools/deploy.py --all` for each badge, which installs the file as
+`/system/secrets.py`. Networks a user adds from their phone (hold **B**) are tried first, so
+attendees can still override it. Captive portals, 802.1X and WPA3-only networks will not work
+(see the table above). Test the password on one badge first with `python3 tools/netdebug.py`:
+a wrong password makes this radio sit in "joining" forever instead of reporting an error.
+Flash backups of a badge that holds event credentials contain them in plain text, so store
+those carefully.
 
 ## Wi-Fi troubleshooting
 
@@ -315,6 +354,14 @@ the ROM pixel fonts with the firmware's spacing. So the PNGs match the real scre
 deploying doesn't need USB disk mode. The badge tools take a lock file so the bridge's USB
 tether pauses while they use the port.
 
+## Every level of every theme
+
+Simulator renders of each activity level, from asleep to sprinting, for each theme.
+
+![Zelda theme, every level](docs/img/sheet_hero.png)
+![Running Man theme, every level](docs/img/sheet_gameshow.png)
+![Forrest theme, every level](docs/img/sheet_chocolates.png)
+
 ## Contents
 
 - `badge/` - everything that goes onto the badge's `/system` (app, `main.py`, secrets template)
@@ -330,11 +377,3 @@ tether pauses while they use the port.
 Flash backups (`backup/`), firmware images (`*.uf2`), raw dumps (`*.bin`) and
 `badge/secrets.py` are git-ignored. They contain Wi-Fi passwords, Supabase keys and device
 tokens, so never commit them.
-## Every level of every theme
-
-Simulator renders of each activity level, from asleep to sprinting, for each theme.
-
-![Zelda theme, every level](docs/img/sheet_hero.png)
-![Running Man theme, every level](docs/img/sheet_gameshow.png)
-![Forrest theme, every level](docs/img/sheet_chocolates.png)
-
