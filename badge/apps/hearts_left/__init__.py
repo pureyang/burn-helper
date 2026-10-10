@@ -5,7 +5,7 @@
 #
 # Buttons
 #   A / C      previous / next theme
-#   B          info screen -> Wi-Fi debug screen -> close; hold 2 s for phone setup
+#   B          Desktop mode -> Wi-Fi debug screen -> close; hold 2 s for phone setup
 #              (on the debug screen UP rescans and retries Wi-Fi right away)
 #   hold UP    demo mode for 2 s (cycles every level, shows a DEMO tag)
 #   DOWN       brightness (10 levels); hold 2 s to switch the case LEDs on or off (off by default)
@@ -55,7 +55,7 @@ st = S.Status()
 link = net.Net(config.networks(), config.bridge())
 tether = usb.UsbLink()
 themes = {}
-view = 0        # 0 theme, 1 info overlay, 2 Wi-Fi debug
+view = 0        # 0 theme, 1 Desktop mode, 2 Wi-Fi debug
 demo = 0            # 0 off, 1 demo with a DEMO tag, 2 demo with no tag
 DEMO_HOLD_MS = 2000      # hold UP alone
 HIDDEN_HOLD_MS = 3000    # hold UP + DOWN together
@@ -205,21 +205,26 @@ def lights(t):
 
 
 def draw_info(t):
-    screen.pen = color.rgb(0, 0, 0, 215)
-    screen.rectangle(0, 0, 160, 120)
-    gfx.text("HEARTS LEFT", 4, -1, (217, 119, 87), font.sins)
+    gfx.box(0, 0, 160, 120, (12, 14, 20))
+    gfx.box(0, 0, 160, 11, (217, 119, 87))
+    gfx.text("DESKTOP MODE", 3, -1, (12, 14, 20), font.sins)
     rows = []
     if demo:
         rows.append("DATA DEMO%s" % (" (NO TAG)" if demo == 2 else ""))
     else:
         rows.append("DATA %s" % ({"usb": "USB CABLE", "net": "WI-FI"}.get(source, "NONE") if st.online else "OFFLINE"))
-    if link.state == "up":
+    if demo:
+        rows.append("WIFI home-wifi  192.168.1.50")      # example values: demo mode never shows the real network
+    elif link.state == "up":
         rows.append("WIFI %s  %s" % (link.ssid[:10], link.ip))
     else:
         rows.append("WIFI " + (link.label() or link.state)[:22])
     b = link.bridge
     age = "" if link.ok_t is None else " %ds" % (net.since(link.ok_t) // 1000)
-    rows.append("BRDG %s%s" % ("%s:%d" % b if b else "searching", age))
+    if demo:
+        rows.append("BRDG 192.168.1.20:8787 1s")
+    else:
+        rows.append("BRDG %s%s" % ("%s:%d" % b if b else "searching", age))
     rows.append("BUSY %d  WAIT %d  IDLE %d" % (st.busy, st.waiting, st.idle))
     rows.append("TOOLS/MIN %d  TODAY %d" % (st.tpm, st.tools))
     for label, used, left in (("5H", st.used5, st.left5), ("7D", st.used7, st.left7)):
@@ -234,7 +239,7 @@ def draw_info(t):
     rows.append("BATT %s  LVL %d  %s" % (bat, st.level, st.clock))
     if link.err:
         rows.append("ERR " + link.err[:22])
-    y = 9
+    y = 13
     for r in rows[:9]:
         gfx.text(r, 4, y, (230, 230, 230), font.sins)
         y += 10
@@ -377,6 +382,8 @@ def pace(t):
     """Cap the frame rate: smooth when busy, frugal when asleep."""
     global frame_t
     target = 90 if (st.level == S.SLEEP and not st.waiting) else 40
+    if view:
+        target = 100       # info/debug screens: nothing animates, 10 fps still catches a quick tap
     spent = time.ticks_diff(time.ticks_ms(), frame_t)
     try:
         if spent < target:
@@ -414,8 +421,11 @@ def update():
         demo_status(t)
     else:
         st.tick()
-    th = theme_obj(prefs["theme"])
-    th.draw(st, t)
+    if view == 0:
+        # The info and debug screens are opaque and static: pause the animation underneath
+        # (no theme drawing, and pace() slows the loop) to save CPU and battery.
+        th = theme_obj(prefs["theme"])
+        th.draw(st, t)
     if toast is not None and time.ticks_diff(t, toast_t) < 1500:
         w = gfx.width(toast, font.sins) + 8
         gfx.box(80 - w // 2, 48, w, 13, (0, 0, 0))
@@ -423,6 +433,8 @@ def update():
         gfx.ctext(toast, 80, 48, (255, 255, 255), font.sins)
     if demo == 1:
         gfx.text("DEMO", 136, 96, (255, 255, 255), font.sins, shadow=(0, 0, 0))
+    # These screens are drawn every frame (the firmware does not keep the previous frame), but
+    # without the animation underneath and at 10 fps, so they cost a fraction of a theme.
     if view == 1:
         draw_info(t)
     elif view == 2:
