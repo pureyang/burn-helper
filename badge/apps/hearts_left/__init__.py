@@ -70,6 +70,7 @@ b_down_t = None
 seen = {"usb": 0, "net": 0}
 source = None   # "usb" or "net": where the current numbers came from
 last_input = time.ticks_ms()
+theme_cost = {}          # theme -> (heap bytes its sprites took, ms to build them), for the memory report
 leds_lit = True          # LEDs may be lit (unknown at start): the first frame turns them off unless enabled
 dimmed = False
 frame_t = time.ticks_ms()
@@ -103,12 +104,15 @@ def theme_obj(name):
         gfx.ctext("LOADING", 80, 44, (255, 255, 255), font.sins)
         gfx.ctext(LABELS[name], 80, 58, (217, 119, 87), font.sins)
         display.update()
+        gc.collect()
+        mem0, t0 = gc.mem_alloc(), time.ticks_ms()
         mod = __import__("theme_" + name)
         th = mod.Theme()
         th.build()
         th.ready = True
         themes[name] = th
         gc.collect()
+        theme_cost[name] = (gc.mem_alloc() - mem0, time.ticks_diff(time.ticks_ms(), t0))
     return th
 
 
@@ -435,7 +439,10 @@ def update():
     if tether.netlog_req:
         tether.netlog_req = False
         try:
-            usb.send_lines("NETLOG", link.dump() + ["-- log --"] + link.log)
+            gc.collect()
+            mem = ["memory: heap used %d KB, free %d KB" % (gc.mem_alloc() // 1024, gc.mem_free() // 1024)]
+            mem += ["  theme %s: %d KB of sprites, built in %d ms" % (n, c[0] // 1024, c[1]) for n, c in theme_cost.items()]
+            usb.send_lines("NETLOG", link.dump() + mem + ["-- log --"] + link.log)
         except Exception as e:  # noqa: BLE001
             print("@NETLOG-ERR", e)
     if tether.shot_req:
