@@ -40,7 +40,7 @@ p.mac = "28:cd:c1:00:00:00"
 
 s = FakeSock(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n")
 p.handle(s)
-assert b"Tufty badge setup" in s.out and b"none" in s.out, s.out[:200]
+assert b"Hearts Left setup" in s.out and b"none" in s.out, s.out[:200]
 assert b"data-n=\"home-wifi\"" in s.out and b"Cafe &quot;Guest&quot;" in s.out and b"28:cd:c1" in s.out
 
 body = b"ssid=My+Phone%27s+Hotspot&psk=p%40ss+w%26rd+&bridge=192.168.1.20%3A8787"

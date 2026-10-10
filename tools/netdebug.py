@@ -3,7 +3,7 @@
 
     python3 tools/netdebug.py
 
-The claude_buddy app must be running on the badge. Nothing is restarted.
+The Hearts Left app must be running on the badge. Nothing is restarted.
 Passwords are never printed, only their length.
 """
 import os
@@ -27,7 +27,7 @@ def main():
                 print(body.decode(errors="replace").strip("\r\n").replace("\r", ""))
                 return 0
             time.sleep(1.5)
-        print("The badge did not answer. Is the claude_buddy app running (not the menu)?")
+        print("The badge did not answer. Is the Hearts Left app running (not the menu)?")
         return 1
     finally:
         b.close()

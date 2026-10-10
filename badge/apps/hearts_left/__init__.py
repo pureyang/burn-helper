@@ -1,4 +1,4 @@
-# Claude Buddy: live Claude Code activity on a Pimoroni Tufty 2350.
+# Hearts Left: live Claude Code activity and usage on a Pimoroni Tufty 2350.
 #
 # Polls the bridge on your Mac (bridge/tufty_bridge.py) over Wi-Fi and animates
 # one of three themes by activity level, with hearts for the remaining usage.
@@ -17,7 +17,7 @@ import os
 import sys
 import time
 
-APP_DIR = "/system/apps/claude_buddy"
+APP_DIR = "/system/apps/hearts_left"
 sys.path.insert(0, APP_DIR)
 os.chdir(APP_DIR)
 
@@ -33,10 +33,11 @@ import debugview  # noqa: E402
 THEMES = ("zelda", "runningman", "forrest")
 LABELS = {"zelda": "HYRULE", "runningman": "THE RUNNING MAN", "forrest": "FORREST"}
 BRIGHT = (1.0, 0.7, 0.45, 0.25)
-MENU_FLAG = "/state/.buddy_menu"
+MENU_FLAG = "/state/.hearts_left_menu"
 
 prefs = {"theme": "zelda", "bright": 0, "seq": -1, "lights": True}
-State.load("claude_buddy", prefs)
+config.migrate()
+State.load("hearts_left", prefs)
 if prefs.get("theme") not in THEMES:
     prefs["theme"] = "zelda"
 
@@ -104,12 +105,12 @@ def switch(delta=0, name=None):
         i = THEMES.index(prefs["theme"])
         name = THEMES[(i + delta) % len(THEMES)]
     prefs["theme"] = name
-    State.save("claude_buddy", prefs)
+    State.save("hearts_left", prefs)
     show_toast(LABELS[name])
 
 
 def save_prefs():
-    State.save("claude_buddy", prefs)
+    State.save("hearts_left", prefs)
 
 
 def apply_bridge():
@@ -182,7 +183,7 @@ def lights(t):
 def draw_info(t):
     screen.pen = color.rgb(0, 0, 0, 215)
     screen.rectangle(0, 0, 160, 120)
-    gfx.text("CLAUDE BUDDY", 4, -1, (217, 119, 87), font.sins)
+    gfx.text("HEARTS LEFT", 4, -1, (217, 119, 87), font.sins)
     rows = []
     if demo:
         rows.append("DATA DEMO%s" % (" (NO TAG)" if demo == 2 else ""))

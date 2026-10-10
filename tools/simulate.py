@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the claude_buddy themes on the desktop, no badge needed.
+"""Render the Hearts Left themes on the desktop, no badge needed.
 
     python3 tools/simulate.py                 # contact sheet per theme -> tools/sim/out/
     python3 tools/simulate.py zelda           # one theme

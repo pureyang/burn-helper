@@ -26,6 +26,25 @@ sys.path.insert(0, os.path.join(REPO, "scripts"))
 from badge import Badge  # noqa: E402
 
 SRC = os.path.join(REPO, "badge")
+# app folders from earlier versions, removed so the launcher does not list them
+OLD_APPS = ("/system/apps/claude_buddy",)
+
+REMOVE = """
+import os
+def _rm(p):
+    try:
+        st = os.stat(p)
+    except OSError:
+        return 0
+    if st[0] & 0x4000:
+        for n in os.listdir(p):
+            _rm(p + '/' + n)
+        os.rmdir(p)
+    else:
+        os.remove(p)
+    return 1
+print('removed', sum(_rm(p) for p in %r))
+"""
 SKIP = ("secrets.example.py",)
 
 REMOUNT = """
@@ -54,7 +73,7 @@ def _walk(p):
                     if not b: break
                     h.update(b)
             print(q, binascii.hexlify(h.digest()).decode())
-for _p in ('/system/apps/claude_buddy',):
+for _p in ('/system/apps/hearts_left',):
     try:
         _walk(_p)
     except OSError:
@@ -130,7 +149,7 @@ def screenshot(path, wait=12.0, view=None, demo=None):
                     print("  " + got.split(b"@INFO ", 1)[1].split(b"\n", 1)[0].decode(errors="replace").strip())
                 return path
             time.sleep(2)
-        raise RuntimeError("badge app did not answer @SHOT (is claude_buddy running?)")
+        raise RuntimeError("badge app did not answer @SHOT (is the Hearts Left app running?)")
     finally:
         b.close()
 
@@ -167,6 +186,9 @@ def main(argv):
         put(b, rpath, data)
         sent += 1
         print("  sent", rpath, len(data), "bytes")
+    out, err = b.exec(REMOVE % (OLD_APPS,))
+    if "removed 1" in out or "removed 2" in out:
+        print("  removed old app folder(s):", ", ".join(OLD_APPS))
     out, err = b.exec("import vfs\nvfs.umount('/system')\nprint('flushed')\n")
     print("%d file(s) updated, %d unchanged. %s" % (sent, len(files) - sent, out.strip()))
     if reset:

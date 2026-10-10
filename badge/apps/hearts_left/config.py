@@ -3,12 +3,12 @@
 #   /system/secrets.py            WIFI_SSID / WIFI_PASSWORD (stock firmware file),
 #                                 optional WIFI_EXTRA = [("ssid", "pass"), ...]
 #                                 optional BRIDGE = "192.168.1.20:8787"
-#   /state/claude_buddy_net.json  networks and bridge added from a phone via the
+#   /state/hearts_left_net.json   networks and bridge added from a phone via the
 #                                 setup portal (hold B). Tried first.
 
 import json
 
-NET_FILE = "/state/claude_buddy_net.json"
+NET_FILE = "/state/hearts_left_net.json"
 
 
 def _secrets():
@@ -17,6 +17,29 @@ def _secrets():
         return secrets
     except Exception:  # noqa: BLE001
         return None
+
+
+# The app was called claude_buddy before it became Hearts Left; keep what an
+# earlier install saved (phone-added Wi-Fi, theme and brightness, the log).
+OLD_NAMES = (
+    ("/state/claude_buddy_net.json", NET_FILE),
+    ("/state/claude_buddy.json", "/state/hearts_left.json"),
+    ("/state/claude_buddy_net.log", "/state/hearts_left_net.log"),
+)
+
+
+def migrate():
+    import os
+    for old, new in OLD_NAMES:
+        try:
+            os.stat(new)
+            continue
+        except OSError:
+            pass
+        try:
+            os.rename(old, new)
+        except OSError:
+            pass
 
 
 def load_portal():

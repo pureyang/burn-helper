@@ -27,7 +27,7 @@ JOIN_TIMEOUT_MS = 20000
 RETRY_ALL_MS = 15000
 FRESH_MS = 12000
 NO_BEACON_MS = 10000
-LOG_FILE = "/state/claude_buddy_net.log"
+LOG_FILE = "/state/hearts_left_net.log"
 LOG_MAX = 16384
 
 # wlan.status() codes (cyw43) and what they mean to a person
@@ -142,7 +142,7 @@ class HttpGet:
 class Net:
     """Wi-Fi + bridge link with a diagnosis of every failure (see debug screen)."""
 
-    def __init__(self, networks, bridge=None, hostname="tufty-claude"):
+    def __init__(self, networks, bridge=None, hostname="hearts-left"):
         self.cands = []
         for n in networks:
             if not n or not n[0]:

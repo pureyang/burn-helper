@@ -5,7 +5,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-APP = os.path.join(REPO, "badge", "apps", "claude_buddy")
+APP = os.path.join(REPO, "badge", "apps", "hearts_left")
 
 sys.path.insert(0, HERE)
 import pvshim  # noqa: E402

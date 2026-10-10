@@ -31,13 +31,13 @@ Flashed firmware/tufty-v3.1.1-micropython-with-filesystem.uf2 -> reports "tufty 
   into builtins by the badgeware module, not visible from a bare REPL after Ctrl-C.
 - An exception inside run(update) -> fatal_error screen until a button press. HOME = IRQ -> app
   on_exit -> machine.reset(). badge.caselights(v) drives the 4 case LEDs (0..1).
-- wifi.connect() (frozen) calls fatal_error on failure -> claude_buddy drives network.WLAN itself.
+- wifi.connect() (frozen) calls fatal_error on failure -> Hearts Left drives network.WLAN itself.
 - CYW43 radio is 2.4 GHz only. AP mode works: ap.config(ssid=..., key=...) -> 192.168.4.1, WPA2.
 - No loopback interface while Wi-Fi is down (sockets to 127.0.0.1 -> EHOSTUNREACH).
 - picovector facts measured: fresh image is transparent; blit(img, rect) scales nearest-neighbour;
   negative rect width flips; image.qr(text, 0, 0, 1) returns a QR image; pixel fonts (.ppf):
   46-byte header, (u32 codepoint, u16 width) table, 1bpp rows; advance = width + 1, space = (h+2)//4.
-- Performance (claude_buddy, LORES): theme draw 10-14 ms/frame, capped at 25 fps (11 fps asleep).
+- Performance (Hearts Left app, LORES): theme draw 10-14 ms/frame, capped at 25 fps (11 fps asleep).
   Building a theme's sprites takes ~1-2 s the first time it is shown.
 - USB: product "Pimoroni Tufty 2350 MicroPython", serial = chip id; port /dev/cu.usbmodem<locationID>01.
 - Wi-Fi creds carried over from the conference secrets.py are for a network not in range here; the
@@ -51,9 +51,9 @@ Flashed firmware/tufty-v3.1.1-micropython-with-filesystem.uf2 -> reports "tufty 
   handshake for this badge (wrong password most likely; else WPA3-only or MAC filter).
   Badge STA MAC: shown on the debug screen (Raspberry Pi OUI 28:cd:c1).
 - cyw43 here does not report -3 (wrong password) within 35 s; a stuck status 1 is the only signal.
-  claude_buddy calls this verdict STUCK after 20 s.
+  Hearts Left calls this verdict STUCK after 20 s.
 - Debug: press B twice on the badge, or `python3 tools/netdebug.py` over USB. Log persists in
-  /state/claude_buddy_net.log on the badge.
+  /state/hearts_left_net.log on the badge.
 
 ## Working conventions
 - Commits: small, logical steps, one purpose per commit (a tool, a module, a theme, a fix, docs),
