@@ -32,10 +32,12 @@ import debugview  # noqa: E402
 
 THEMES = ("hero", "gameshow", "chocolates")
 LABELS = {"hero": "HYRULE", "gameshow": "THE RUNNING MAN", "chocolates": "FORREST"}
-BRIGHT = (1.0, 0.7, 0.45, 0.25)
+# 10 backlight levels, brightest first; the steps are roughly even to the eye
+BRIGHT = (1.0, 0.85, 0.7, 0.57, 0.46, 0.36, 0.28, 0.21, 0.15, 0.1)
+OLD_BRIGHT = (1.0, 0.7, 0.45, 0.25)   # the four levels used before
 MENU_FLAG = "/state/.hearts_left_menu"
 
-prefs = {"theme": "hero", "bright": 0, "seq": -1, "lights": True}
+prefs = {"theme": "hero", "bright": 0, "levels": 4, "seq": -1, "lights": True}
 config.migrate()
 State.load("hearts_left", prefs)
 # theme ids used before the files were renamed
@@ -43,6 +45,11 @@ LEGACY_THEMES = {"zelda": "hero", "runningman": "gameshow", "forrest": "chocolat
 prefs["theme"] = LEGACY_THEMES.get(prefs.get("theme"), prefs.get("theme"))
 if prefs.get("theme") not in THEMES:
     prefs["theme"] = "hero"
+if prefs.get("levels") != len(BRIGHT):
+    # saved with the old four levels: keep the same brightness on the new scale
+    old = OLD_BRIGHT[prefs.get("bright", 0) % len(OLD_BRIGHT)]
+    prefs["bright"] = min(range(len(BRIGHT)), key=lambda i: abs(BRIGHT[i] - old))
+    prefs["levels"] = len(BRIGHT)
 
 st = S.Status()
 link = net.Net(config.networks(), config.bridge())

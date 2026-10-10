@@ -334,7 +334,7 @@ Short presses act when you let go, so holding a button never also triggers its p
 | B | info screen, then Wi-Fi debug screen, then back. Hold 2 s for phone setup |
 | Hold UP 2 s | demo mode: cycles every level and a 90-second usage window with its countdown, with a DEMO tag. Hold again to stop |
 | UP | on the Wi-Fi debug screen: rescan |
-| DOWN | brightness |
+| DOWN | brightness: each press steps through 10 levels, then wraps to full |
 | HOME | stock app menu; HOME again comes back |
 
 ## Development
