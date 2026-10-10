@@ -142,8 +142,9 @@ def apply_bridge():
     tseq = d.get("theme_seq")
     if isinstance(tseq, int) and tseq != prefs.get("seq"):
         prefs["seq"] = tseq
-        if d.get("theme") in THEMES and d.get("theme") != prefs["theme"]:
-            switch(name=d.get("theme"))
+        want = LEGACY_THEMES.get(d.get("theme"), d.get("theme"))   # an older bridge sends the old ids
+        if want in THEMES and want != prefs["theme"]:
+            switch(name=want)
         else:
             save_prefs()
 
