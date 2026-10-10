@@ -5,7 +5,8 @@
 #   run    -> Pegasus-boots dash, dust flying
 #   sprint -> dashing with sword out, spin attacks
 # Hearts are the 5-hour budget, the magic meter is the weekly budget, rupees
-# count today's tool calls and keys count busy agents. Navi shows up shouting
+# count today's tool calls, boomerangs count busy agents and the ocarina counts
+# sessions waiting for you. Navi shows up shouting
 # "HEY! LISTEN!" when a session is waiting for you.
 
 import math
@@ -56,8 +57,10 @@ SPEC = F.Spec(w=26, h=26, head_r=4, torso=4, torso_w=6, thigh=3, shin=3, upper=3
               thighs=F.BOT, shins=F.SHOE, uppers=F.TOP, forearms=F.SKIN, foot=2, extra=_props)
 
 RUPEE = ("..G..", ".GgG.", "GgWgG", "GgggG", "GgggG", "GgggG", ".GgG.", "..G..")
-KEY = (".YY.", "Y..Y", ".YY.", "..Y.", "..YY", "..Y.", "..YY")
-BOMB = ("....o", "...K.", ".BBB.", "BWBBB", "BBBBB", "BBBBB", ".BBB.")
+# boomerang = agents out working (thrown, and comes back with the result)
+BOOMERANG = ("..OOOO..", ".OLLLOO.", "OLOOOLOO", "OO....OO", "O......O")
+# ocarina = a session is waiting for you to play your part
+OCARINA = ("..BB....", ".BBBBBB.", "BLBBHBBB", "BBHBBBHB", ".BBBHBB.", "..BBBB..")
 FAIRY = ("w...w", "ww.ww", ".wCw.", "ww.ww", "w...w")
 HOURGLASS = ("KKKKK", ".KSK.", "..S..", ".KSK.", "KKKKK")
 
@@ -82,8 +85,8 @@ class Theme(S.Theme):
         self.hearts = gfx.heart_set(RED, DARK_RED, BLACK)
         self.hearts_grey = gfx.heart_set((120, 120, 120), (60, 60, 60), BLACK)[2]
         self.rupee = gfx.sprite(RUPEE, {"G": (40, 200, 72), "g": (140, 240, 140), "W": WHITE})
-        self.key = gfx.sprite(KEY, {"Y": GOLD})
-        self.bomb = gfx.sprite(BOMB, {"B": (40, 64, 200), "W": WHITE, "K": (160, 120, 80), "o": (252, 160, 40)})
+        self.boomerang = gfx.sprite(BOOMERANG, {"O": (170, 110, 40), "L": (235, 180, 90)})
+        self.ocarina = gfx.sprite(OCARINA, {"B": (60, 100, 220), "L": (160, 195, 255), "H": (20, 30, 90)})
         self.fairy = gfx.sprite(FAIRY, {"w": (200, 230, 255), "C": WHITE})
         self.clock = gfx.sprite(HOURGLASS, {"K": (200, 160, 80), "S": GOLD})
 
@@ -220,10 +223,10 @@ class Theme(S.Theme):
         gfx.box(0, 0, 160, 22, BLACK)
         screen.blit(self.rupee, vec2(3, 2))
         gfx.text("x%d" % min(st.tools, 9999), 10, -1, WHITE, font.sins)
-        screen.blit(self.key, vec2(3, 12))
-        gfx.text("x%d" % st.busy, 9, 9, WHITE, font.sins)
-        screen.blit(self.bomb, vec2(31, 12))
-        gfx.text("x%d" % st.waiting, 39, 9, WHITE, font.sins)
+        screen.blit(self.boomerang, vec2(3, 12))
+        gfx.text("x%d" % st.busy, 12, 9, WHITE, font.sins)
+        screen.blit(self.ocarina, vec2(30, 12))
+        gfx.text("x%d" % st.waiting, 40, 9, WHITE, font.sins)
 
         gfx.text("-LIFE-", 76, -2, RED, font.sins)
         # time until the hearts refill (the 5-hour window resets)

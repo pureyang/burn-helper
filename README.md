@@ -109,6 +109,9 @@ audience votes "YOUR MOVE!", or Forrest yells "JENNY!". The badge's four case LE
 
 ### Usage meters
 
+In the Zelda theme the three counters at the top left are: green gem = tool calls today,
+boomerang = agents working right now, ocarina = sessions waiting for you.
+
 Every theme shows the 5-hour limit as ten icons, the weekly limit as a bar, and a countdown
 to the next 5-hour reset. Each icon is 10% of the limit left and a half icon is 5%. The icons
 flash once less than 20% is left.
