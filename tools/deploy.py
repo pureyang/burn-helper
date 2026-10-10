@@ -186,6 +186,14 @@ def main(argv):
         put(b, rpath, data)
         sent += 1
         print("  sent", rpath, len(data), "bytes")
+    # drop files the badge still has from earlier versions (renamed or deleted here)
+    keep = sorted(r.rsplit("/", 1)[1] for r in files if r.startswith("/system/apps/hearts_left/") and r.count("/") == 4)
+    out, err = b.exec("import os\nkeep = %r\nfor n in os.listdir('/system/apps/hearts_left'):\n"
+                      "    if n not in keep and not (os.stat('/system/apps/hearts_left/' + n)[0] & 0x4000):\n"
+                      "        os.remove('/system/apps/hearts_left/' + n)\n        print('pruned', n)\n" % (keep,))
+    for line in out.splitlines():
+        if line.startswith("pruned"):
+            print("  removed stale", line.split(" ", 1)[1])
     out, err = b.exec(REMOVE % (OLD_APPS,))
     if "removed 1" in out or "removed 2" in out:
         print("  removed old app folder(s):", ", ".join(OLD_APPS))
