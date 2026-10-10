@@ -23,7 +23,7 @@ except (ImportError, AttributeError):
 BEACON_PORT = 47800
 POLL_MS = 2500
 HTTP_TIMEOUT_MS = 4000
-JOIN_TIMEOUT_MS = 20000
+JOIN_TIMEOUT_MS = 12000   # a right password joins in about 3 s; a wrong one hangs in "joining"
 RETRY_ALL_MS = 15000
 FRESH_MS = 12000
 NO_BEACON_MS = 10000
@@ -168,6 +168,8 @@ class Net:
         self.gw = ""
         self.mac = ""
         self.seen = {}                         # ssid -> (best rssi, channel, access points)
+        self.best_bssid = {}                   # ssid -> bssid of its strongest access point
+        self.pinned = False                    # current join is pinned to best_bssid
         self.scan_total = 0
         self.scan_t = None
         self.status = None
@@ -254,8 +256,8 @@ class Net:
             for c in verdicts:
                 if c["result"] == want:
                     if want == STUCK:
-                        return ("%s never let the badge in. Check the password (hold B). Router "
-                                "must allow WPA2 and not filter MACs." % c["ssid"])
+                        return ("%s is in range but never let the badge in: almost always a "
+                                "wrong password (hold B to retype). Else: WPA2 off or MAC filter." % c["ssid"])
                     if want == BAD_PW:
                         return "%s: wrong password. Hold B to re-enter it." % c["ssid"]
                     if want == NO_IP:
@@ -306,6 +308,7 @@ class Net:
     # -------------------------------------------------- wifi
     def _scan(self):
         self.seen = {}
+        self.best_bssid = {}
         try:
             res = self.wlan.scan()
         except Exception as e:  # noqa: BLE001
@@ -320,6 +323,8 @@ class Net:
             if not name:
                 continue
             old = self.seen.get(name)
+            if old is None or r[3] > old[0]:
+                self.best_bssid[name] = r[1]
             if old is None:
                 self.seen[name] = (r[3], r[2], 1)
             else:
@@ -345,7 +350,7 @@ class Net:
                 return i
         return None
 
-    def _join(self, i):
+    def _join(self, i, pin=True):
         c = self.cands[i]
         self.cur = i
         self.ssid = c["ssid"]
@@ -355,11 +360,24 @@ class Net:
             self.wlan.disconnect()
         except Exception:  # noqa: BLE001
             pass
-        self.wlan.connect(c["ssid"], c["psk"])
+        # Combined 2.4/5 GHz and mesh networks share one name: the radio only hears the 2.4 GHz
+        # side, so aim at its strongest access point first, then let it pick any.
+        bssid = self.best_bssid.get(c["ssid"]) if pin else None
+        self.pinned = bssid is not None
+        try:
+            if bssid is not None:
+                self.wlan.connect(c["ssid"], c["psk"], bssid=bssid)
+            else:
+                self.wlan.connect(c["ssid"], c["psk"])
+        except Exception as e:  # noqa: BLE001
+            self.pinned = False
+            self.note("pinned join not accepted (%r); joining by name" % (e,))
+            self.wlan.connect(c["ssid"], c["psk"])
         self.join_t0 = ticks()
         self.status = None
         self.state = "joining"
-        self.note("join %s%s (password %d chars)" % (c["ssid"], " [trimmed]" if c["variant"] else "", len(c["psk"])))
+        self.note("join %s%s%s (password %d chars)" % (c["ssid"], " [trimmed]" if c["variant"] else "",
+                                                       " [strongest AP]" if self.pinned else "", len(c["psk"])))
 
     def _verdict(self, st, timed_out):
         if st == network.STAT_WRONG_PASSWORD:
@@ -427,6 +445,11 @@ class Net:
         verdict = self._verdict(st, timed_out)
         if verdict:
             c = self.cands[self.cur]
+            info = self.seen.get(c["ssid"])
+            if self.pinned and verdict in (STUCK, FAILED) and info and info[2] > 1:
+                self.note("%s: strongest AP did not accept; trying any AP" % c["ssid"])
+                self._join(self.cur, pin=False)
+                return
             c["result"] = verdict
             self.note("%s: %s" % (c["ssid"], verdict))
             nxt = self._next(self.cur + 1)
