@@ -88,8 +88,14 @@ class Portal:
         except Exception:  # noqa: BLE001
             pass
         uid = machine.unique_id()
+        self.psk = "hearts%02x%02x%02x" % (uid[-3], uid[-2], uid[-1])
+        # The screen is small: use the full hotspot name when it fits beside the QR code,
+        # otherwise a shorter real name, so what is shown is exactly what the phone sees.
         self.ssid = "HeartsLeft-%02X%02X" % (uid[-2], uid[-1])
-        self.psk = "buddy%02x%02x%02x" % (uid[-3], uid[-2], uid[-1])
+        self.qr = self._make_qr()
+        if not self._fits():
+            self.ssid = "Hearts-%02X%02X" % (uid[-2], uid[-1])
+            self.qr = self._make_qr()
         self.ap = network.WLAN(network.AP_IF)
         try:
             self.ap.config(ssid=self.ssid, key=self.psk)
@@ -110,8 +116,18 @@ class Portal:
         self.new_ssid = ""
         self.new_psk = ""
         self.j0 = 0
-        self.qr = screen.qr("WIFI:T:WPA;S:%s;P:%s;;" % (self.ssid, self.psk), 0, 0, 1)
         self.t0 = time.ticks_ms()
+
+    def _make_qr(self):
+        return screen.qr("WIFI:T:WPA;S:%s;P:%s;;" % (self.ssid, self.psk), 0, 0, 1)
+
+    def _layout(self):
+        """(qr scale, x of the text column) used by draw()."""
+        s = 3 if self.qr.width * 3 <= 84 else 2
+        return s, self.qr.width * s + 14
+
+    def _fits(self):
+        return gfx.width(self.ssid, font.sins) <= 160 - self._layout()[1] - 2
 
     def ip(self):
         try:
@@ -284,13 +300,12 @@ class Portal:
         gfx.box(0, 0, 160, 13, (217, 119, 87))
         gfx.text("PHONE SETUP", 4, -1, (20, 18, 24), font.sins)
         q = self.qr
-        s = 3 if q.width * 3 <= 84 else 2
+        s, x = self._layout()
         qs = q.width * s
         gfx.box(2, 18, qs + 8, qs + 8, (255, 255, 255))
         screen.blit(q, rect(6, 22, qs, qs))
-        x = qs + 14
         y = 15
-        for line in ("1. SCAN TO JOIN", "   WI-FI:", self.ssid[-9:], "2. OPEN", self.ip(), "3. ADD NETWORK"):
+        for line in ("1. SCAN TO JOIN", "   WI-FI:", self.ssid, "2. OPEN", self.ip(), "3. ADD NETWORK"):
             gfx.text(line, x, y, (230, 230, 230), font.sins)
             y += 10
         if self.notice:

@@ -117,3 +117,50 @@ now[0] += 5000; q.tick(); assert q.phase == "done"
 q, sta, now = run_join("gone")
 assert q.outcome == "fail" and "NETWORK NOT SEEN" in q.lines, q.lines
 print("PASS join after save: success, wrong password, network not seen; pinned BSSID; auto hand-back")
+
+
+# --- hotspot name: the full name when it fits beside the QR code, else a shorter real one
+import builtins
+
+
+class FakeAp:
+    def __init__(self): self.cfg = {}
+    def config(self, **kw): self.cfg.update(kw)
+    def active(self, v): pass
+    def ifconfig(self): return ("192.168.4.1",)
+
+
+class FakeSrv:
+    def setsockopt(self, *a): pass
+    def bind(self, *a): pass
+    def listen(self, *a): pass
+    def setblocking(self, *a): pass
+
+
+class FakeSock2:
+    SOL_SOCKET = SO_REUSEADDR = 0
+    def socket(self): return FakeSrv()
+    def __call__(self): return FakeSrv()
+
+
+def make_portal(qr_modules):
+    ap = FakeAp()
+    fake_sta = types.SimpleNamespace(active=lambda v: None, scan=lambda: [], config=lambda k: b"\x28\xcd\xc1\x1a\xf7\x96")
+    portal.network.WLAN = lambda mode: ap if mode == 1 else fake_sta
+    portal.network.AP_IF, portal.network.STA_IF = 1, 0
+    portal.socket = types.SimpleNamespace(socket=lambda: FakeSrv(), SOL_SOCKET=0, SO_REUSEADDR=0)
+    sys.modules["machine"].unique_id = lambda: b"\x01\x02\x03\x04\x6d\x68"
+    portal.machine = sys.modules["machine"]
+    builtins.screen.qr = lambda text, *a: types.SimpleNamespace(width=qr_modules, text=text)
+    time.ticks_ms = lambda: 0
+    return portal.Portal(), ap
+
+
+pt, ap = make_portal(29)
+assert pt.ssid == "HeartsLeft-6D68", pt.ssid          # fits: keep the longer name
+assert ap.cfg["ssid"] == pt.ssid and "S:HeartsLeft-6D68;" in pt.qr.text
+pt, ap = make_portal(33)
+assert pt.ssid == "Hearts-6D68", pt.ssid               # too wide: shorter, and it is the real name
+assert ap.cfg["ssid"] == "Hearts-6D68" and "S:Hearts-6D68;" in pt.qr.text
+assert pt.psk.startswith("hearts") and "P:" + pt.psk in pt.qr.text
+print("PASS hotspot name: full when it fits, shorter real name otherwise; QR matches")
