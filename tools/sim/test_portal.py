@@ -84,7 +84,7 @@ class FakeSta:
 def run_join(behaviour, bssids=None):
     q = portal.Portal.__new__(portal.Portal)
     q.phase, q.saved, q.outcome, q.lines, q.bssids = "wait", True, None, [], bssids or {}
-    q.new_ssid, q.new_psk, q.due, q.j0 = "otter2", "secret-pw", 0, 0
+    q.new_ssid, q.new_psk, q.due, q.j0 = "home-wifi", "secret-pw", 0, 0
     q.srv = types.SimpleNamespace(close=lambda: None)
     q.ap = types.SimpleNamespace(active=lambda v: None)
     sta = FakeSta(behaviour)
@@ -104,9 +104,9 @@ def run_join(behaviour, bssids=None):
     return q, sta, now
 
 
-q, sta, now = run_join("ok", {"otter2": b"\xac\xec\x85\xf2\x3e\xe4"})
+q, sta, now = run_join("ok", {"home-wifi": b"\x02\x00\x00\x00\x00\x01"})
 assert q.outcome == "ok" and q.phase == "result" and "SUCCESS!" in q.lines and "IP 192.168.4.48" in q.lines, (q.phase, q.lines)
-assert sta.calls[0][2].get("bssid") == b"\xac\xec\x85\xf2\x3e\xe4", "should pin to the strongest access point"
+assert sta.calls[0][2].get("bssid") == b"\x02\x00\x00\x00\x00\x01", "should pin to the strongest access point"
 assert not any("secret-pw" in l for l in q.lines), "password must never be shown"
 now[0] += 4000; q.tick(); assert q.phase == "done", "should hand back to the main screen by itself"
 
@@ -145,11 +145,11 @@ class FakeSock2:
 
 def make_portal(qr_modules):
     ap = FakeAp()
-    fake_sta = types.SimpleNamespace(active=lambda v: None, scan=lambda: [], config=lambda k: b"\x28\xcd\xc1\x1a\xf7\x96")
+    fake_sta = types.SimpleNamespace(active=lambda v: None, scan=lambda: [], config=lambda k: b"\x28\xcd\xc1\x00\x00\x02")
     portal.network.WLAN = lambda mode: ap if mode == 1 else fake_sta
     portal.network.AP_IF, portal.network.STA_IF = 1, 0
     portal.socket = types.SimpleNamespace(socket=lambda: FakeSrv(), SOL_SOCKET=0, SO_REUSEADDR=0)
-    sys.modules["machine"].unique_id = lambda: b"\x01\x02\x03\x04\x6d\x68"
+    sys.modules["machine"].unique_id = lambda: b"\x01\x02\x03\x04\xab\x12"
     portal.machine = sys.modules["machine"]
     builtins.screen.qr = lambda text, *a: types.SimpleNamespace(width=qr_modules, height=qr_modules, text=text)
     time.ticks_ms = lambda: 0
@@ -158,11 +158,11 @@ def make_portal(qr_modules):
 
 config.save_portal({"networks": [["home", "pw"]], "bridge": ""})   # a saved network: secured hotspot
 pt, ap = make_portal(29)
-assert pt.ssid == "HeartsLeft-6D68", pt.ssid          # fits: keep the longer name
-assert ap.cfg["ssid"] == pt.ssid and "S:HeartsLeft-6D68;" in pt.qr.text
+assert pt.ssid == "HeartsLeft-AB12", pt.ssid          # fits: keep the longer name
+assert ap.cfg["ssid"] == pt.ssid and "S:HeartsLeft-AB12;" in pt.qr.text
 pt, ap = make_portal(33)
-assert pt.ssid == "Hearts-6D68", pt.ssid               # too wide: shorter, and it is the real name
-assert ap.cfg["ssid"] == "Hearts-6D68" and "S:Hearts-6D68;" in pt.qr.text
+assert pt.ssid == "Hearts-AB12", pt.ssid               # too wide: shorter, and it is the real name
+assert ap.cfg["ssid"] == "Hearts-AB12" and "S:Hearts-AB12;" in pt.qr.text
 assert pt.psk.startswith("hearts") and "P:" + pt.psk in pt.qr.text
 print("PASS hotspot name: full when it fits, shorter real name otherwise; QR matches")
 
@@ -170,7 +170,7 @@ print("PASS hotspot name: full when it fits, shorter real name otherwise; QR mat
 config.save_portal({"networks": [], "bridge": ""})
 pt, ap = make_portal(29)
 assert pt.open and pt.psk == "" and "key" not in ap.cfg and "password" not in ap.cfg, ap.cfg
-assert pt.qr.text == "WIFI:T:nopass;S:HeartsLeft-6D68;;", pt.qr.text
+assert pt.qr.text == "WIFI:T:nopass;S:HeartsLeft-AB12;;", pt.qr.text
 shown = []
 portal.gfx.text = lambda t, *a, **k: shown.append(t)
 builtins.screen.blit = lambda *a, **k: None   # only the labels are checked here
