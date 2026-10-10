@@ -2,8 +2,8 @@
 """Render the Hearts Left themes on the desktop, no badge needed.
 
     python3 tools/simulate.py                 # contact sheet per theme -> tools/sim/out/
-    python3 tools/simulate.py zelda           # one theme
-    python3 tools/simulate.py --frames zelda 3   # animation frames for level 3
+    python3 tools/simulate.py hero           # one theme
+    python3 tools/simulate.py --frames hero 3   # animation frames for level 3
 
 The drawing code is the same module the badge runs; only the picovector API is
 replaced by tools/sim/pvshim.py, which follows the pixel rules measured on the
@@ -21,7 +21,7 @@ import pvshim  # noqa: E402
 import scene  # noqa: E402
 
 OUT = os.path.join(HERE, "sim", "out")
-THEMES = ["zelda", "runningman", "forrest"]
+THEMES = ["hero", "gameshow", "chocolates"]
 
 M = 1000000  # microseconds
 SCENARIOS = [

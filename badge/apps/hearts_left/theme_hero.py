@@ -63,7 +63,7 @@ HOURGLASS = ("KKKKK", ".KSK.", "..S..", ".KSK.", "KKKKK")
 
 
 class Theme(S.Theme):
-    name = "zelda"
+    name = "hero"
     label = "HYRULE"
 
     def build(self):

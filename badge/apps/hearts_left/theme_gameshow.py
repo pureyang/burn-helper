@@ -56,7 +56,7 @@ STALKER_SPEC = F.Spec(torso_w=6, arm_w=2, leg_w=3, hair="none", hat="helmet",
 
 
 class Theme(S.Theme):
-    name = "runningman"
+    name = "gameshow"
     label = "RUNNING MAN"
 
     def build(self):

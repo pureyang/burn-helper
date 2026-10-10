@@ -54,7 +54,9 @@ REMOTE_EXPIRE_S = 3600         # forget remote sessions entirely after this long
 TPM_WINDOW_S = 60
 USB_INTERVAL = 2.0
 
-THEMES = ("zelda", "runningman", "forrest")
+THEMES = ("hero", "gameshow", "chocolates")
+# theme ids used before the files were renamed (saved state, old phone panels)
+LEGACY_THEMES = {"zelda": "hero", "runningman": "gameshow", "forrest": "chocolates"}
 COUNTED_KINDS = ("interactive", "bg", "daemon-worker")
 BUSY_EVENTS = ("UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "SubagentStart", "SessionStart")
 TOOL_EVENTS = ("PostToolUse", "PostToolUseFailure")
@@ -127,7 +129,7 @@ class Bridge:
             if isinstance(w, dict) and _num(w.get("used")) is not None:
                 setattr(self, key, {"used": _num(w["used"]), "resets_at": int(_num(w.get("resets_at"), 0)),
                                     "rx": _num(w.get("rx"), 0)})
-        t = d.get("theme")
+        t = LEGACY_THEMES.get(d.get("theme"), d.get("theme"))
         self.theme = t if t in THEMES else None
         self.theme_seq = int(_num(d.get("theme_seq"), 0))
         self.last_active = _num(d.get("last_active"), 0.0)
@@ -281,6 +283,7 @@ class Bridge:
         return changed
 
     def set_theme(self, theme):
+        theme = LEGACY_THEMES.get(theme, theme)
         if theme in ("auto", None, ""):
             theme = None
         elif theme not in THEMES:
@@ -679,9 +682,9 @@ button.on{border-color:var(--accent)}
 <div class="card">
   <div class="k" style="margin-bottom:8px">Badge theme</div>
   <div class="btns">
-    <button data-t="zelda">Zelda</button>
-    <button data-t="runningman">Running Man</button>
-    <button data-t="forrest">Forrest Gump</button>
+    <button data-t="hero">Zelda</button>
+    <button data-t="gameshow">Running Man</button>
+    <button data-t="chocolates">Forrest Gump</button>
     <button data-t="auto">Badge decides</button>
   </div>
 </div>

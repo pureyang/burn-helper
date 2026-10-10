@@ -5,7 +5,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "sim"))
 import harness
 harness.install()
-import pvshim, figure as F, gfx, theme_zelda as Z
+import pvshim, figure as F, gfx, theme_hero as Z
 g = F.render(Z.SPEC, F.stand(prop="shield"))
 img = gfx.to_image(g, gfx.palette(Z.HERO))
 icon = pvshim.image(24, 24)

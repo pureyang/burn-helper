@@ -45,7 +45,7 @@ change without reconfiguring anything.
  "subagents":1,"tpm":2,"tools_today":2,
  "five_hour":{"used":38.0,"resets_at":1791578721},
  "seven_day":{"used":12.0,"resets_at":1791834321},
- "hearts":12,"theme":"zelda","theme_seq":3,"last_active":1791575121,"clock":"12:45"}
+ "hearts":12,"theme":"hero","theme_seq":3,"last_active":1791575121,"clock":"12:45"}
 ```
 
 - `hearts` is the remaining five-hour budget in half-heart units, 0 to 20. It is
@@ -55,7 +55,7 @@ change without reconfiguring anything.
   2 walking (any busy agent), 3 running (load 2+ or 15+ tool calls a minute),
   4 sprinting (load 4+ or 40+ tool calls a minute). Load is busy sessions plus
   half of each shell session and each subagent.
-- `theme` is set from the phone panel (`POST /theme {"theme": "zelda" | "runningman" | "forrest" | "auto"}`).
+- `theme` is set from the phone panel (`POST /theme {"theme": "hero" | "gameshow" | "chocolates" | "auto"}`).
   `theme_seq` increases on every change so the badge can tell a new choice from an old one.
 
 ## Other machines

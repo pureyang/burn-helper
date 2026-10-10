@@ -30,16 +30,19 @@ import scene as S  # noqa: E402
 import usb  # noqa: E402
 import debugview  # noqa: E402
 
-THEMES = ("zelda", "runningman", "forrest")
-LABELS = {"zelda": "HYRULE", "runningman": "THE RUNNING MAN", "forrest": "FORREST"}
+THEMES = ("hero", "gameshow", "chocolates")
+LABELS = {"hero": "HYRULE", "gameshow": "THE RUNNING MAN", "chocolates": "FORREST"}
 BRIGHT = (1.0, 0.7, 0.45, 0.25)
 MENU_FLAG = "/state/.hearts_left_menu"
 
-prefs = {"theme": "zelda", "bright": 0, "seq": -1, "lights": True}
+prefs = {"theme": "hero", "bright": 0, "seq": -1, "lights": True}
 config.migrate()
 State.load("hearts_left", prefs)
+# theme ids used before the files were renamed
+LEGACY_THEMES = {"zelda": "hero", "runningman": "gameshow", "forrest": "chocolates"}
+prefs["theme"] = LEGACY_THEMES.get(prefs.get("theme"), prefs.get("theme"))
 if prefs.get("theme") not in THEMES:
-    prefs["theme"] = "zelda"
+    prefs["theme"] = "hero"
 
 st = S.Status()
 link = net.Net(config.networks(), config.bridge())

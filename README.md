@@ -15,13 +15,13 @@ Install everything with one line on a Mac, with the badge plugged in:
 curl -fsSL https://raw.githubusercontent.com/pureyang/hearts-left/main/install.sh | bash
 ```
 
-![Zelda theme, every level](docs/img/sheet_zelda.png)
-![Running Man theme, every level](docs/img/sheet_runningman.png)
-![Forrest theme, every level](docs/img/sheet_forrest.png)
+![Zelda theme, every level](docs/img/sheet_hero.png)
+![Running Man theme, every level](docs/img/sheet_gameshow.png)
+![Forrest theme, every level](docs/img/sheet_chocolates.png)
 
 Real screenshots from the badge:
 
-![Zelda on the badge](docs/img/device_zelda.png) ![Running Man on the badge](docs/img/device_runningman.png) ![Forrest on the badge](docs/img/device_forrest.png)
+![Zelda on the badge](docs/img/device_hero.png) ![Running Man on the badge](docs/img/device_gameshow.png) ![Forrest on the badge](docs/img/device_chocolates.png)
 
 ## Hardware
 
@@ -104,9 +104,9 @@ flash once less than 20% is left.
 | Running Man | The runner's explosive collar: green light = charge left, amber = half, dark red = spent; the collar flashes red when low | Cyan charge strip under the collar | The show's game clock |
 | Forrest | A box of chocolates: whole, bitten (half), empty paper cup | The road from coast to coast | Clock beside the miles |
 
-![Zelda usage meter](docs/img/meter_zelda.png)
-![Running Man usage meter](docs/img/meter_runningman.png)
-![Forrest usage meter](docs/img/meter_forrest.png)
+![Zelda usage meter](docs/img/meter_hero.png)
+![Running Man usage meter](docs/img/meter_gameshow.png)
+![Forrest usage meter](docs/img/meter_chocolates.png)
 
 The countdown shows hours and minutes while the reset is far off (`2H13M`). Under an hour it
 becomes a ticking clock (`13:42`), under a minute it shows milliseconds (`42.173`), and in the

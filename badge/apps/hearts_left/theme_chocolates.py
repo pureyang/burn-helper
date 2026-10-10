@@ -55,7 +55,7 @@ SHOE = ("...WW..", "..WWWW.", "WWRRWWW", "WWWWRRW", "KKKKKKK")
 
 
 class Theme(S.Theme):
-    name = "forrest"
+    name = "chocolates"
     label = "FORREST"
 
     def build(self):
@@ -185,7 +185,7 @@ class Theme(S.Theme):
             self.mesas.draw(self.scroll)
             gfx.box(0, 84, 160, 6, (226, 168, 110))
             self.desert_road.draw(self.scroll)
-        self.draw_forrest(st, t)
+        self.draw_hero_figure(st, t)
         self.draw_hud(st, t)
         self.draw_caption(st, t)
 
@@ -215,7 +215,7 @@ class Theme(S.Theme):
         fy = 22 + p * 66
         gfx.blit(self.feather, fx, fy, 2, math.sin(t / 700.0) > 0)
 
-    def draw_forrest(self, st, t):
+    def draw_hero_figure(self, st, t):
         lv = st.level
         foot = 104
         if lv == S.SLEEP:
