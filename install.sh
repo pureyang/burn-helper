@@ -1,0 +1,121 @@
+#!/bin/bash
+# Hearts Left installer for macOS. One line:
+#
+#   curl -fsSL https://raw.githubusercontent.com/pureyang/hearts-left/main/install.sh | bash
+#
+# or from a checkout: ./install.sh
+#
+# Options (after `| bash -s --` when piping):
+#   --yes        accept every step without asking (Wi-Fi is then set up from your phone)
+#   --no-flash   never replace the badge's firmware
+#   --no-badge   only set up the Mac side
+#   --no-bridge  only set up the badge
+#   --dry-run    show what would happen, change nothing
+#   --uninstall  remove the hooks, status line and login item from this Mac
+#
+# What it does: gets the code into ~/hearts-left, installs the Mac bridge (async
+# Claude Code hooks, a hearts status line, a login item; settings.json is backed
+# up first), then backs up and flashes the badge if needed, asks for Wi-Fi, and
+# copies the app onto it.
+set -e
+
+REPO_URL="${HEARTS_LEFT_REPO:-https://github.com/pureyang/hearts-left.git}"
+REF="${HEARTS_LEFT_REF:-main}"
+DEST="${HEARTS_LEFT_DIR:-$HOME/hearts-left}"
+PY=/usr/bin/python3
+
+YES=0 NO_BADGE=0 NO_BRIDGE=0 DRY=0 UNINSTALL=0
+BADGE_ARGS=""
+for arg in "$@"; do
+  case "$arg" in
+    --yes|-y) YES=1; BADGE_ARGS="$BADGE_ARGS --yes" ;;
+    --no-flash) BADGE_ARGS="$BADGE_ARGS --no-flash" ;;
+    --no-badge) NO_BADGE=1 ;;
+    --no-bridge) NO_BRIDGE=1 ;;
+    --dry-run) DRY=1; BADGE_ARGS="$BADGE_ARGS --dry-run" ;;
+    --uninstall) UNINSTALL=1 ;;
+    -h|--help) sed -n '2,23p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Unknown option: $arg (try --help)" >&2; exit 2 ;;
+  esac
+done
+
+say() { printf '\033[1;31m\xe2\x99\xa5\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31m\xe2\x99\xa5 %s\033[0m\n' "$*" >&2; exit 1; }
+
+# yes/no question that works under `curl | bash` (stdin is the script there)
+ask() {
+  [ "$YES" = 1 ] && return 0
+  if ! (exec < /dev/tty) 2>/dev/null; then
+    say "No terminal to ask on. Rerun with: curl -fsSL <url> | bash -s -- --yes"
+    return 1
+  fi
+  printf '%s [Y/n] ' "$1" > /dev/tty
+  read -r answer < /dev/tty || answer=n
+  case "$answer" in ""|y|Y|yes|YES|Yes) return 0 ;; *) return 1 ;; esac
+}
+
+say "Hearts Left: your Claude Code agents on a Tufty 2350 badge."
+[ "$(uname -s)" = "Darwin" ] || die "The installer supports macOS only for now."
+xcode-select -p >/dev/null 2>&1 || die "Install Apple's command line tools first (they include git and python3): xcode-select --install"
+[ -x "$PY" ] || die "$PY is missing; run: xcode-select --install"
+
+# 1. the code: this checkout, or a fresh clone in ~/hearts-left
+ROOT=""
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  [ -f "$here/bridge/install.py" ] && [ -d "$here/badge" ] && ROOT="$here"
+fi
+if [ -z "$ROOT" ]; then
+  if [ -d "$DEST/.git" ]; then
+    if [ "$DRY" = 1 ]; then say "Would update $DEST from $REPO_URL ($REF)."; else
+      say "Updating $DEST ..."
+      git -C "$DEST" fetch --quiet origin "$REF"
+      git -C "$DEST" checkout --quiet "$REF"
+      git -C "$DEST" merge --ff-only --quiet "origin/$REF"
+    fi
+  elif [ -e "$DEST" ]; then
+    die "$DEST already exists and is not a Hearts Left checkout. Set HEARTS_LEFT_DIR to another folder."
+  elif [ "$DRY" = 1 ]; then
+    say "Would clone $REPO_URL ($REF) into $DEST, then continue."
+    exit 0
+  else
+    say "Downloading Hearts Left into $DEST ..."
+    git clone --quiet --branch "$REF" "$REPO_URL" "$DEST"
+  fi
+  ROOT="$DEST"
+fi
+say "Code: $ROOT"
+
+if [ "$UNINSTALL" = 1 ]; then
+  "$PY" "$ROOT/bridge/install.py" --uninstall $([ "$DRY" = 1 ] && echo --dry-run)
+  say "The badge was left as it is. To put its original firmware back:"
+  say "  python3 $ROOT/scripts/badge.py bootloader && picotool load -v -x $ROOT/backup/<date>/flash-full.bin"
+  exit 0
+fi
+
+[ -d "$HOME/.claude" ] || say "Claude Code does not seem to be set up yet (no ~/.claude). Install it, run it once, then rerun this."
+
+# 2. the Mac side
+if [ "$NO_BRIDGE" = 0 ]; then
+  if [ "$DRY" = 1 ]; then
+    "$PY" "$ROOT/bridge/install.py" --dry-run
+  else
+    say "The bridge adds async hooks and a hearts status line to ~/.claude/settings.json"
+    say "(backed up first; undo with --uninstall) and starts at login."
+    if ask "Install the bridge on this Mac?"; then
+      "$PY" "$ROOT/bridge/install.py"
+    else
+      say "Skipped the bridge."
+    fi
+  fi
+fi
+
+# 3. the badge
+if [ "$NO_BADGE" = 0 ]; then
+  # shellcheck disable=SC2086
+  "$PY" "$ROOT/tools/setup_badge.py" $BADGE_ARGS
+fi
+
+ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo '<this-mac-ip>')"
+say "Done. Phone panel and theme picker: http://$ip:8787/"
+say "On the badge: A/C change theme, B shows info (twice: Wi-Fi debug), hold B for phone Wi-Fi setup."
