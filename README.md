@@ -330,3 +330,11 @@ tether pauses while they use the port.
 Flash backups (`backup/`), firmware images (`*.uf2`), raw dumps (`*.bin`) and
 `badge/secrets.py` are git-ignored. They contain Wi-Fi passwords, Supabase keys and device
 tokens, so never commit them.
+## Every level of every theme
+
+Simulator renders of each activity level, from asleep to sprinting, for each theme.
+
+![Zelda theme, every level](docs/img/sheet_hero.png)
+![Running Man theme, every level](docs/img/sheet_gameshow.png)
+![Forrest theme, every level](docs/img/sheet_chocolates.png)
+
