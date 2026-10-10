@@ -88,7 +88,10 @@ class Portal:
         except Exception:  # noqa: BLE001
             pass
         uid = machine.unique_id()
-        self.psk = "hearts%02x%02x%02x" % (uid[-3], uid[-2], uid[-1])
+        # First-time setup (no Wi-Fi saved yet) uses an open hotspot so there is nothing to type or
+        # scan past; once a network is saved the hotspot gets a password.
+        self.open = not config.networks()
+        self.psk = "" if self.open else "hearts%02x%02x%02x" % (uid[-3], uid[-2], uid[-1])
         # The screen is small: use the full hotspot name when it fits beside the QR code,
         # otherwise a shorter real name, so what is shown is exactly what the phone sees.
         self.ssid = "HeartsLeft-%02X%02X" % (uid[-2], uid[-1])
@@ -97,10 +100,16 @@ class Portal:
             self.ssid = "Hearts-%02X%02X" % (uid[-2], uid[-1])
             self.qr = self._make_qr()
         self.ap = network.WLAN(network.AP_IF)
-        try:
-            self.ap.config(ssid=self.ssid, key=self.psk)
-        except Exception:  # noqa: BLE001
-            self.ap.config(ssid=self.ssid, password=self.psk)
+        if self.open:
+            try:
+                self.ap.config(ssid=self.ssid, security=0)
+            except Exception:  # noqa: BLE001
+                self.ap.config(ssid=self.ssid)
+        else:
+            try:
+                self.ap.config(ssid=self.ssid, key=self.psk)
+            except Exception:  # noqa: BLE001
+                self.ap.config(ssid=self.ssid, password=self.psk)
         self.ap.active(True)
         self.srv = socket.socket()
         self.srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -119,6 +128,8 @@ class Portal:
         self.t0 = time.ticks_ms()
 
     def _make_qr(self):
+        if self.open:
+            return screen.qr("WIFI:T:nopass;S:%s;;" % self.ssid, 0, 0, 1)
         return screen.qr("WIFI:T:WPA;S:%s;P:%s;;" % (self.ssid, self.psk), 0, 0, 1)
 
     def _layout(self):
@@ -310,5 +321,5 @@ class Portal:
             y += 10
         if self.notice:
             gfx.text(self.notice[:26], 4, 82, (255, 110, 100), font.sins)
-        gfx.text("PASS " + self.psk, 4, 94, (250, 200, 120), font.sins)
+        gfx.text("NO WIFI PASS NEEDED" if self.open else "WIFI PASS " + self.psk, 4, 94, (250, 200, 120), font.sins)
         gfx.text("PRESS B TO CANCEL", 4, 106, (150, 150, 160), font.sins)

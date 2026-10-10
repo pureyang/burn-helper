@@ -151,11 +151,12 @@ def make_portal(qr_modules):
     portal.socket = types.SimpleNamespace(socket=lambda: FakeSrv(), SOL_SOCKET=0, SO_REUSEADDR=0)
     sys.modules["machine"].unique_id = lambda: b"\x01\x02\x03\x04\x6d\x68"
     portal.machine = sys.modules["machine"]
-    builtins.screen.qr = lambda text, *a: types.SimpleNamespace(width=qr_modules, text=text)
+    builtins.screen.qr = lambda text, *a: types.SimpleNamespace(width=qr_modules, height=qr_modules, text=text)
     time.ticks_ms = lambda: 0
     return portal.Portal(), ap
 
 
+config.save_portal({"networks": [["home", "pw"]], "bridge": ""})   # a saved network: secured hotspot
 pt, ap = make_portal(29)
 assert pt.ssid == "HeartsLeft-6D68", pt.ssid          # fits: keep the longer name
 assert ap.cfg["ssid"] == pt.ssid and "S:HeartsLeft-6D68;" in pt.qr.text
@@ -164,3 +165,19 @@ assert pt.ssid == "Hearts-6D68", pt.ssid               # too wide: shorter, and 
 assert ap.cfg["ssid"] == "Hearts-6D68" and "S:Hearts-6D68;" in pt.qr.text
 assert pt.psk.startswith("hearts") and "P:" + pt.psk in pt.qr.text
 print("PASS hotspot name: full when it fits, shorter real name otherwise; QR matches")
+
+# --- nothing saved yet: open hotspot, no password anywhere
+config.save_portal({"networks": [], "bridge": ""})
+pt, ap = make_portal(29)
+assert pt.open and pt.psk == "" and "key" not in ap.cfg and "password" not in ap.cfg, ap.cfg
+assert pt.qr.text == "WIFI:T:nopass;S:HeartsLeft-6D68;;", pt.qr.text
+shown = []
+portal.gfx.text = lambda t, *a, **k: shown.append(t)
+builtins.screen.blit = lambda *a, **k: None   # only the labels are checked here
+pt.draw(0)
+assert "NO WIFI PASS NEEDED" in shown and not any(t.startswith("WIFI PASS") for t in shown), shown
+config.save_portal({"networks": [["home", "pw"]], "bridge": ""})
+pt, ap = make_portal(29)
+shown.clear(); pt.draw(0)
+assert "WIFI PASS " + pt.psk in shown and ap.cfg["key"] == pt.psk, shown
+print("PASS open hotspot with no saved Wi-Fi; secured and labelled WIFI PASS once one is saved")
