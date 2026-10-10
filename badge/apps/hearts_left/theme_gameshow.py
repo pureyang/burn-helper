@@ -249,7 +249,7 @@ class Theme(S.Theme):
     def draw_hud(self, st, t):
         gfx.box(0, 0, 160, 22, (10, 0, 18))
         gfx.box(0, 21, 160, 1, PINK)
-        gfx.text("THE RUNNING MAN", 2, -2, YELLOW, font.sins, shadow=RED)
+        gfx.text("RUNNING MAN", 2, -2, YELLOW, font.sins, shadow=RED)
         lv = st.level
         if not st.online:
             self.rtext("NO SIGNAL", (150, 150, 160))

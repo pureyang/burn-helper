@@ -31,7 +31,7 @@ import usb  # noqa: E402
 import debugview  # noqa: E402
 
 THEMES = ("hero", "gameshow", "chocolates")
-LABELS = {"hero": "HYRULE", "gameshow": "THE RUNNING MAN", "chocolates": "FORREST"}
+LABELS = {"hero": "HYRULE", "gameshow": "RUNNING MAN", "chocolates": "FORREST"}
 # 10 backlight levels, brightest first; the steps are roughly even to the eye
 BRIGHT = (1.0, 0.85, 0.7, 0.57, 0.46, 0.36, 0.28, 0.21, 0.15, 0.1)
 OLD_BRIGHT = (1.0, 0.7, 0.45, 0.25)   # the four levels used before
