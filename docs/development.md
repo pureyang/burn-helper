@@ -4,6 +4,7 @@
 python3 tools/simulate.py                       # render every theme/level to tools/sim/out/*.png
 python3 tools/simulate.py --tiers hero          # all 15 activity levels on one sheet
 python3 tools/sim/preview_views.py              # render Desktop, Paged and Waiting focus
+python3 tools/sim/video_storyboard.py           # one frame per beat of the 20-second video demo
 python3 tools/sim/preview_debug.py              # render the Wi-Fi debug screen states
 python3 tools/deploy.py                         # copy changed files to the badge and restart
 python3 tools/deploy.py --shot-only x.png [--view 1-3] [--page 0-3] [--demo 1]   # screenshot the badge

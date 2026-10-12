@@ -109,14 +109,15 @@ troubleshooting and shipping badges with an event network are in [docs/wifi.md](
 | [How it works](docs/how-it-works.md) | Bridge, badge app, activity levels, usage meters, every theme |
 | [Making themes](docs/themes.md) | The theme contract, memory and build-time budgets, how to add one |
 | [Development](docs/development.md) | Simulator, tools, tests, repo layout |
+| [Demo video](docs/video.md) | Recording the 20-second demo take the badge plays on its own |
 | [Bridge](bridge/README.md) | The Mac-side server and its API |
 
-## Private data
 ## License
 
 [MIT](LICENSE) for the code. The license does not cover the names and characters the homage
 themes refer to (Zelda, *The Running Man*, Forrest Gump); those belong to their owners.
 
+## Private data
 
 Flash backups (`backup/`), firmware images, raw dumps and `badge/secrets.py` are git-ignored
 because they can hold Wi-Fi passwords and keys. Never commit them.
