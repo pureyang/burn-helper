@@ -4,6 +4,10 @@ A 3D-printable stand that holds the Tufty 2350 upright on your desk while a USB-
 plugged into its left side. There are two versions: a plain one in one colour, and one with a
 Zelda-style heart meter in a second colour on the front.
 
+Tested with the Tufty 2350 badge given out at Supabase Select 2026. Other Tufty 2350
+badges may differ in size or port position, so check the measurements under
+[The design](#the-design) before printing.
+
 ![Plain stand](badge_stand.png)
 
 ![Two-colour stand, front view](badge_stand_2colors.png)
