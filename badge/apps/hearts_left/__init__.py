@@ -9,7 +9,8 @@
 #              hold 2 s for phone setup. In Paged mode A/C turn pages (the last is Wi-Fi debug)
 #              (on the debug screen UP rescans and retries Wi-Fi right away)
 #   hold UP    demo mode for 2 s (cycles every level, shows a DEMO tag)
-#   DOWN       brightness (10 levels); hold 2 s to switch the case LEDs on or off (off by default)
+#   DOWN       brightness: 10 levels, then 0% (screen off, badge still running), then full again;
+#              hold 2 s to switch the case LEDs on or off (off by default)
 #   HOME       switch to the stock app menu (HOME again comes back here)
 
 import gc
@@ -33,8 +34,11 @@ import views  # noqa: E402
 
 THEMES = ("hero", "gameshow", "chocolates")
 LABELS = {"hero": "HYRULE", "gameshow": "RUNNING MAN", "chocolates": "FORREST"}
-# 10 backlight levels, brightest first; the steps are roughly even to the eye
-BRIGHT = (1.0, 0.85, 0.7, 0.57, 0.46, 0.36, 0.28, 0.21, 0.15, 0.1)
+# 10 lit backlight levels, brightest first (steps roughly even to the eye), then 0%: the screen
+# is off but the badge keeps running
+BRIGHT = (1.0, 0.85, 0.7, 0.57, 0.46, 0.36, 0.28, 0.21, 0.15, 0.1, 0.0)
+OFF = len(BRIGHT) - 1
+SCREEN_OFF_NOTE_MS = 3000            # how long the "screen turning off" note shows first
 OLD_BRIGHT = (1.0, 0.7, 0.45, 0.25)   # the four levels used before
 MENU_FLAG = "/state/.hearts_left_menu"
 
@@ -46,11 +50,14 @@ LEGACY_THEMES = {"zelda": "hero", "runningman": "gameshow", "forrest": "chocolat
 prefs["theme"] = LEGACY_THEMES.get(prefs.get("theme"), prefs.get("theme"))
 if prefs.get("theme") not in THEMES:
     prefs["theme"] = "hero"
-if prefs.get("levels") != len(BRIGHT):
+if prefs.get("levels") not in (10, len(BRIGHT)):
     # saved with the old four levels: keep the same brightness on the new scale
     old = OLD_BRIGHT[prefs.get("bright", 0) % len(OLD_BRIGHT)]
-    prefs["bright"] = min(range(len(BRIGHT)), key=lambda i: abs(BRIGHT[i] - old))
-    prefs["levels"] = len(BRIGHT)
+    prefs["bright"] = min(range(OFF), key=lambda i: abs(BRIGHT[i] - old))
+prefs["levels"] = len(BRIGHT)
+if prefs["bright"] >= OFF:
+    # never start with a dark screen: a badge that boots black looks dead
+    prefs["bright"] = OFF - 1
 
 st = S.Status()
 link = net.Net(config.networks(), config.bridge())
@@ -59,6 +66,7 @@ themes = {}
 view = 0        # 0 animation, then views.DESKTOP, views.PAGED, views.WAITING
 page = 0        # the page shown in Paged mode
 wait_since = None        # ticks_ms when a session started waiting (for Waiting focus)
+screen_off_at = None     # ticks_ms when the backlight goes off after the 0% note
 demo = 0            # 0 off, 1 demo with a DEMO tag, 2 demo with no tag
 DEMO_HOLD_MS = 2000      # hold UP alone
 HIDDEN_HOLD_MS = 3000    # hold UP + DOWN together
@@ -225,7 +233,7 @@ def wifi_trouble():
 
 
 def short_press(b):
-    global view, page
+    global view, page, screen_off_at
     if view == views.PAGED and b in (BUTTON_A, BUTTON_C):
         page = (page + (1 if b == BUTTON_C else -1)) % len(views.PAGES)
     elif b == BUTTON_A:
@@ -241,9 +249,14 @@ def short_press(b):
         show_toast("RESCANNING")
     elif b == BUTTON_DOWN:
         prefs["bright"] = (prefs["bright"] + 1) % len(BRIGHT)
-        set_brightness(prefs["bright"])
         save_prefs()
-        show_toast("BRIGHTNESS %d%%" % int(BRIGHT[prefs["bright"]] * 100))
+        if prefs["bright"] == OFF:
+            # keep the screen lit for a moment to say what is happening, then turn it off
+            screen_off_at = time.ticks_add(time.ticks_ms(), SCREEN_OFF_NOTE_MS)
+        else:
+            screen_off_at = None
+            set_brightness(prefs["bright"])
+            show_toast("BRIGHTNESS %d%%" % int(BRIGHT[prefs["bright"]] * 100 + 0.5))
 
 
 def handle_buttons(t):
@@ -305,6 +318,10 @@ def handle_buttons(t):
 
 def start_portal():
     global portal
+    if prefs["bright"] == OFF:
+        # phone setup needs the screen: come back on at the dimmest lit level
+        prefs["bright"] = OFF - 1
+        set_brightness(prefs["bright"])
     link.stop()
     try:
         import portal as P
@@ -339,7 +356,8 @@ def finish_portal():
 
 def power_save(t):
     global dimmed
-    if not dimmed and st.level == S.SLEEP and time.ticks_diff(t, last_input) > 10 * 60 * 1000:
+    if not dimmed and BRIGHT[prefs["bright"]] > 0.12 and st.level == S.SLEEP \
+            and time.ticks_diff(t, last_input) > 10 * 60 * 1000:
         dimmed = True
         try:
             display.backlight(0.12)
@@ -350,12 +368,24 @@ def power_save(t):
         set_brightness(prefs["bright"])
 
 
+def screen_dark():
+    return prefs["bright"] == OFF and screen_off_at is None
+
+
+def draw_off_note(left_ms):
+    gfx.box(8, 32, 144, 52, (0, 0, 0))
+    gfx.box(8, 32, 144, 1, (217, 119, 87))
+    gfx.ctext("SCREEN OFF IN %d" % ((left_ms + 999) // 1000), 80, 35, (255, 255, 255), font.sins)
+    gfx.ctext("THE BADGE STAYS ON", 80, 50, (110, 220, 120), font.sins)
+    gfx.ctext("DOWN: SCREEN BACK ON", 80, 65, (150, 150, 160), font.sins)
+
+
 def pace(t):
     """Cap the frame rate: smooth when busy, frugal when asleep."""
     global frame_t
     target = 90 if (st.level == S.SLEEP and not st.waiting) else 40
-    if view:
-        target = 100       # static screens: nothing animates, 10 fps still catches a quick tap
+    if view or screen_dark():
+        target = 100       # static screens or a dark screen: nothing animates, 10 fps still catches a quick tap
     spent = time.ticks_diff(time.ticks_ms(), frame_t)
     try:
         if spent < target:
@@ -390,10 +420,12 @@ def draw_frame(t):
         gfx.box(80 - w // 2, 48, w, 13, (0, 0, 0))
         gfx.box(80 - w // 2, 48, w, 1, (217, 119, 87))
         gfx.ctext(toast, 80, 48, (255, 255, 255), font.sins)
+    if screen_off_at is not None:
+        draw_off_note(time.ticks_diff(screen_off_at, t))
 
 
 def update():
-    global wait_since
+    global wait_since, screen_off_at
     t = time.ticks_ms()
     t_start = t
     handle_buttons(t)
@@ -418,7 +450,11 @@ def update():
             wait_since = t
     else:
         wait_since = None
-    draw_frame(t)
+    if screen_off_at is not None and time.ticks_diff(screen_off_at, t) <= 0:
+        screen_off_at = None
+        set_brightness(prefs["bright"])       # the 0% level: backlight off
+    if not screen_dark():
+        draw_frame(t)
     lights(t)
     power_save(t)
     perf[0] = perf[0] * 0.9 + time.ticks_diff(time.ticks_ms(), t_start) * 0.1
