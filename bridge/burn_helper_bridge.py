@@ -20,6 +20,7 @@ Standard library only. Python 3.9 compatible.
 """
 import argparse
 import datetime
+import hmac
 import json
 import os
 import socket
@@ -67,6 +68,11 @@ SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
 STATE_DIR = os.path.expanduser(env("STATE_DIR") or os.path.join(HOME, ".claude", "burn-helper"))
 OLD_STATE_DIRS = (os.path.join(HOME, ".claude", "hearts-left"), os.path.join(HOME, ".claude", "tufty-bridge"))
 STATE_FILE = os.path.join(STATE_DIR, "state.json")
+# Internet relay (bridge/relay.py turns it on): a second listener on 127.0.0.1 that only
+# Tailscale Funnel reaches, answering GET /status to callers with the key.
+RELAY_FILE = os.path.join(STATE_DIR, "relay.json")
+RELAY_PORT = 8788
+RELAY = None          # {"url": "https://<mac>.<tailnet>.ts.net", "key": "<hex>"} when on
 USB_LOCK = os.path.join(STATE_DIR, "usb.lock")   # held by scripts/badge.py while it uses the port
 HOSTNAME = socket.gethostname()
 
@@ -484,6 +490,61 @@ class Handler(BaseHTTPRequestHandler):
             self._send(500, {"error": "internal"})
 
 
+def load_relay():
+    try:
+        with open(RELAY_FILE) as f:
+            r = json.load(f)
+        if isinstance(r, dict) and str(r.get("url", "")).startswith("https://") and len(str(r.get("key", ""))) >= 32:
+            return {"url": str(r["url"]).rstrip("/"), "key": str(r["key"])}
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+class RelayHandler(BaseHTTPRequestHandler):
+    """The internet-facing side: read-only status, and only for callers with the key.
+
+    Keeps connections open (HTTP/1.1) so a badge on the relay does one TLS handshake, not one
+    per poll. Nothing here can change the bridge's state.
+    """
+    server_version = "BurnHelperRelay/1"
+    protocol_version = "HTTP/1.1"
+    timeout = 60                      # drop idle connections after a minute
+
+    def log_message(self, fmt, *args):
+        if VERBOSE:
+            log("relay %s" % (fmt % args))
+
+    def _send(self, code, body):
+        data = json.dumps(body, separators=(",", ":")).encode("utf-8")
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError, socket.timeout):
+            self.close_connection = True
+
+    def do_GET(self):
+        try:
+            path, _, query = self.path.partition("?")
+            if path == "/health":
+                self._send(200, {"ok": True})
+                return
+            given = self.headers.get("X-Burn-Helper-Key") or ""
+            if not given and query.startswith("key="):
+                given = query[4:]
+            if path != "/status" or RELAY is None or not hmac.compare_digest(given.encode(), RELAY["key"].encode()):
+                self._send(404, {"error": "not found"})
+                return
+            self._send(200, BRIDGE.status())
+        except Exception as e:  # noqa: BLE001 - never let a request kill the server
+            log("relay error: %r" % e)
+            self._send(500, {"error": "internal"})
+
+
 class Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
@@ -592,7 +653,11 @@ def usb_loop():
                     tty.setraw(fd)
                     log("usb: tethered to badge on %s" % port)
             if fd is not None:
-                line = "@TUFTY " + json.dumps(BRIDGE.status(), separators=(",", ":")) + "\n"
+                s = BRIDGE.status()
+                if RELAY is not None:
+                    # the relay address and key go to the badge over the cable only, never over Wi-Fi
+                    s = dict(s, relay=RELAY)
+                line = "@TUFTY " + json.dumps(s, separators=(",", ":")) + "\n"
                 try:
                     os.write(fd, line.encode())
                 except BlockingIOError:
@@ -620,7 +685,7 @@ def lan_ip():
 
 
 def main():
-    global BRIDGE, VERBOSE
+    global BRIDGE, VERBOSE, RELAY
     ap = argparse.ArgumentParser(description="Burn Helper: Claude Code activity bridge for the badge")
     ap.add_argument("--port", type=int, default=int(env("PORT") or DEFAULT_PORT))
     ap.add_argument("--bind", default=env("BIND") or "0.0.0.0")
@@ -643,6 +708,11 @@ def main():
         threading.Thread(target=beacon_loop, args=(args.port,), daemon=True).start()
     if not args.no_usb:
         threading.Thread(target=usb_loop, daemon=True).start()
+    RELAY = load_relay()
+    if RELAY is not None:
+        relay = Server(("127.0.0.1", RELAY_PORT), RelayHandler)
+        threading.Thread(target=relay.serve_forever, daemon=True).start()
+        log("relay: %s -> 127.0.0.1:%d (Tailscale Funnel)" % (RELAY["url"], RELAY_PORT))
     httpd = Server((args.bind, args.port), Handler)
     log("listening on http://%s:%d/ (phone panel), badge JSON at /status, beacon %s" % (
         lan_ip(), args.port, "off" if args.no_beacon else "udp/%d" % BEACON_PORT))
