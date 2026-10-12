@@ -27,7 +27,7 @@ def find_port():
     return ports[0]
 
 
-LOCK = os.path.expanduser("~/.claude/hearts-left/usb.lock")
+LOCK = os.path.expanduser("~/.claude/burn-helper/usb.lock")
 
 
 def _lock():

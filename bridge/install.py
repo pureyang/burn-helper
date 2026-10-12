@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Install or remove the Hearts Left bridge integration for Claude Code on this Mac.
+"""Install or remove the Burn Helper bridge integration for Claude Code on this Mac.
 
     python3 bridge/install.py              add hooks + status line, start the bridge at login
     python3 bridge/install.py --dry-run    show the settings.json diff and plist, change nothing
     python3 bridge/install.py --uninstall  remove only what this script added
 
-Set HEARTS_LEFT_HOME to point at a different home directory (used for testing).
-With it set, launchctl is never called. Installs from an older version (the
-com.lexco.tufty-bridge login item) are replaced.
+Set BURN_HELPER_HOME to point at a different home directory (used for testing).
+With it set, launchctl is never called. Installs from older versions (the
+com.heartsleft.bridge and com.lexco.tufty-bridge login items) are replaced.
 """
 import argparse
 import difflib
@@ -22,23 +22,23 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PY = "/usr/bin/python3"
 HOOK_CMD = "%s %s" % (PY, os.path.join(HERE, "cc_hook.py"))
 STATUS_CMD = "%s %s" % (PY, os.path.join(HERE, "cc_statusline.py"))
-BRIDGE = os.path.join(HERE, "hearts_left_bridge.py")
-LABEL = "com.heartsleft.bridge"
-OLD_LABELS = ("com.lexco.tufty-bridge",)
+BRIDGE = os.path.join(HERE, "burn_helper_bridge.py")
+LABEL = "com.burnhelper.bridge"
+OLD_LABELS = ("com.heartsleft.bridge", "com.lexco.tufty-bridge")
 EVENTS = ("PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SubagentStart",
           "SubagentStop", "Notification", "SessionStart", "SessionEnd")
 TOOL_EVENTS = ("PostToolUse", "PostToolUseFailure")
 
-TEST_HOME = os.environ.get("HEARTS_LEFT_HOME") or os.environ.get("TUFTY_HOME")
+TEST_HOME = os.environ.get("BURN_HELPER_HOME") or os.environ.get("HEARTS_LEFT_HOME") or os.environ.get("TUFTY_HOME")
 HOME = os.path.expanduser(TEST_HOME or "~")
 SETTINGS = os.path.join(HOME, ".claude", "settings.json")
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
-LOGFILE = os.path.join(HOME, "Library", "Logs", "hearts-left.log")
+LOGFILE = os.path.join(HOME, "Library", "Logs", "burn-helper.log")
 
 
 def is_ours(cmd):
     # Match by script name wherever the repo lives, so reinstalling from another
-    # clone (the one-line installer uses ~/hearts-left) replaces the old entries.
+    # clone (the one-line installer uses ~/burn-helper) replaces the old entries.
     return isinstance(cmd, str) and ("/bridge/cc_hook.py" in cmd or "/bridge/cc_statusline.py" in cmd)
 
 
@@ -123,14 +123,14 @@ def plist_text():
 def write_settings(settings, old_text):
     os.makedirs(os.path.dirname(SETTINGS), exist_ok=True)
     if os.path.exists(SETTINGS):
-        bak = SETTINGS + ".bak-hearts-left-" + time.strftime("%Y%m%d-%H%M%S")
+        bak = SETTINGS + ".bak-burn-helper-" + time.strftime("%Y%m%d-%H%M%S")
         n = 1
         while os.path.exists(bak):
             n += 1
-            bak = SETTINGS + ".bak-hearts-left-" + time.strftime("%Y%m%d-%H%M%S") + "-%d" % n
+            bak = SETTINGS + ".bak-burn-helper-" + time.strftime("%Y%m%d-%H%M%S") + "-%d" % n
         shutil.copy2(SETTINGS, bak)
         print("Backed up settings to", bak)
-    tmp = SETTINGS + ".tmp-hearts-left"
+    tmp = SETTINGS + ".tmp-burn-helper"
     with open(tmp, "w") as f:
         f.write(json.dumps(settings, indent=2) + "\n")
     os.replace(tmp, SETTINGS)
@@ -139,7 +139,7 @@ def write_settings(settings, old_text):
 
 def launchctl(*args):
     if TEST_HOME:
-        print("(HEARTS_LEFT_HOME set: skipping launchctl %s)" % " ".join(args))
+        print("(BURN_HELPER_HOME set: skipping launchctl %s)" % " ".join(args))
         return 0
     r = subprocess.run(["launchctl"] + list(args), capture_output=True, text=True)
     return r.returncode

@@ -1,7 +1,7 @@
 #!/bin/bash
-# Hearts Left installer for macOS. One line:
+# Burn Helper installer for macOS. One line:
 #
-#   curl -fsSL https://raw.githubusercontent.com/pureyang/hearts-left/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash
 #
 # or from a checkout: ./install.sh
 #
@@ -13,15 +13,15 @@
 #   --dry-run    show what would happen, change nothing
 #   --uninstall  remove the hooks, status line and login item from this Mac
 #
-# What it does: gets the code into ~/hearts-left, installs the Mac bridge (async
+# What it does: gets the code into ~/burn-helper, installs the Mac bridge (async
 # Claude Code hooks, a hearts status line, a login item; settings.json is backed
 # up first), then backs up and flashes the badge if needed, asks for Wi-Fi, and
 # copies the app onto it.
 set -e
 
-REPO_URL="${HEARTS_LEFT_REPO:-https://github.com/pureyang/hearts-left.git}"
-REF="${HEARTS_LEFT_REF:-main}"
-DEST="${HEARTS_LEFT_DIR:-$HOME/hearts-left}"
+REPO_URL="${BURN_HELPER_REPO:-${HEARTS_LEFT_REPO:-https://github.com/pureyang/burn-helper.git}}"
+REF="${BURN_HELPER_REF:-${HEARTS_LEFT_REF:-main}}"
+DEST="${BURN_HELPER_DIR:-${HEARTS_LEFT_DIR:-$HOME/burn-helper}}"
 PY=/usr/bin/python3
 
 YES=0 NO_BADGE=0 NO_BRIDGE=0 DRY=0 UNINSTALL=0
@@ -54,12 +54,12 @@ ask() {
   case "$answer" in ""|y|Y|yes|YES|Yes) return 0 ;; *) return 1 ;; esac
 }
 
-say "Hearts Left: your Claude Code agents on a Tufty 2350 badge."
+say "Burn Helper: your Claude Code agents on a Tufty 2350 badge."
 [ "$(uname -s)" = "Darwin" ] || die "The installer supports macOS only for now."
 xcode-select -p >/dev/null 2>&1 || die "Install Apple's command line tools first (they include git and python3): xcode-select --install"
 [ -x "$PY" ] || die "$PY is missing; run: xcode-select --install"
 
-# 1. the code: this checkout, or a fresh clone in ~/hearts-left
+# 1. the code: this checkout, or a fresh clone in ~/burn-helper
 ROOT=""
 if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,12 +74,12 @@ if [ -z "$ROOT" ]; then
       git -C "$DEST" merge --ff-only --quiet "origin/$REF"
     fi
   elif [ -e "$DEST" ]; then
-    die "$DEST already exists and is not a Hearts Left checkout. Set HEARTS_LEFT_DIR to another folder."
+    die "$DEST already exists and is not a Burn Helper checkout. Set BURN_HELPER_DIR to another folder."
   elif [ "$DRY" = 1 ]; then
     say "Would clone $REPO_URL ($REF) into $DEST, then continue."
     exit 0
   else
-    say "Downloading Hearts Left into $DEST ..."
+    say "Downloading Burn Helper into $DEST ..."
     git clone --quiet --branch "$REF" "$REPO_URL" "$DEST"
   fi
   ROOT="$DEST"

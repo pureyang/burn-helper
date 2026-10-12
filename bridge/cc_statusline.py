@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code status line: show remaining usage as hearts and report it to the Hearts Left bridge.
+"""Claude Code status line: show remaining usage as hearts and report it to the Burn Helper bridge.
 
 Prints one line such as:
     ♥♥♥♥♥♥❥♡♡♡ 5h 38% (resets in 1h23m) · 7d 12% (in 3d4h) · ctx 45% · Opus 5.5
@@ -13,8 +13,9 @@ import urllib.request
 
 
 def env(name, default=None):
-    """HEARTS_LEFT_<name>, or the older TUFTY_<name>, or default."""
-    return os.environ.get("HEARTS_LEFT_" + name) or os.environ.get("TUFTY_" + name) or default
+    """BURN_HELPER_<name>, or the older HEARTS_LEFT_<name> or TUFTY_<name>, or default."""
+    return (os.environ.get("BURN_HELPER_" + name) or os.environ.get("HEARTS_LEFT_" + name)
+            or os.environ.get("TUFTY_" + name) or default)
 
 FULL, HALF, EMPTY = "♥", "❥", "♡"
 
@@ -73,7 +74,7 @@ def report(d):
     headers = {"Content-Type": "application/json"}
     token = env("TOKEN")
     if token:
-        headers["X-Hearts-Left-Token"] = token
+        headers["X-Burn-Helper-Token"] = token
     try:
         req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
         urllib.request.urlopen(req, timeout=0.3).close()

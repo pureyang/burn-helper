@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code hook: forward a minimal activity event to the Hearts Left bridge.
+"""Claude Code hook: forward a minimal activity event to the Burn Helper bridge.
 
 Only session_id, event name, tool name, agent id and hostname leave this
 machine. Tool inputs and outputs are never sent. Always exits 0.
@@ -12,8 +12,9 @@ import urllib.request
 
 
 def env(name, default=None):
-    """HEARTS_LEFT_<name>, or the older TUFTY_<name>, or default."""
-    return os.environ.get("HEARTS_LEFT_" + name) or os.environ.get("TUFTY_" + name) or default
+    """BURN_HELPER_<name>, or the older HEARTS_LEFT_<name> or TUFTY_<name>, or default."""
+    return (os.environ.get("BURN_HELPER_" + name) or os.environ.get("HEARTS_LEFT_" + name)
+            or os.environ.get("TUFTY_" + name) or default)
 
 
 def main():
@@ -34,7 +35,7 @@ def main():
         headers = {"Content-Type": "application/json"}
         token = env("TOKEN")
         if token:
-            headers["X-Hearts-Left-Token"] = token
+            headers["X-Burn-Helper-Token"] = token
         req = urllib.request.Request(url, data=json.dumps(event).encode(), headers=headers, method="POST")
         urllib.request.urlopen(req, timeout=0.5).close()
     except Exception:  # noqa: BLE001 - a hook must never fail the session
