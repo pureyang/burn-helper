@@ -6,6 +6,7 @@
 import gfx
 import debugview
 import net
+import power
 import scene as S
 
 BG = (12, 14, 20)
@@ -105,13 +106,6 @@ def bridge_text(c):
     return ("%s:%d" % b if b else "SEARCHING"), age
 
 
-def battery():
-    try:
-        return "USB POWER" if badge.usb_connected() else "%d%%" % badge.battery_level()
-    except Exception:  # noqa: BLE001
-        return "?"
-
-
 def resets(left):
     if left is None:
         return ""
@@ -154,7 +148,7 @@ def desktop(c, t):
         when = gfx.countdown(left)
         rows.append("%s %s LEFT%s" % (label, "--" if p is None else "%d%%" % p,
                                       "" if left is None else (", RESET IN " + when if left > 0 else ", " + when)))
-    rows.append("BATT %s  %s" % (battery().replace(" POWER", ""), st.clock))
+    rows.append("BATT " + power.text())
     rows.insert(4, "LEVEL " + activity(st))
     if c.link.err and not c.demo:
         rows.append("ERR " + c.link.err[:22])
@@ -228,8 +222,7 @@ def _connection(c):
             ("SIGNAL", signal or "-"),
             ("BRIDGE", brg),
             ("UPDATED", age or "NEVER"),
-            ("BATTERY", battery()),
-            ("CLOCK", c.st.clock or "-")]
+            ("BATTERY", power.text())]
     y = 13
     for k, v in rows:
         gfx.text(k, 4, y, DIM, font.sins)

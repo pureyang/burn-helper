@@ -31,6 +31,7 @@ import net  # noqa: E402
 import scene as S  # noqa: E402
 import usb  # noqa: E402
 import views  # noqa: E402
+import power  # noqa: E402
 
 THEMES = ("hero", "gameshow", "chocolates")
 LABELS = {"hero": "HYRULE", "gameshow": "RUNNING MAN", "chocolates": "FORREST"}
@@ -89,6 +90,8 @@ frame_t = time.ticks_ms()
 toast = None
 toast_t = 0
 perf = [0.0, 0.0]   # moving averages: draw ms, frame-to-frame ms
+boot_ms = time.ticks_ms()
+power.trim()
 ctx = views.Ctx(st, link, tether)
 
 
@@ -521,6 +524,7 @@ def update():
         draw_frame(t)
     lights(t)
     power_save(t)
+    power.tick(boot_ms)
     perf[0] = perf[0] * 0.9 + time.ticks_diff(time.ticks_ms(), t_start) * 0.1
     if tether.demo_req is not None:
         set_demo(tether.demo_req % 3)
@@ -542,7 +546,7 @@ def update():
             gc.collect()
             mem = ["memory: heap used %d KB, free %d KB" % (gc.mem_alloc() // 1024, gc.mem_free() // 1024)]
             mem += ["  theme %s: %d KB of sprites, built in %d ms" % (n, c[0] // 1024, c[1]) for n, c in theme_cost.items()]
-            usb.send_lines("NETLOG", link.dump() + mem + ["-- log --"] + link.log)
+            usb.send_lines("NETLOG", link.dump() + mem + ["-- power --"] + power.recent() + ["-- log --"] + link.log)
         except Exception as e:  # noqa: BLE001
             print("@NETLOG-ERR", e)
     if tether.shot_req:
