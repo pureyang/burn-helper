@@ -1,6 +1,6 @@
 """A small CPython stand-in for the badge's `picovector` drawing API.
 
-It implements the subset the Hearts Left app uses, with the same pixel rules
+It implements the subset the Burn Helper app uses, with the same pixel rules
 measured on the real Tufty 2350: nearest-neighbour scaled blits, negative-width
 flips, alpha-blended pens, and the ROM pixel fonts (".ppf") rendered with the
 firmware's advance rules (glyph width + 1, space = (height + 2) // 4).

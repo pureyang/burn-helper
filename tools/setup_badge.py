@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Get a Pimoroni Tufty 2350 ready for Hearts Left, step by step.
+"""Get a Pimoroni Tufty 2350 ready for Burn Helper, step by step.
 
     python3 tools/setup_badge.py             ask before anything that changes the badge
     python3 tools/setup_badge.py --yes       no questions (flashes if needed; Wi-Fi via phone later)
@@ -14,7 +14,7 @@
    it up from a phone) and write badge/secrets.py.
 4. Test the Wi-Fi from the badge itself, over USB (a combined 2.4/5 GHz network is fine; the
    badge joins its 2.4 GHz side). A wrong password is caught here, not after the install.
-5. Copy the Hearts Left app onto the badge and check that it starts.
+5. Copy the Burn Helper app onto the badge and check that it starts.
 
 If the badge stops answering at any point the installer asks you to press its RESET button
 and keeps going once it hears the badge again.
@@ -103,7 +103,7 @@ def picotool():
 
 def serial_port():
     try:
-        from hearts_left_bridge import find_badge_ports
+        from burn_helper_bridge import find_badge_ports
         ports = find_badge_ports()
     except Exception:  # noqa: BLE001
         ports = []
@@ -372,7 +372,7 @@ def wifi():
 
 
 def deploy():
-    say("Copying the Hearts Left app onto the badge (about 40 seconds)...")
+    say("Copying the Burn Helper app onto the badge (about 40 seconds)...")
     r = subprocess.run([sys.executable, os.path.join(HERE, "deploy.py"), "--all"])
     if r.returncode != 0:
         sys.exit("Copying the app failed; rerun the installer.")
@@ -416,8 +416,8 @@ def main(argv):
         if info is None:
             port, info = wait_for_response(port, "Looking at the badge:", patience=60)
         flash, why = needs_flash(info)
-        if info is not None and ("hearts_left" in info["apps"] or "claude_buddy" in info["apps"]):
-            why += ", with Hearts Left installed"
+        if info is not None and ("burn_helper" in info["apps"] or "hearts_left" in info["apps"] or "claude_buddy" in info["apps"]):
+            why += ", with Burn Helper installed"
     say("Found the badge: %s." % why)
 
     if flash:
@@ -433,12 +433,12 @@ def main(argv):
             say("Stock firmware installed.")
     wifi()
     if ARGS.dry_run:
-        say("Would test the Wi-Fi from the badge, copy the Hearts Left app onto it and restart it.")
+        say("Would test the Wi-Fi from the badge, copy the Burn Helper app onto it and restart it.")
         return 0
     port = verify_wifi(port)
     deploy()
     if check_running():
-        say("Hearts Left is running on the badge.")
+        say("Burn Helper is running on the badge.")
     else:
         say("The app was copied but did not answer yet. Press the badge's RESET button, wait a minute, "
             "then run: python3 tools/netdebug.py")

@@ -45,7 +45,7 @@ p.mac = "28:cd:c1:00:00:00"
 
 s = FakeSock(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n")
 p.handle(s)
-assert b"Hearts Left setup" in s.out and b"none" in s.out, s.out[:200]
+assert b"Burn Helper setup" in s.out and b"none" in s.out, s.out[:200]
 assert b"data-n=\"home-wifi\"" in s.out and b"Cafe &quot;Guest&quot;" in s.out and b"28:cd:c1" in s.out
 
 body = b"ssid=My+Phone%27s+Hotspot&psk=p%40ss+w%26rd+&bridge=192.168.1.20%3A8787"
@@ -158,11 +158,11 @@ def make_portal(qr_modules):
 
 config.save_portal({"networks": [["home", "pw"]], "bridge": ""})   # a saved network: secured hotspot
 pt, ap = make_portal(29)
-assert pt.ssid == "HeartsLeft-AB12", pt.ssid          # fits: keep the longer name
-assert ap.cfg["ssid"] == pt.ssid and "S:HeartsLeft-AB12;" in pt.qr.text
+assert pt.ssid == "BurnHelper-AB12", pt.ssid          # fits: keep the longer name
+assert ap.cfg["ssid"] == pt.ssid and "S:BurnHelper-AB12;" in pt.qr.text
 pt, ap = make_portal(33)
-assert pt.ssid == "Hearts-AB12", pt.ssid               # too wide: shorter, and it is the real name
-assert ap.cfg["ssid"] == "Hearts-AB12" and "S:Hearts-AB12;" in pt.qr.text
+assert pt.ssid == "Burn-AB12", pt.ssid               # too wide: shorter, and it is the real name
+assert ap.cfg["ssid"] == "Burn-AB12" and "S:Burn-AB12;" in pt.qr.text
 assert len(pt.psk) == 8 and pt.psk.isdigit() and "P:" + pt.psk in pt.qr.text, pt.psk   # WPA2 minimum, digits only
 print("PASS hotspot name: full when it fits, shorter real name otherwise; QR matches")
 
@@ -170,7 +170,7 @@ print("PASS hotspot name: full when it fits, shorter real name otherwise; QR mat
 config.save_portal({"networks": [], "bridge": ""})
 pt, ap = make_portal(29)
 assert pt.open and pt.psk == "" and "key" not in ap.cfg and "password" not in ap.cfg, ap.cfg
-assert pt.qr.text == "WIFI:T:nopass;S:HeartsLeft-AB12;;", pt.qr.text
+assert pt.qr.text == "WIFI:T:nopass;S:BurnHelper-AB12;;", pt.qr.text
 shown = []
 portal.gfx.text = lambda t, *a, **k: shown.append(t)
 builtins.screen.blit = lambda *a, **k: None   # only the labels are checked here

@@ -5,7 +5,7 @@
 """
 import os, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "badge", "apps", "hearts_left"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "badge", "apps", "burn_helper"))
 _t0 = time.monotonic()
 time.ticks_ms = lambda: int((time.monotonic() - _t0) * 1000)
 time.ticks_diff = lambda a, b: a - b

@@ -28,7 +28,7 @@ from badge import Badge  # noqa: E402
 
 SRC = os.path.join(REPO, "badge")
 # app folders from earlier versions, removed so the launcher does not list them
-OLD_APPS = ("/system/apps/claude_buddy",)
+OLD_APPS = ("/system/apps/claude_buddy", "/system/apps/hearts_left")
 
 REMOVE = """
 import os
@@ -74,7 +74,7 @@ def _walk(p):
                     if not b: break
                     h.update(b)
             print(q, binascii.hexlify(h.digest()).decode())
-for _p in ('/system/apps/hearts_left',):
+for _p in ('/system/apps/burn_helper',):
     try:
         _walk(_p)
     except OSError:
@@ -153,7 +153,7 @@ def screenshot(path, wait=12.0, view=None, demo=None, page=None):
                     print("  " + got.split(b"@INFO ", 1)[1].split(b"\n", 1)[0].decode(errors="replace").strip())
                 return path
             time.sleep(2)
-        raise RuntimeError("badge app did not answer @SHOT (is the Hearts Left app running?)")
+        raise RuntimeError("badge app did not answer @SHOT (is the Burn Helper app running?)")
     finally:
         b.close()
 
@@ -192,10 +192,10 @@ def main(argv):
         sent += 1
         print("  sent", rpath, len(data), "bytes")
     # drop files the badge still has from earlier versions (renamed or deleted here)
-    keep = sorted(r.rsplit("/", 1)[1] for r in files if r.startswith("/system/apps/hearts_left/") and r.count("/") == 4)
-    out, err = b.exec("import os\nkeep = %r\nfor n in os.listdir('/system/apps/hearts_left'):\n"
-                      "    if n not in keep and not (os.stat('/system/apps/hearts_left/' + n)[0] & 0x4000):\n"
-                      "        os.remove('/system/apps/hearts_left/' + n)\n        print('pruned', n)\n" % (keep,))
+    keep = sorted(r.rsplit("/", 1)[1] for r in files if r.startswith("/system/apps/burn_helper/") and r.count("/") == 4)
+    out, err = b.exec("import os\nkeep = %r\nfor n in os.listdir('/system/apps/burn_helper'):\n"
+                      "    if n not in keep and not (os.stat('/system/apps/burn_helper/' + n)[0] & 0x4000):\n"
+                      "        os.remove('/system/apps/burn_helper/' + n)\n        print('pruned', n)\n" % (keep,))
     for line in out.splitlines():
         if line.startswith("pruned"):
             print("  removed stale", line.split(" ", 1)[1])

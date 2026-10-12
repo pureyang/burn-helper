@@ -7,7 +7,7 @@
 
 import time
 
-LOG_FILE = "/state/hearts_left_power.log"
+LOG_FILE = "/state/burn_helper_power.log"
 LOG_MAX = 8192
 CACHE_MS = 2000
 LOG_ON_BATTERY_MS = 60 * 1000

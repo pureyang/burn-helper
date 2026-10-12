@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate badge/apps/hearts_left/icon.png (24x24, transparent) for the stock launcher."""
+"""Generate badge/apps/burn_helper/icon.png (24x24, transparent) for the stock launcher."""
 import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "sim"))

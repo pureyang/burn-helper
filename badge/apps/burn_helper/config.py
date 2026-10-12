@@ -3,12 +3,12 @@
 #   /system/secrets.py            WIFI_SSID / WIFI_PASSWORD (stock firmware file),
 #                                 optional WIFI_EXTRA = [("ssid", "pass"), ...]
 #                                 optional BRIDGE = "192.168.1.20:8787"
-#   /state/hearts_left_net.json   networks and bridge added from a phone via the
+#   /state/burn_helper_net.json   networks and bridge added from a phone via the
 #                                 setup portal (hold B). Tried first.
 
 import json
 
-NET_FILE = "/state/hearts_left_net.json"
+NET_FILE = "/state/burn_helper_net.json"
 
 
 def _secrets():
@@ -19,12 +19,16 @@ def _secrets():
         return None
 
 
-# The app was called claude_buddy before it became Hearts Left; keep what an
-# earlier install saved (phone-added Wi-Fi, theme and brightness, the log).
+# The app was called Hearts Left, and claude_buddy before that; keep what an earlier
+# install saved (phone-added Wi-Fi, theme and brightness, the logs).
 OLD_NAMES = (
+    ("/state/hearts_left_net.json", NET_FILE),
+    ("/state/hearts_left.json", "/state/burn_helper.json"),
+    ("/state/hearts_left_net.log", "/state/burn_helper_net.log"),
+    ("/state/hearts_left_power.log", "/state/burn_helper_power.log"),
     ("/state/claude_buddy_net.json", NET_FILE),
-    ("/state/claude_buddy.json", "/state/hearts_left.json"),
-    ("/state/claude_buddy_net.log", "/state/hearts_left_net.log"),
+    ("/state/claude_buddy.json", "/state/burn_helper.json"),
+    ("/state/claude_buddy_net.log", "/state/burn_helper_net.log"),
 )
 
 

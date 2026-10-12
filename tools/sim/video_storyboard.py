@@ -13,7 +13,7 @@ import simulate as sm  # noqa: E402  (installs the simulator)
 import pvshim  # noqa: E402
 import scene as S  # noqa: E402
 
-APP = os.path.join(os.path.dirname(TOOLS), "badge", "apps", "hearts_left", "__init__.py")
+APP = os.path.join(os.path.dirname(TOOLS), "badge", "apps", "burn_helper", "__init__.py")
 OUT = os.path.join(os.path.dirname(TOOLS), "docs", "img", "video_storyboard.png")
 BEATS = ((1.5, "0-3 s  asleep"), (3.7, "3-4.5 s  wakes up"), (5.5, "4.5-7 s  1 agent: walks"),
          (7.7, "7-8.5 s  5 agents: runs"), (9.2, "8.5-10 s  9 agents: sprints"),

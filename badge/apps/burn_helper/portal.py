@@ -3,7 +3,7 @@
 # Join the hotspot from your phone (scan the QR code on screen), open
 # http://192.168.4.1 and add a Wi-Fi network (home, office or your phone's own
 # hotspot) and optionally a fixed bridge address. Saved to
-# /state/hearts_left_net.json, then the badge restarts and uses it.
+# /state/burn_helper_net.json, then the badge restarts and uses it.
 
 import json
 import socket
@@ -15,12 +15,12 @@ import config
 import gfx
 
 PAGE = """<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1">
-<title>Hearts Left setup</title><style>body{font-family:-apple-system,system-ui,sans-serif;max-width:440px;margin:24px auto;padding:0 16px;background:#111;color:#eee}
+<title>Burn Helper setup</title><style>body{font-family:-apple-system,system-ui,sans-serif;max-width:440px;margin:24px auto;padding:0 16px;background:#111;color:#eee}
 input,button{font-size:18px;width:100%;box-sizing:border-box;padding:10px;margin:6px 0 14px;border-radius:8px;border:1px solid #555;background:#222;color:#eee}
 button{background:#d97757;border:0;color:#111;font-weight:600}small,.dim{color:#999}li{margin:6px 0}
 .net{display:flex;justify-content:space-between;padding:10px;margin:4px 0;border-radius:8px;background:#1d1d1d;cursor:pointer}
 .bad{color:#ff8a80}.ok{color:#8be38b}label.cb{display:flex;gap:8px;align-items:center;margin:-8px 0 14px}label.cb input{width:auto;margin:0}</style></head><body>
-<h2>Hearts Left setup</h2>
+<h2>Burn Helper setup</h2>
 <p class=dim>The badge only does <b>2.4 GHz</b> Wi-Fi with a WPA2 password. These are the networks it can hear right now; tap one to use it.</p>
 %SCAN%
 <form method=post action=/save><label>Wi-Fi name (SSID)<input id=ssid name=ssid required autocapitalize=none autocorrect=off spellcheck=false></label>
@@ -97,10 +97,10 @@ class Portal:
         self.psk = "" if self.open else "%08d" % n
         # The screen is small: use the full hotspot name when it fits beside the QR code,
         # otherwise a shorter real name, so what is shown is exactly what the phone sees.
-        self.ssid = "HeartsLeft-%02X%02X" % (uid[-2], uid[-1])
+        self.ssid = "BurnHelper-%02X%02X" % (uid[-2], uid[-1])
         self.qr = self._make_qr()
         if not self._fits():
-            self.ssid = "Hearts-%02X%02X" % (uid[-2], uid[-1])
+            self.ssid = "Burn-%02X%02X" % (uid[-2], uid[-1])
             self.qr = self._make_qr()
         self.ap = network.WLAN(network.AP_IF)
         if self.open:

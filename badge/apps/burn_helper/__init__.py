@@ -1,6 +1,6 @@
-# Hearts Left: live Claude Code activity and usage on a Pimoroni Tufty 2350.
+# Burn Helper: live Claude Code activity and usage on a Pimoroni Tufty 2350.
 #
-# Polls the bridge on your Mac (bridge/hearts_left_bridge.py) over Wi-Fi and animates
+# Polls the bridge on your Mac (bridge/burn_helper_bridge.py) over Wi-Fi and animates
 # one of three themes by activity level, with hearts for the remaining usage.
 #
 # Buttons
@@ -19,7 +19,7 @@ import os
 import sys
 import time
 
-APP_DIR = "/system/apps/hearts_left"
+APP_DIR = "/system/apps/burn_helper"
 sys.path.insert(0, APP_DIR)
 os.chdir(APP_DIR)
 
@@ -41,11 +41,11 @@ BRIGHT = (1.0, 0.85, 0.7, 0.57, 0.46, 0.36, 0.28, 0.21, 0.15, 0.1, 0.0)
 OFF = len(BRIGHT) - 1
 SCREEN_OFF_NOTE_MS = 3000            # how long the "screen turning off" note shows first
 OLD_BRIGHT = (1.0, 0.7, 0.45, 0.25)   # the four levels used before
-MENU_FLAG = "/state/.hearts_left_menu"
+MENU_FLAG = "/state/.burn_helper_menu"
 
 prefs = {"theme": "hero", "bright": 0, "levels": 4, "seq": -1, "case_leds": False}
 config.migrate()
-State.load("hearts_left", prefs)
+State.load("burn_helper", prefs)
 # theme ids used before the files were renamed
 LEGACY_THEMES = {"zelda": "hero", "runningman": "gameshow", "forrest": "chocolates"}
 prefs["theme"] = LEGACY_THEMES.get(prefs.get("theme"), prefs.get("theme"))
@@ -140,12 +140,12 @@ def switch(delta=0, name=None):
     if demo and name != DEMO_THEME:
         demo = 0                     # the demo only exists for the hero theme
     prefs["theme"] = name
-    State.save("hearts_left", prefs)
+    State.save("burn_helper", prefs)
     show_toast(LABELS[name])
 
 
 def save_prefs():
-    State.save("hearts_left", prefs)
+    State.save("burn_helper", prefs)
 
 
 def apply_bridge():
