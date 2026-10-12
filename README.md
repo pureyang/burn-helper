@@ -111,6 +111,7 @@ troubleshooting and shipping badges with an event network are in [docs/wifi.md](
 | [Development](docs/development.md) | Simulator, tools, tests, repo layout |
 | [Demo video](docs/video.md) | Recording the 20-second demo take the badge plays on its own |
 | [Bridge](bridge/README.md) | The Mac-side server and its API |
+| [Desk stand](stand/README.md) | A 3D-printable stand that keeps the badge upright with the USB-C cable plugged in, with an optional two-colour heart meter |
 
 ## License
 
