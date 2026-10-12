@@ -63,6 +63,7 @@ class Status:
         self.subagents = int(d.get("subagents") or 0)
         self.tpm = int(d.get("tpm") or 0)
         self.tools = int(d.get("tools_today") or 0)
+        self.waiting_list = []  # [(session name, seconds waiting)], longest first, if the bridge sends it
         self.clock = d.get("clock") or ""
         now_ms = d.get("now_ms")
         if now_ms is None and d.get("ts") is not None:
@@ -96,6 +97,13 @@ class Status:
         """Refresh the countdowns; call once per frame."""
         now = self._now_us()
         self.left5 = None if (now is None or not self.reset5) else int(self.reset5) * 1000000 - now
+        wl = []
+        for w in d.get("waiting_list") or []:
+            try:
+                wl.append((str(w.get("n") or "session")[:24], int(w.get("s") or 0)))
+            except (AttributeError, TypeError, ValueError):
+                pass
+        self.waiting_list = wl[:4]
         self.left7 = None if (now is None or not self.reset7) else int(self.reset7) * 1000000 - now
 
 

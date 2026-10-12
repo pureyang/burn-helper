@@ -86,6 +86,12 @@ def _num(v, default=None):
         return default
 
 
+def _badge_name(d):
+    """A short, plain-ASCII name for a session: its title, else its folder name."""
+    raw = d.get("name") or os.path.basename(str(d.get("cwd") or "").rstrip("/")) or "session"
+    clean = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in str(raw))
+    return " ".join(clean.split())[:20] or "session"
+
 class Bridge:
     def __init__(self):
         self.lock = threading.RLock()
@@ -172,6 +178,7 @@ class Bridge:
 
     def scan(self):
         counts = {"busy": 0, "shell": 0, "waiting": 0, "idle": 0, "sessions": 0}
+        waiting_list = []      # (display name, epoch seconds it started waiting)
         live_keys = set()
         try:
             names = os.listdir(SESSIONS_DIR)
@@ -208,12 +215,16 @@ class Bridge:
             counts["sessions"] += 1
             if status in ("busy", "shell", "waiting"):
                 counts[status] += 1
+                if status == "waiting":
+                    since = d.get("statusUpdatedAt")
+                    waiting_list.append((_badge_name(d), since / 1000.0 if isinstance(since, (int, float)) else time.time()))
             else:
                 counts["idle"] += 1
         # drop cache entries for processes that went away
         for key in list(self._ps_cache):
             if key not in live_keys:
                 del self._ps_cache[key]
+        counts["waiting_list"] = sorted(waiting_list, key=lambda w: w[1])[:4]
         with self.lock:
             self.local = counts
             if counts["busy"] or counts["shell"]:
@@ -356,6 +367,8 @@ class Bridge:
             "level": level,
             "busy": busy,
             "waiting": waiting,
+            # which local sessions are waiting, longest first (shown on the badge's Waiting focus)
+            "waiting_list": [{"n": n, "s": max(0, int(now - since))} for n, since in loc.get("waiting_list", [])],
             "idle": loc["idle"],
             "sessions": loc["sessions"] + remote_live,
             "subagents": subagents,
