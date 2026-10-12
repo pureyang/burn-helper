@@ -20,16 +20,38 @@ Claude Code sessions ──hooks + status line──▶ bridge (Mac) ──Wi-Fi
 
 ## Activity levels
 
-| Level | When | Zelda | Running Man | Forrest |
-|---|---|---|---|---|
-| 0 asleep | nothing busy for 5 min | Link asleep under the stars | runner asleep on the concrete, OFF AIR | on the bench with his chocolates |
-| 1 idle | recently active, or a session waiting | standing guard | limbering up, STANDBY | standing by the bench |
-| 2 walk | 1 agent busy | walking the field | jogging into the Zone, LIVE | jogging a country road |
-| 3 run | 2–3 agents, or ≥15 tool calls/min | Pegasus-boots dash | a stalker on his heels | bearded, Monument Valley |
-| 4 sprint | 4+ agents, or ≥40 tool calls/min | sword dash + spin attacks | explosions, searchlights | a crowd of followers, one per agent |
+Agents working means busy sessions plus running subagents. With none working, the bridge's
+level decides between asleep (nothing for 5 minutes) and idle. With any working, the badge
+picks one of 15 levels from the count (`scene.tier_for`):
+
+| Agents | Level | Gait | Added on top (`fx.py`, every theme) |
+|---|---|---|---|
+| 1 to 3 | 1 to 3 | walk | faster scrolling each level; speed lines from level 2 |
+| 4 to 7 | 4 to 7 | run | more speed lines |
+| 8 to 10 | 8 to 10 | sprint | more speed lines |
+| 11-25 | 11 | sprint | sparks |
+| 26-50 | 12 | sprint | more sparks |
+| 51-75 | 13 | sprint | heat haze |
+| 76-100 | 14 | sprint | a pulsing red edge |
+| over 100 | 15, ULTRA | sprint | the scene dims behind hyperspace star streaks |
+
+The tool-call rate still adds speed. Each theme has its own scenes for the gaits:
+
+| Gait | Zelda | Running Man | Forrest |
+|---|---|---|---|
+| asleep | Link asleep under the stars | runner asleep on the concrete, OFF AIR | on the bench with his chocolates |
+| idle | standing guard | limbering up, STANDBY | standing by the bench |
+| walk | walking the field | jogging into the Zone, LIVE | jogging a country road |
+| run | Pegasus-boots dash | a stalker on his heels | bearded, Monument Valley, with followers |
+| sprint | sword dash + spin attacks | explosions, searchlights | a crowd of followers, up to 7 |
+
+![All 15 levels in the Zelda theme](img/tiers_hero.png)
 
 When any session is waiting for your input, Navi shouts "HEY! LISTEN!", the Running Man
-audience votes "YOUR MOVE!", or Forrest yells "JENNY!". The badge's four case LEDs can blink too, but they are off by default (hold DOWN for 2 s to switch them on).
+audience votes "YOUR MOVE!", or Forrest yells "JENNY!". Waiting focus (press **B** three
+times) lists the waiting sessions by name: the bridge sends each one's title, or its folder
+name, cut to 20 plain characters. Those names are shown on the badge and in the bridge's
+`/status` JSON on your network. The badge's four case LEDs can blink too, but they are off by default (hold DOWN for 2 s to switch them on).
 
 ## Usage meters
 

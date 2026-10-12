@@ -110,5 +110,5 @@ curl -s http://127.0.0.1:8787/status    # level, busy, hearts...
 - With the badge on USB it should show your activity within a few seconds. Press **B** for
   Desktop mode: its first line should read `DATA USB CABLE`.
 - Open `http://<your-mac-ip>:8787/` on your phone for the status panel and theme picker.
-- Unplug the badge to run on Wi-Fi. Press **B** twice for the Wi-Fi debug screen if it doesn't
-  connect.
+- Unplug the badge to run on Wi-Fi. Press **B** twice for Paged mode, which opens on the Wi-Fi debug
+  page if it doesn't connect.

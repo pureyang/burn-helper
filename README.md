@@ -13,9 +13,10 @@ Real screenshots from the badge (Zelda, Running Man and Forrest themes):
 
 ![Zelda on the badge](docs/img/device_hero.png) ![Running Man on the badge](docs/img/device_gameshow.png) ![Forrest on the badge](docs/img/device_chocolates.png)
 
-Press **B** for Desktop mode: status at a glance, with the animation paused (shown in demo mode, with example network details):
+Press **B** to step from the animation through Desktop mode, Paged mode and Waiting focus
+(shown in demo mode, with example network details):
 
-![Desktop mode on the badge](docs/img/device_desktop.png)
+![Desktop mode on the badge](docs/img/device_desktop.png) ![Paged mode, usage left](docs/img/device_paged.png) ![Waiting focus](docs/img/device_waiting.png)
 
 ## Quick install
 
@@ -44,18 +45,35 @@ Handy options (after `| bash -s --`): `--yes` (no questions), `--no-flash`, `--d
 
 ## What the badge shows
 
-| Level | When | The character |
-|---|---|---|
-| 0 asleep | nothing busy for 5 min | asleep |
-| 1 idle | recently active, or a session is waiting | standing by |
-| 2 walk | 1 agent busy | walking |
-| 3 run | 2 to 3 agents, or 15+ tool calls a minute | running |
-| 4 sprint | 4+ agents, or 40+ tool calls a minute | sprinting, with a crowd of followers in the Forrest theme |
+The character speeds up with the number of agents working (busy sessions plus running
+subagents), over 15 levels:
 
-When a session is waiting for your input the character calls for you, and the optional case
-LEDs flash. Ten icons show the 5-hour usage limit left, a bar shows the weekly limit, and a
+| Agents working | Level | The character |
+|---|---|---|
+| none | asleep or idle | asleep (nothing for 5 minutes) or standing by |
+| 1 to 3 | 1 to 3 | walking |
+| 4 to 7 | 4 to 7 | running |
+| 8 to 10 | 8 to 10 | sprinting |
+| 11-25, 26-50, 51-75, 76-100 | 11 to 14 | sprinting, with sparks, then heat haze, then a pulsing edge |
+| over 100 | 15, ULTRA | flying through hyperspace |
+
+Every level adds speed and speed lines, so all 15 look different. When a session is waiting
+for your input the character calls for you, and the optional case LEDs flash. Ten icons show the 5-hour usage limit left, a bar shows the weekly limit, and a
 countdown runs to the next reset. See [how it works](docs/how-it-works.md) for the meters and
-every theme and level.
+every theme and level, and [all 15 levels](docs/img/tiers_hero.png) side by side.
+
+## Screens
+
+**B** steps through four screens. None of them turns the screen off, and the three status
+screens pause the animation to save battery. Usage is always shown as what is **left**.
+
+- **Animation**: the theme.
+- **Desktop mode**: everything on one screen, from the data source and Wi-Fi to the levels and
+  usage left.
+- **Paged mode**: one topic per page, with A/C to turn pages: status, usage left, connection
+  and Wi-Fi debug. When Wi-Fi is not working it opens on the Wi-Fi page.
+- **Waiting focus**: how many sessions need you, the longest wait, and which sessions they
+  are (names need the updated bridge).
 
 ## Buttons
 
@@ -65,11 +83,11 @@ Short presses act when you let go, so holding a button never also triggers its p
 
 | Button | Action |
 |---|---|
-| A / C | previous / next theme |
-| B | Desktop mode (status at a glance, animation paused), then the Wi-Fi debug screen, then back. Hold 2 s for phone setup |
-| Hold UP 2 s | demo mode: cycles every level and a 90-second usage window with its countdown, with a DEMO tag. Hold again to stop |
-| UP | on the Wi-Fi debug screen: rescan |
-| DOWN | brightness: each press steps through 10 levels, then wraps to full |
+| A / C | previous / next theme. In Paged mode: previous / next page |
+| B | next screen: animation, Desktop mode, Paged mode, Waiting focus, then the animation again. Hold 2 s for phone setup |
+| Hold UP 2 s | demo, hero theme only: a 30-second ramp from asleep through all 15 levels to hyperspace, with sessions waiting now and then, and a DEMO tag. Hold again to stop |
+| UP | on the Wi-Fi page of Paged mode: rescan |
+| DOWN | brightness: 10 levels, then 0% (screen off, the badge keeps running; a note shows for 3 s first), then full again |
 | Hold DOWN 2 s | case LEDs on or off (off by default). When on, they pulse with activity and flash when a session is waiting for you |
 | HOME | stock app menu; HOME again comes back |
 

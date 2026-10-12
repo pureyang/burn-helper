@@ -35,8 +35,10 @@ class Theme(S.Theme):
 
 | Field | Meaning |
 |---|---|
-| `st.level` | 0 sleep, 1 idle, 2 walk, 3 run, 4 sprint (`S.SLEEP` .. `S.SPRINT`) |
-| `st.busy`, `st.waiting`, `st.idle` | agents working now, sessions waiting for you, sessions idle |
+| `st.level` | the gait: 0 sleep, 1 idle, 2 walk, 3 run, 4 sprint (`S.SLEEP` .. `S.SPRINT`) |
+| `st.tier`, `st.agents` | activity level 0 to 15 (`S.tier_for`) and the agents working it is based on |
+| `st.busy`, `st.waiting`, `st.idle` | sessions working now, sessions waiting for you, sessions idle |
+| `st.waiting_list` | `[(name, seconds waiting)]` for the waiting sessions, when the bridge sends it |
 | `st.sessions`, `st.subagents` | open sessions, running subagents |
 | `st.tpm`, `st.tools` | tool calls per minute, tool calls today |
 | `st.hearts` | 5-hour budget left in half units, 0 to 20, or `None` if unknown |
@@ -47,9 +49,12 @@ class Theme(S.Theme):
 
 ### What a theme should show
 
-At minimum: an animation for each of the five levels, the 5-hour budget (ten icons), the weekly
+At minimum: an animation for each of the five gaits, the 5-hour budget (ten icons), the weekly
 budget (a bar), the reset countdown, a state for "waiting for you" (`st.waiting > 0`), and an
-offline state. `figure.py` builds consistent walk, run and sprint cycles from a small posed
+offline state. The 15 activity levels come for free: `scene.Theme.draw` speeds the scroll up
+with the level and draws `fx.py`'s speed lines, sparks, haze, edge and hyperspace over the
+scene area (y 22 to 107), so keep the top bar above y 22 and the caption from y 108. A theme
+can also use `st.tier` or `st.agents` for its own touches, as Forrest's crowd does. `figure.py` builds consistent walk, run and sprint cycles from a small posed
 skeleton, and `gfx.py` has the shared pieces (`heart_set`, `draw_hearts`, `meter`, `countdown`,
 `bubble`, pixel text). Look at `theme_hero.py` for the smallest complete example.
 

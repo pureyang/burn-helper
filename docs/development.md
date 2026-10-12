@@ -2,14 +2,21 @@
 
 ```
 python3 tools/simulate.py                       # render every theme/level to tools/sim/out/*.png
+python3 tools/simulate.py --tiers hero          # all 15 activity levels on one sheet
+python3 tools/sim/preview_views.py              # render Desktop, Paged and Waiting focus
 python3 tools/sim/preview_debug.py              # render the Wi-Fi debug screen states
 python3 tools/deploy.py                         # copy changed files to the badge and restart
-python3 tools/deploy.py --shot-only x.png [--view 2] [--demo 1]   # screenshot the badge (2 = debug screen, demo 1 = demo)
+python3 tools/deploy.py --shot-only x.png [--view 1-3] [--page 0-3] [--demo 1]   # screenshot the badge
 python3 tools/netdebug.py                       # badge Wi-Fi diagnosis over USB
 python3 tools/sim/test_net.py                   # badge networking code against a live local bridge
 python3 tools/sim/test_portal.py                # phone setup portal form handling
+python3 tools/sim/test_tiers.py                 # the 15 activity levels and the waiting list
 python3 scripts/badge.py exec "print(1)"        # raw REPL one-liner
 ```
+
+While the app runs it also takes test commands on the USB serial port: `@VIEW n` (0 animation,
+1 Desktop, 2 Paged, 3 Waiting focus), `@PAGE n`, `@DEMO n`, `@KEY A|B|C|UP|DOWN` (a short
+press), `@SHOT` (a screenshot) and `@NETLOG` (the Wi-Fi report).
 
 The simulator (`tools/sim/pvshim.py`) re-implements the badge's `picovector` drawing calls
 with the pixel rules measured on the device. These are nearest-neighbour blits and flips, and
