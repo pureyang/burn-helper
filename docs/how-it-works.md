@@ -6,14 +6,14 @@ Claude Code sessions ──hooks + status line──▶ bridge (Mac) ──Wi-Fi
                                                     phone browser (theme picker)
 ```
 
-- **bridge/hearts_left_bridge.py** runs on the Mac. It reads Claude Code's live session registry
+- **bridge/burn_helper_bridge.py** runs on the Mac. It reads Claude Code's live session registry
   (`~/.claude/sessions/*.json`, which says which sessions are busy, idle or waiting for you).
   It also takes tool-call events from a hook and usage limits from the status line, and serves
   one small JSON document at `/status`. It announces itself on the LAN with a UDP beacon, and
   when the badge is plugged into the Mac it also pushes the same JSON down the USB cable.
 - **The status line** gets the official `rate_limits` numbers from Claude Code: 5-hour and
   7-day usage, account-wide. It prints hearts in your terminal too.
-- **The badge app** (`badge/apps/hearts_left`) joins Wi-Fi, finds the bridge by its beacon,
+- **The badge app** (`badge/apps/burn_helper`) joins Wi-Fi, finds the bridge by its beacon,
   polls it every 2.5 s without blocking the animation, and draws the theme. All sprites are
   generated on the badge from a tiny posed skeleton (`figure.py`), so the walk, run and sprint
   cycles stay consistent across themes.

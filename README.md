@@ -1,4 +1,4 @@
-# Hearts Left
+# Burn Helper
 
 Your Claude Code agents as a pixel game on a Pimoroni Tufty 2350 conference badge.
 
@@ -24,7 +24,7 @@ You need a Mac, the badge, a USB-C **data** cable, and Claude Code already set u
 Plug the badge in, then paste this into Terminal:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/pureyang/hearts-left/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash
 ```
 
 The installer asks before each change. It:

@@ -1,4 +1,4 @@
-# Hearts Left bridge
+# Burn Helper bridge
 
 A small server on your Mac that tells the badge how busy your Claude Code agents
 are and how much of your usage budget is left. Python 3.9 standard library only.
@@ -18,7 +18,7 @@ are and how much of your usage budget is left. Python 3.9 standard library only.
 ## Run it
 
 ```sh
-python3 bridge/hearts_left_bridge.py       # port 8787, phone panel at http://<mac-ip>:8787/
+python3 bridge/burn_helper_bridge.py       # port 8787, phone panel at http://<mac-ip>:8787/
 python3 bridge/install.py --dry-run       # preview the settings.json change
 python3 bridge/install.py                 # add hooks + status line, start the bridge at login
 python3 bridge/install.py --uninstall     # remove exactly what install added
@@ -26,11 +26,11 @@ python3 bridge/install.py --uninstall     # remove exactly what install added
 
 `install.py` backs up `~/.claude/settings.json` first, adds one async hook per
 event (they never block a session), adds the status line only if you have none,
-and installs a LaunchAgent (`com.heartsleft.bridge`, log in
-`~/Library/Logs/hearts-left.log`). It replaces the older `com.lexco.tufty-bridge` agent if present.
+and installs a LaunchAgent (`com.burnhelper.bridge`, log in
+`~/Library/Logs/burn-helper.log`). It replaces the older `com.heartsleft.bridge` and `com.lexco.tufty-bridge` agents if present.
 
 Options: `--port`, `--bind`, `--no-beacon`, `--verbose`. Environment:
-`HEARTS_LEFT_PORT`, `HEARTS_LEFT_TOKEN`, `HEARTS_LEFT_STATE_DIR` (state defaults to `~/.claude/hearts-left`). The older `TUFTY_*` names still work.
+`BURN_HELPER_PORT`, `BURN_HELPER_TOKEN`, `BURN_HELPER_STATE_DIR` (state defaults to `~/.claude/burn-helper`). The older `TUFTY_*` names still work.
 
 ## Badge discovery
 
@@ -69,8 +69,8 @@ Install the same hooks and status line on another computer and point them at
 this Mac:
 
 ```sh
-export HEARTS_LEFT_BRIDGE_URL=http://<mac-ip>:8787
-export HEARTS_LEFT_TOKEN=<shared secret>     # optional; set the same value for the bridge
+export BURN_HELPER_BRIDGE_URL=http://<mac-ip>:8787
+export BURN_HELPER_TOKEN=<shared secret>     # optional; set the same value for the bridge
 ```
 
 Events from another host count as remote sessions: busy for 90 seconds after
@@ -82,6 +82,6 @@ they only show up through the account-wide usage hearts.
 - The hook sends only the session id, event name, tool name, agent id and
   hostname. Tool inputs and outputs never leave the machine.
 - `/status` contains counts only: no session names, paths or prompts. Anyone on
-  your LAN can read it and change the theme. Set `HEARTS_LEFT_TOKEN` to stop other LAN
+  your LAN can read it and change the theme. Set `BURN_HELPER_TOKEN` to stop other LAN
   devices from posting fake activity.
 - `.key` files in `~/.claude/sessions` are never opened.

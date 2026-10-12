@@ -4,20 +4,20 @@ You need the badge, a USB-C **data** cable, and a Mac with Claude Code and Homeb
 Plug the badge in, then run:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/pureyang/hearts-left/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash
 ```
 
 The installer does everything below and asks before each step that changes something:
 
-1. Downloads the code into `~/hearts-left` (or updates it).
+1. Downloads the code into `~/burn-helper` (or updates it).
 2. Installs the Mac bridge: async hooks and the status line in `~/.claude/settings.json`
    (backed up first) and a login item.
 3. Finds the badge. If it runs a conference build or anything other than stock Pimoroni
-   firmware, it saves and verifies a full flash backup in `~/hearts-left/backup/`, then
+   firmware, it saves and verifies a full flash backup in `~/burn-helper/backup/`, then
    flashes the stock Tufty 2350 v3.1.1 firmware, downloaded and checked against a pinned
    checksum. It installs `picotool` with Homebrew if needed.
 4. Asks for a 2.4 GHz Wi-Fi network. Leave it blank to set it up from your phone later.
-5. Copies the Hearts Left app onto the badge and checks that it starts.
+5. Copies the Burn Helper app onto the badge and checks that it starts.
 
 Options go after `bash -s --`, for example `... | bash -s -- --yes`:
 
@@ -39,8 +39,8 @@ The same steps by hand, from a clone:
 
 ```
 brew install picotool
-git clone https://github.com/pureyang/hearts-left.git
-cd hearts-left
+git clone https://github.com/pureyang/burn-helper.git
+cd burn-helper
 ```
 
 Download `tufty-v3.1.1-micropython-with-filesystem.uf2` from the
@@ -97,7 +97,7 @@ python3 bridge/install.py
 ```
 
 This backs up `~/.claude/settings.json`, then adds the async hooks and the hearts status line,
-and starts the bridge as a login item. The log is at `~/Library/Logs/hearts-left.log`. Restart
+and starts the bridge as a login item. The log is at `~/Library/Logs/burn-helper.log`. Restart
 open Claude Code sessions so they pick up the hooks. To remove everything it added, run
 `python3 bridge/install.py --uninstall`.
 

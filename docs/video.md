@@ -50,8 +50,8 @@ The times are the badge's. Record one continuous shot; the moves below are optio
 | 13-16 s | 40, then 88 agents: sparks, then a red pulsing edge | Hold | "40... 88 agents" |
 | 16-20 s | 128 agents: hyperspace; the hearts are almost gone and the countdown runs out | Slowly to the hearts | "100+ agents: hyperspace. Hearts = usage left" |
 
-End card (1-2 s, added in the edit): **Hearts Left**, "works with Claude Code, open source",
-`github.com/pureyang/hearts-left`.
+End card (1-2 s, added in the edit): **Burn Helper**, "works with Claude Code, open source",
+`github.com/pureyang/burn-helper`.
 
 ## Optional voiceover (about 45 words)
 

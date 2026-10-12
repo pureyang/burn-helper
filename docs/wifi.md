@@ -66,4 +66,4 @@ python3 tools/netdebug.py
 | `OK`, but `BEACON NEVER` | On Wi-Fi but can't hear the bridge | The Mac is on another network or a guest/isolated network, or broadcasts are blocked. Put both on the same network, or set a fixed `BRIDGE` address |
 | `OK`, bridge not answering | Found the bridge but the HTTP poll fails | Check `curl http://<mac-ip>:8787/status` from another device, and the macOS firewall |
 
-The network log is also kept on the badge in `/state/hearts_left_net.log`.
+The network log is also kept on the badge in `/state/burn_helper_net.log`.
