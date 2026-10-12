@@ -1,6 +1,6 @@
 # Hearts Left: live Claude Code activity and usage on a Pimoroni Tufty 2350.
 #
-# Polls the bridge on your Mac (bridge/tufty_bridge.py) over Wi-Fi and animates
+# Polls the bridge on your Mac (bridge/hearts_left_bridge.py) over Wi-Fi and animates
 # one of three themes by activity level, with hearts for the remaining usage.
 #
 # Buttons
