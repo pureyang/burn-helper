@@ -67,7 +67,8 @@ view = 0        # 0 animation, then views.DESKTOP, views.PAGED, views.WAITING
 page = 0        # the page shown in Paged mode
 wait_since = None        # ticks_ms when a session started waiting (for Waiting focus)
 screen_off_at = None     # ticks_ms when the backlight goes off after the 0% note
-demo = 0            # 0 off, 1 demo with a DEMO tag, 2 demo with no tag
+demo = 0            # 0 off, 1 demo with a DEMO tag, 2 the hidden 20-second video take
+demo_t0 = 0         # ticks_ms when the demo started
 DEMO_HOLD_MS = 2000      # hold UP alone
 HIDDEN_HOLD_MS = 3000    # hold UP + DOWN together
 PORTAL_HOLD_MS = 1800    # hold B alone
@@ -168,25 +169,56 @@ def apply_bridge():
             save_prefs()
 
 
-# Demo: a 30-second ramp from asleep through every activity tier up to ULTRA, with sessions
-# waiting for you now and then. Only the hero theme has a demo.
+# Two demos, both on the hero theme only, each starting from its first frame:
+#   demo 1 (hold UP 2 s, DEMO tag): a 30-second ramp from asleep through every activity level
+#     up to ULTRA, with sessions waiting for you now and then, on a 90-second usage window.
+#   demo 2 (hold UP + DOWN 3 s, no tag): a 20-second take for the launch video, timed to the
+#     shot list in docs/video.md.
 DEMO_THEME = "hero"
 DEMO_CYCLE_MS = 30000
 DEMO_AGENTS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 40, 63, 88, 128)   # one count inside each tier
 DEMO_WAITS = {3: 1, 7: 2, 12: 1}             # tier -> sessions waiting while it runs
 DEMO_WAITING = (("api-server", 95), ("docs-site", 12))
+VIDEO_MS = 20000
+# (second it starts, level when no agents work, agents working, sessions waiting)
+VIDEO_STEPS = ((0.0, S.SLEEP, 0, 0),     # asleep
+               (3.0, S.IDLE, 0, 0),      # wakes up
+               (4.5, S.WALK, 1, 0),      # one agent: walks
+               (7.0, S.WALK, 5, 0),      # five: runs
+               (8.5, S.WALK, 9, 0),      # nine: sprints
+               (10.0, S.WALK, 9, 1),     # a session needs you: "HEY! LISTEN!"
+               (13.0, S.WALK, 40, 0),    # 26-50 band: sparks
+               (15.0, S.WALK, 88, 0),    # 76-100 band: pulsing edge
+               (16.0, S.WALK, 128, 0))   # over 100: hyperspace until the end
+
+
+def set_demo(kind):
+    """Start demo 1 or 2 from its first frame, or stop (0). Demos run on the hero theme."""
+    global demo, demo_t0
+    demo = kind
+    demo_t0 = time.ticks_ms()
+    if demo and prefs["theme"] != DEMO_THEME:
+        switch(name=DEMO_THEME)
 
 
 def demo_status(t):
-    k = t % DEMO_CYCLE_MS
-    if k < 2000:
-        agents, level, waiting = 0, S.SLEEP, 0
-    elif k < 3500:
-        agents, level, waiting = 0, S.IDLE, 0
+    k = time.ticks_diff(t, demo_t0)
+    if demo == 2:
+        k %= VIDEO_MS
+        level, agents, waiting = S.SLEEP, 0, 0
+        for start, lv, n, w in VIDEO_STEPS:
+            if k >= start * 1000:
+                level, agents, waiting = lv, n, w
     else:
-        # tiers 1-14 for 1.6 s each, then ULTRA for the last 4 s
-        tier = min((k - 3500) // 1600, 14) + 1
-        agents, level, waiting = DEMO_AGENTS[tier - 1], st.level, DEMO_WAITS.get(tier, 0)
+        k %= DEMO_CYCLE_MS
+        if k < 2000:
+            agents, level, waiting = 0, S.SLEEP, 0
+        elif k < 3500:
+            agents, level, waiting = 0, S.IDLE, 0
+        else:
+            # tiers 1-14 for 1.6 s each, then ULTRA for the last 4 s
+            tier = min((k - 3500) // 1600, 14) + 1
+            agents, level, waiting = DEMO_AGENTS[tier - 1], S.WALK, DEMO_WAITS.get(tier, 0)
     if view == views.WAITING:
         waiting = 2                              # so Waiting focus always has something to show
     st.level = level
@@ -197,18 +229,24 @@ def demo_status(t):
     st.idle = 2
     st.sessions = agents + waiting + 2
     st.tpm = min(60, 4 * st.tier)
-    st.tools = 1234
     st.online = True
     st.net = ""
-    # a 90-second usage window: hearts drain for 75 s while the countdown runs
-    # down through minutes, milliseconds and microseconds, then it resets
-    into = (t % 90000) * 1000 + time.ticks_us() % 1000
-    st.left5 = 75 * 1000000 - into
-    st.hearts = 20 if st.left5 <= 0 else max(0, 20 - into // 3750000)
-    st.used5 = (20 - st.hearts) * 5
     st.week = 0.6
     st.used7 = 40
     st.left7 = (3 * 86400 + 4 * 3600) * 1000000
+    if demo == 2:
+        # the take: hearts drain from full to low, and the 5-hour countdown runs out at 20 s
+        st.tools = 200 + k // 40
+        st.left5 = (VIDEO_MS - k) * 1000 - time.ticks_us() % 1000
+        st.hearts = max(3, 20 - 17 * k // 19000)
+    else:
+        # a 90-second usage window: hearts drain for 75 s while the countdown runs
+        # down through minutes, milliseconds and microseconds, then it resets
+        st.tools = 1234
+        into = (time.ticks_diff(t, demo_t0) % 90000) * 1000 + time.ticks_us() % 1000
+        st.left5 = 75 * 1000000 - into
+        st.hearts = 20 if st.left5 <= 0 else max(0, 20 - into // 3750000)
+    st.used5 = (20 - st.hearts) * 5
 
 
 def lights(t):
@@ -316,9 +354,7 @@ def handle_buttons(t):
         if held(BUTTON_UP) >= HIDDEN_HOLD_MS and held(BUTTON_DOWN) >= HIDDEN_HOLD_MS:
             # undocumented: demo with no on-screen tag, for videos and talks
             fired = True
-            demo = 0 if demo else 2
-            if demo and prefs["theme"] != DEMO_THEME:
-                switch(name=DEMO_THEME)
+            set_demo(0 if demo else 2)
             wink_until = time.ticks_add(t, 350)
         elif held(BUTTON_DOWN) >= DEMO_HOLD_MS and BUTTON_UP not in down and len(down) == 1:
             fired = True
@@ -327,9 +363,7 @@ def handle_buttons(t):
             show_toast("CASE LIGHTS ON" if prefs["case_leds"] else "CASE LIGHTS OFF")
         elif held(BUTTON_UP) >= DEMO_HOLD_MS and BUTTON_DOWN not in down:
             fired = True
-            demo = 0 if demo else 1
-            if demo and prefs["theme"] != DEMO_THEME:
-                switch(name=DEMO_THEME)
+            set_demo(0 if demo else 1)
             show_toast("DEMO ON" if demo else "DEMO OFF")
         elif held(BUTTON_B) >= PORTAL_HOLD_MS and len(down) == 1:
             fired = True
@@ -489,10 +523,8 @@ def update():
     power_save(t)
     perf[0] = perf[0] * 0.9 + time.ticks_diff(time.ticks_ms(), t_start) * 0.1
     if tether.demo_req is not None:
-        globals()["demo"] = tether.demo_req % 3
+        set_demo(tether.demo_req % 3)
         tether.demo_req = None
-        if demo and prefs["theme"] != DEMO_THEME:
-            switch(name=DEMO_THEME)
     if tether.view_req is not None:
         globals()["view"] = tether.view_req % 4
         tether.view_req = None
