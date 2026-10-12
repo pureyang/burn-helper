@@ -1,3 +1,5 @@
+<img src="docs/img/logo.png" width="96" alt="Burn Helper logo: a pixel glove with flames, holding a terminal">
+
 # Burn Helper
 
 Your Claude Code agents as a pixel game on a Pimoroni Tufty 2350 conference badge.
