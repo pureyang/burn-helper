@@ -4,6 +4,7 @@
     python3 tools/simulate.py                 # contact sheet per theme -> tools/sim/out/
     python3 tools/simulate.py hero           # one theme
     python3 tools/simulate.py --frames hero 3   # animation frames for level 3
+    python3 tools/simulate.py --tiers hero      # all 15 activity tiers, 1 agent to ULTRA
 
 The drawing code is the same module the badge runs; only the picovector API is
 replaced by tools/sim/pvshim.py, which follows the pixel rules measured on the
@@ -29,7 +30,7 @@ SCENARIOS = [
     ("0 asleep", 1000, dict(level=0, hearts=20, week=0.92, busy=0, sessions=2, tools=0, left5=-3600 * M)),
     ("1 idle", 2000, dict(level=1, hearts=17, week=0.8, busy=0, sessions=3, tools=14, left5=(2 * 3600 + 13 * 60) * M)),
     ("2 walk", 3100, dict(level=2, hearts=13, week=0.7, busy=1, sessions=3, tools=128, tpm=6, left5=(13 * 60 + 42) * M)),
-    ("3 run", 4200, dict(level=3, hearts=9, week=0.55, busy=3, sessions=5, tools=402, tpm=22, left5=42173000)),
+    ("3 run", 4200, dict(level=3, hearts=9, week=0.55, busy=5, sessions=7, tools=402, tpm=22, left5=42173000)),
     ("4 sprint", 5300, dict(level=4, hearts=5, week=0.3, busy=6, sessions=8, tools=1337, tpm=48, subagents=4, left5=9173248)),
     ("4 sprint (alt)", 7350, dict(level=4, hearts=3, week=0.2, busy=5, sessions=8, tools=2048, tpm=55, subagents=3, left5=4 * 60 * M)),
     ("waiting", 6000, dict(level=2, hearts=11, week=0.6, busy=1, waiting=2, sessions=4, tools=250, tpm=4, left5=(65 * 60) * M)),
@@ -43,6 +44,8 @@ def status(**kw):
     st.net = ""
     for k, v in kw.items():
         setattr(st, k, v)
+    if "busy" in kw or "subagents" in kw:
+        st.set_agents(st.busy + st.subagents)    # the tier picks the gait, as on the badge
     return st
 
 
@@ -94,6 +97,36 @@ def sheet(name):
     return path
 
 
+TIER_AGENTS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 40, 63, 88, 128)   # one count inside each tier
+
+
+def tiers(name):
+    """Every activity tier on one sheet: 1-10 agents, the four bands, then ULTRA."""
+    theme = load(name)
+    cols, scale, pad = 5, 2, 6
+    tw, th = 160 * scale, 120 * scale
+    big = pvshim.image(cols * (tw + pad) + pad, 3 * (th + pad + 14) + pad)
+    big.pen = pvshim.color(40, 40, 48)
+    big.clear()
+    big.font = pvshim.font.sins
+    for i, agents in enumerate(TIER_AGENTS):
+        st = status(level=2, hearts=12, week=0.6, busy=agents, sessions=agents + 2, tools=400, tpm=20,
+                    left5=(65 * 60) * M)
+        theme.last_t = None
+        img = render(theme, st, 5200)
+        tier = st.tier
+        label = "%d: %s" % (tier, "%d agent%s" % (agents, "" if agents == 1 else "s") if tier <= 10
+                            else (scene.TIER_TEXT[tier] + " agents" if tier < 15 else "ULTRA, 100+ agents"))
+        x = pad + (i % cols) * (tw + pad)
+        y = pad + (i // cols) * (th + pad + 14)
+        big.pen = pvshim.color(220, 220, 220)
+        big.text(label, x, y)
+        big.blit(img, pvshim.rect(x, y + 14, tw, th))
+    path = os.path.join(OUT, "tiers_%s.png" % name)
+    big.to_png(path, 1)
+    return path
+
+
 def frames(name, level):
     theme = load(name)
     kw = dict(SCENARIOS[min(level, 4)][2])
@@ -110,6 +143,10 @@ def frames(name, level):
 
 def main(argv):
     os.makedirs(OUT, exist_ok=True)
+    if argv and argv[0] == "--tiers":
+        for name in (argv[1:] or THEMES):
+            print(tiers(name))
+        return
     if argv and argv[0] == "--frames":
         print(frames(argv[1], int(argv[2])))
         return

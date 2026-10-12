@@ -320,8 +320,11 @@ class Theme(S.Theme):
             return "AUDIENCE VOTE: YOUR MOVE!"
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
             return "COLLAR LOW! RECHARGE " + gfx.countdown(st.left5)
+        tc = S.tier_caption(st, t, "ULTRA RATINGS: HYPERSPACE!")
+        if tc:
+            return tc
         lv = st.level
-        n = max(1, st.busy)
+        n = max(1, st.agents)
         if lv == S.SLEEP:
             return "OFF AIR - RUNNER ASLEEP"
         if lv == S.IDLE:

@@ -224,9 +224,11 @@ class Theme(S.Theme):
         screen.blit(self.rupee, vec2(3, 2))
         gfx.text("x%d" % min(st.tools, 9999), 10, -1, WHITE, font.sins)
         screen.blit(self.boomerang, vec2(3, 12))
-        gfx.text("x%d" % st.busy, 12, 9, WHITE, font.sins)
-        screen.blit(self.ocarina, vec2(30, 12))
-        gfx.text("x%d" % st.waiting, 40, 9, WHITE, font.sins)
+        busy = "x%d" % st.agents
+        gfx.text(busy, 12, 9, WHITE, font.sins)
+        ox = max(30, 12 + gfx.width(busy, font.sins) + 3)    # make room for 3-digit counts
+        screen.blit(self.ocarina, vec2(ox, 12))
+        gfx.text("x%d" % st.waiting, ox + 10, 9, WHITE, font.sins)
 
         gfx.text("-LIFE-", 76, -2, RED, font.sins)
         # time until the hearts refill (the 5-hour window resets)
@@ -253,12 +255,15 @@ class Theme(S.Theme):
             return "%d QUEST%s NEED YOU!" % (st.waiting, "" if st.waiting == 1 else "S")
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
             return "LOW HEARTS! REFILL IN " + gfx.countdown(st.left5)
+        tc = S.tier_caption(st, t, "HYPERSPACE JUMP!")
+        if tc:
+            return tc
         lv = st.level
         if lv == S.SLEEP:
             return "LINK IS ASLEEP... ZZZ"
         if lv == S.IDLE:
             return "WAITING FOR A QUEST"
-        n = max(1, st.busy)
+        n = max(1, st.agents)
         if lv == S.WALK:
             return "%d AGENT%s ON A QUEST" % (n, "" if n == 1 else "S")
         if lv == S.RUN:

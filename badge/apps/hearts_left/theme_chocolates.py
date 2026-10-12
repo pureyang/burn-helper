@@ -234,7 +234,7 @@ class Theme(S.Theme):
         else:
             img = self.frame(self.sprint, t, 15)
             x = 84
-        followers = 0 if lv == S.WALK else min(max(st.busy - 1, 1 if lv == S.SPRINT else 0), 7)
+        followers = 0 if lv == S.WALK else min(max(st.agents - 1, 1 if lv == S.SPRINT else 0), 7)
         for i in range(followers - 1, -1, -1):
             frames = self.crowd[i % len(self.crowd)]
             fimg = frames[int(t * 14 / 1000 + i * 3) % len(frames)]
@@ -295,6 +295,9 @@ class Theme(S.Theme):
             return "%d SESSION%s NEED YOU" % (st.waiting, "" if st.waiting == 1 else "S")
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
             return "I'M PRETTY TIRED... %d CHOCOLATE%s LEFT" % ((st.hearts + 1) // 2, "" if (st.hearts + 1) // 2 == 1 else "S")
+        tc = S.tier_caption(st, t, "RUNNING INTO HYPERSPACE!")
+        if tc:
+            return tc
         lv = st.level
         alt = (t // 3500) % 2
         if lv == S.SLEEP:
@@ -303,7 +306,7 @@ class Theme(S.Theme):
             return "MAMA ALWAYS SAID..." if alt == 0 else "STUPID IS AS STUPID DOES"
         if lv == S.WALK:
             return "I JUST FELT LIKE RUNNING"
-        n = max(1, st.busy)
+        n = max(1, st.agents)
         if lv == S.RUN:
             return "RUN, FORREST, RUN!" if alt == 0 else "%d AGENTS RUNNING" % n
         return "RUN, FORREST, RUN!!" if alt == 0 else "%d FOLLOWERS, %d TOOLS/MIN" % (n, st.tpm)

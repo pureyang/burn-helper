@@ -3,6 +3,7 @@
 import math
 import time
 import gfx
+import fx
 
 W = gfx.W
 H = gfx.H
@@ -15,6 +16,41 @@ GAIT = {WALK: ("walk", 9), RUN: ("run", 13), SPRINT: ("sprint", 16)}
 # background scroll speed in pixels per second
 SPEED = {SLEEP: 0, IDLE: 0, WALK: 18, RUN: 46, SPRINT: 78}
 
+# Activity tiers by how many agents are working (busy sessions + running subagents):
+# 1 to 10 one agent at a time, then 11-25, 26-50, 51-75, 76-100, and ULTRA above 100.
+MAX_TIER = ULTRA = 15
+BANDS = ((25, 11), (50, 12), (75, 13), (100, 14))
+TIER_TEXT = {11: "11-25", 12: "26-50", 13: "51-75", 14: "76-100", 15: "100+"}
+
+
+def tier_for(agents):
+    if agents <= 0:
+        return 0
+    if agents <= 10:
+        return agents
+    for top, tier in BANDS:
+        if agents <= top:
+            return tier
+    return ULTRA
+
+
+def gait_for(tier):
+    """The level whose gait a tier uses: walk for 1-3, run for 4-7, sprint from 8."""
+    return WALK if tier <= 3 else (RUN if tier <= 7 else SPRINT)
+
+
+def tier_caption(st, t, ultra_line):
+    """A caption for the top tiers, or None to let the theme use its own."""
+    if st.tier >= ULTRA:
+        return ultra_line if (t // 2500) % 2 == 0 else "%d AGENTS: ULTRA" % st.agents
+    if st.tier > 10 and (t // 3000) % 2:
+        return "%d AGENTS AT WORK" % st.agents
+    return None
+
+
+# the scene area between the themes' top bar and caption, where tier effects are drawn
+FX_TOP, FX_BOTTOM = 22, 108
+
 
 class Status:
     """What the themes draw. Filled from the bridge's /status JSON."""
@@ -24,7 +60,10 @@ class Status:
         self.hearts = None      # remaining 5-hour budget, half units 0..20
         self.week = None        # remaining 7-day budget, 0..1
         self.busy = 0
+        self.agents = 0         # busy sessions + running subagents
+        self.tier = 0           # 0 none working, 1..MAX_TIER (see tier_for)
         self.waiting = 0
+        self.waiting_list = []  # [(session name, seconds waiting)], longest first, if the bridge sends it
         self.idle = 0
         self.sessions = 0
         self.subagents = 0
@@ -58,12 +97,19 @@ class Status:
         self.reset7 = (wk or {}).get("resets_at")
         self.busy = int(d.get("busy") or 0)
         self.waiting = int(d.get("waiting") or 0)
+        wl = []
+        for w in d.get("waiting_list") or []:
+            try:
+                wl.append((str(w.get("n") or "session")[:24], int(w.get("s") or 0)))
+            except (AttributeError, TypeError, ValueError):
+                pass
+        self.waiting_list = wl[:4]
         self.idle = int(d.get("idle") or 0)
         self.sessions = int(d.get("sessions") or 0)
         self.subagents = int(d.get("subagents") or 0)
         self.tpm = int(d.get("tpm") or 0)
         self.tools = int(d.get("tools_today") or 0)
-        self.waiting_list = []  # [(session name, seconds waiting)], longest first, if the bridge sends it
+        self.set_agents(self.busy + self.subagents)
         self.clock = d.get("clock") or ""
         now_ms = d.get("now_ms")
         if now_ms is None and d.get("ts") is not None:
@@ -93,17 +139,17 @@ class Status:
         us = time.ticks_diff(time.ticks_us(), self._at_us) if ms < 500000 else ms * 1000
         return self._now_ms * 1000 + us
 
+    def set_agents(self, n):
+        """Set the working-agent count; while any work, the tier picks the gait."""
+        self.agents = max(0, int(n))
+        self.tier = tier_for(self.agents)
+        if self.tier:
+            self.level = gait_for(self.tier)
+
     def tick(self):
         """Refresh the countdowns; call once per frame."""
         now = self._now_us()
         self.left5 = None if (now is None or not self.reset5) else int(self.reset5) * 1000000 - now
-        wl = []
-        for w in d.get("waiting_list") or []:
-            try:
-                wl.append((str(w.get("n") or "session")[:24], int(w.get("s") or 0)))
-            except (AttributeError, TypeError, ValueError):
-                pass
-        self.waiting_list = wl[:4]
         self.left7 = None if (now is None or not self.reset7) else int(self.reset7) * 1000000 - now
 
 
@@ -141,7 +187,7 @@ class Theme:
             self.last_t = t
         dt = max(0, min(200, t - self.last_t)) / 1000.0
         self.last_t = t
-        boost = 1.0 + min(st.tpm, 60) / 150.0
+        boost = (1.0 + min(st.tpm, 60) / 150.0) * (1.0 + 0.06 * max(0, st.tier - 1))
         self.scroll += SPEED.get(st.level, 0) * boost * dt
         if self.shown_level != st.level:
             self.shown_level = st.level
@@ -156,6 +202,8 @@ class Theme:
             self.ready = True
         self.advance(st, t)
         self.render(st, t)
+        if st.tier:
+            fx.draw(st.tier, t, FX_TOP, FX_BOTTOM)
 
     def render(self, st, t):
         pass
