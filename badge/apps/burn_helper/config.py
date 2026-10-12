@@ -46,6 +46,30 @@ def migrate():
             pass
 
 
+RELAY_FILE = "/state/burn_helper_relay.json"
+
+
+def load_relay():
+    """The Mac's internet relay {"url", "key"}, learned over USB from the bridge, or None."""
+    try:
+        with open(RELAY_FILE) as f:
+            r = json.loads(f.read())
+        if isinstance(r, dict) and str(r.get("url", "")).startswith("https://") and r.get("key"):
+            return {"url": str(r["url"]), "key": str(r["key"])}
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def save_relay(r):
+    try:
+        with open(RELAY_FILE, "w") as f:
+            f.write(json.dumps(r))
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def load_portal():
     try:
         with open(NET_FILE) as f:

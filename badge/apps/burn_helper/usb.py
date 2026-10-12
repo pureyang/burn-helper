@@ -22,6 +22,7 @@ class UsbLink:
         self.netlog_req = False
         self.view_req = None
         self.page_req = None
+        self.relay_req = None    # 1 = use the internet relay even at home (testing), 0 = back to normal
         self.key_req = None      # "A", "B", "C", "UP" or "DOWN": act as a short press (testing)
         self.demo_req = None
         try:
@@ -64,6 +65,12 @@ class UsbLink:
         if line.startswith("@DEMO "):
             try:
                 self.demo_req = int(line[6:].strip())
+            except ValueError:
+                pass
+            return
+        if line.startswith("@RELAY "):
+            try:
+                self.relay_req = int(line[7:].strip())
             except ValueError:
                 pass
             return

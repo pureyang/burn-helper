@@ -61,7 +61,7 @@ if prefs["bright"] >= OFF:
     prefs["bright"] = OFF - 1
 
 st = S.Status()
-link = net.Net(config.networks(), config.bridge())
+link = net.Net(config.networks(), config.bridge(), relay=config.load_relay())
 tether = usb.UsbLink()
 themes = {}
 view = 0        # 0 animation, then views.DESKTOP, views.PAGED, views.WAITING
@@ -158,9 +158,17 @@ def apply_bridge():
             # prefer USB while it is fresh; Wi-Fi fills in when unplugged
             if name == "usb" or not tether.fresh():
                 d = src.data
-                source = name
+                source = "relay" if (name == "net" and link.via == "relay") else name
     if d is None:
         return
+    r = d.get("relay")
+    if source == "usb" and isinstance(r, dict) and r.get("url") and r.get("key"):
+        # the bridge hands over its internet relay over the cable only; keep it for later
+        r = {"url": str(r["url"]), "key": str(r["key"])}
+        if r != link.relay:
+            config.save_relay(r)
+            link.set_relay(r)
+            show_toast("INTERNET RELAY READY")
     st.update(d)
     tseq = d.get("theme_seq")
     if isinstance(tseq, int) and tseq != prefs.get("seq"):
@@ -409,7 +417,7 @@ def finish_portal():
     down.clear()
     if ok:
         portal = None
-        link = net.Net(config.networks(), config.bridge())
+        link = net.Net(config.networks(), config.bridge(), relay=config.load_relay())
         show_toast("WI-FI " + ssid[:14].upper())
     else:
         link.stop()
@@ -537,6 +545,9 @@ def update():
         tether.key_req = None
         if key is not None:
             short_press(key)
+    if tether.relay_req is not None:
+        link.force_relay = bool(tether.relay_req)
+        tether.relay_req = None
     if tether.page_req is not None:
         globals()["page"] = tether.page_req % len(views.PAGES)
         tether.page_req = None

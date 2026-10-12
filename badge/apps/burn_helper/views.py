@@ -86,7 +86,7 @@ def data_row(c):
         return "DEMO%s" % (" (NO TAG)" if c.demo == 2 else "")
     if not c.st.online:
         return "OFFLINE"
-    return {"usb": "USB CABLE", "net": "WI-FI"}.get(c.source, "NONE")
+    return {"usb": "USB CABLE", "net": "WI-FI", "relay": "INTERNET RELAY"}.get(c.source, "NONE")
 
 
 def wifi_name_ip(c):
@@ -103,6 +103,8 @@ def bridge_text(c):
         return "192.168.1.20:8787", "1S AGO"
     b = c.link.bridge
     age = "" if c.link.ok_t is None else "%dS AGO" % (net.since(c.link.ok_t) // 1000)
+    if c.link.via == "relay":
+        return "INTERNET RELAY", age
     return ("%s:%d" % b if b else "SEARCHING"), age
 
 

@@ -27,6 +27,7 @@ JOIN_TIMEOUT_MS = 12000   # a right password joins in about 3 s; a wrong one han
 RETRY_ALL_MS = 15000
 FRESH_MS = 12000
 NO_BEACON_MS = 10000
+RELAY_POLL_MS = 5000      # the internet relay is polled less often than the bridge on the LAN
 LOG_FILE = "/state/burn_helper_net.log"
 LOG_MAX = 16384
 
@@ -142,7 +143,7 @@ class HttpGet:
 class Net:
     """Wi-Fi + bridge link with a diagnosis of every failure (see debug screen)."""
 
-    def __init__(self, networks, bridge=None, hostname="burn-helper"):
+    def __init__(self, networks, bridge=None, hostname="burn-helper", relay=None):
         self.cands = []
         for n in networks:
             if not n or not n[0]:
@@ -157,6 +158,11 @@ class Net:
         self.networks = self.cands            # truthy when anything is configured
         self.fixed_bridge = bridge             # (host, port) or None
         self.bridge = bridge
+        self.relay = relay                     # {"url", "key"} of the Mac's internet relay, or None
+        self.rclient = None                    # relay.Client while the relay is in use
+        self.rpoll_t0 = None
+        self.via = None                        # "lan" or "relay": where the last good status came from
+        self.force_relay = False               # testing: ignore the LAN bridge (USB "@RELAY 1")
         self.hostname = hostname
         self.wlan = None
         self.state = "init" if self.cands else "none"   # init|scan|joining|up|down|none
@@ -229,6 +235,32 @@ class Net:
     def fresh(self):
         return self.ok_t is not None and since(self.ok_t) < FRESH_MS
 
+    def set_relay(self, relay):
+        """New relay address and key (they arrive over USB from the bridge)."""
+        if relay != self.relay:
+            self.relay = relay
+            self._close_relay()
+            self.note("relay set to %s" % (relay["url"] if relay else "none"))
+
+    def _close_relay(self):
+        if self.rclient is not None:
+            self.rclient.close()
+            self.rclient = None
+
+    def _lan_bridge(self):
+        """The bridge on this network, if it is there: fixed, or heard by beacon in the last 10 s."""
+        if self.force_relay:
+            return None
+        if self.fixed_bridge is not None:
+            return self.fixed_bridge
+        if self.bridge is not None and self.beacon_t is not None and since(self.beacon_t) < NO_BEACON_MS:
+            return self.bridge
+        return None
+
+    def _use_relay(self):
+        return (self.relay is not None and self._lan_bridge() is None and self.up_t is not None
+                and (self.force_relay or since(self.up_t) > NO_BEACON_MS))
+
     def results(self):
         out = {}
         for c in self.cands:
@@ -241,9 +273,15 @@ class Net:
         if self.state == "none":
             return "No Wi-Fi saved. Hold B for phone setup."
         if self.state == "up":
+            if self.via == "relay" and self.fresh():
+                return "All good, through the internet relay."
+            if self._use_relay():
+                return ("Away from the Mac's network: using the internet relay%s" %
+                        (" (%s)" % self.http_err if self.http_err else "..."))
             if self.fixed_bridge is None and self.beacon_t is None and self.up_t is not None \
                     and since(self.up_t) > NO_BEACON_MS:
-                return "On Wi-Fi but no bridge beacon: is the Mac on this same network?"
+                return ("On Wi-Fi but no bridge beacon: is the Mac on this same network? "
+                        "Plug the badge into the Mac once to set up the internet relay.")
             if self.bridge is not None and not self.fresh() and self.http_err:
                 return "Bridge %s:%d not answering (%s)" % (self.bridge[0], self.bridge[1], self.http_err)
             if self.fresh():
@@ -280,6 +318,10 @@ class Net:
             return "JOINING %s..." % self.ssid.upper()[:14]
         if self.state == "down":
             return "WI-FI FAILING: PRESS B x2"
+        if self.fresh():
+            return ""
+        if self._use_relay():
+            return "REACHING THE RELAY..."
         if self.bridge is None:
             return "SEARCHING FOR BRIDGE..."
         if not self.fresh():
@@ -288,6 +330,7 @@ class Net:
 
     def stop(self):
         self._close_udp()
+        self._close_relay()
         if self.http:
             self.http.close()
             self.http = None
@@ -500,6 +543,11 @@ class Net:
             "never" if self.beacon_t is None else "%ds ago" % (since(self.beacon_t) // 1000),
             "never" if self.ok_t is None else "%ds ago" % (since(self.ok_t) // 1000),
             self.http_err or "-"))
+        if self.relay is not None:
+            c = self.rclient
+            out.append("relay %s  via %s  handshakes %d  %s" % (
+                self.relay["url"].split("://", 1)[-1].split(".", 1)[0], self.via or "-",
+                c.handshakes if c else 0, "forced" if self.force_relay else ""))
         out.append("hint: " + self.hint())
         return out
 
@@ -545,6 +593,10 @@ class Net:
 
     # -------------------------------------------------- polling
     def _poll(self):
+        if self._use_relay():
+            self._poll_relay()
+            return
+        self._close_relay()
         if self.http is not None:
             self.http.step()
             if self.http.done:
@@ -552,6 +604,7 @@ class Net:
                     if self.ok_t is None:
                         self.note("first status from bridge %s:%d" % self.bridge)
                     self.data = self.http.body
+                    self.via = "lan"
                     self.ok_t = ticks()
                     self.seq += 1
                     self.err = ""
@@ -569,3 +622,33 @@ class Net:
             return
         self.poll_t0 = ticks()
         self.http = HttpGet(self.bridge[0], self.bridge[1], "/status" + self.extra_query)
+
+    def _poll_relay(self):
+        """Away from home: the same status, over HTTPS through the Mac's Tailscale Funnel."""
+        if self.rclient is None:
+            import relay
+            self.rclient = relay.Client(self.relay["url"], self.relay["key"])
+            self.note("no bridge on this network: using the internet relay")
+        c = self.rclient
+        if not c.done:
+            c.step()
+            if c.done:
+                if c.ok and isinstance(c.body, dict):
+                    if self.via != "relay":
+                        self.note("first status through the internet relay")
+                    self.data = c.body
+                    self.via = "relay"
+                    self.ok_t = ticks()
+                    self.seq += 1
+                    self.err = ""
+                    self.http_err = ""
+                else:
+                    e = str(c.err)[:40]
+                    if e != self.http_err:
+                        self.note("relay poll failed: " + e)
+                    self.http_err = e
+            return
+        if self.rpoll_t0 is not None and since(self.rpoll_t0) < RELAY_POLL_MS:
+            return
+        self.rpoll_t0 = ticks()
+        c.start("/status")
