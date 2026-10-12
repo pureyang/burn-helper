@@ -230,10 +230,11 @@ class Theme(S.Theme):
         screen.blit(self.ocarina, vec2(ox, 12))
         gfx.text("x%d" % st.waiting, ox + 10, 9, WHITE, font.sins)
 
-        gfx.text("-LIFE-", 76, -2, RED, font.sins)
         # time until the hearts refill (the 5-hour window resets)
         cd = gfx.countdown(st.left5)
         w = gfx.width(cd, font.sins)
+        if 158 - w - 10 >= 76 + gfx.width("-LIFE-", font.sins):
+            gfx.text("-LIFE-", 76, -2, RED, font.sins)     # dropped when the long final-seconds count needs the room
         gfx.text(cd, 158 - w, -2, gfx.countdown_color(st.left5, WHITE), font.sins)
         screen.blit(self.clock, vec2(int(158 - w - 8), 2))
         low = st.hearts is not None and st.hearts <= 4
@@ -252,7 +253,7 @@ class Theme(S.Theme):
         if not st.online:
             return st.net or "SEARCHING FOR BRIDGE..."
         if st.waiting and (t // 2500) % 2 == 0:
-            return "%d QUEST%s NEED YOU!" % (st.waiting, "" if st.waiting == 1 else "S")
+            return ("1 QUEST NEEDS YOU!" if st.waiting == 1 else "%d QUESTS NEED YOU!" % st.waiting)
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
             return "LOW HEARTS! REFILL IN " + gfx.countdown(st.left5)
         tc = S.tier_caption(st, t, "HYPERSPACE JUMP!")
