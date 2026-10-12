@@ -129,9 +129,12 @@ def theme_obj(name):
 
 
 def switch(delta=0, name=None):
+    global demo
     if name is None:
         i = THEMES.index(prefs["theme"])
         name = THEMES[(i + delta) % len(THEMES)]
+    if demo and name != DEMO_THEME:
+        demo = 0                     # the demo only exists for the hero theme
     prefs["theme"] = name
     State.save("hearts_left", prefs)
     show_toast(LABELS[name])
@@ -165,12 +168,35 @@ def apply_bridge():
             save_prefs()
 
 
+# Demo: a 30-second ramp from asleep through every activity tier up to ULTRA, with sessions
+# waiting for you now and then. Only the hero theme has a demo.
+DEMO_THEME = "hero"
+DEMO_CYCLE_MS = 30000
+DEMO_AGENTS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 40, 63, 88, 128)   # one count inside each tier
+DEMO_WAITS = {3: 1, 7: 2, 12: 1}             # tier -> sessions waiting while it runs
+DEMO_WAITING = (("api-server", 95), ("docs-site", 12))
+
+
 def demo_status(t):
-    step = (t // 4500) % 6
-    st.level = (S.SLEEP, S.IDLE, S.WALK, S.RUN, S.SPRINT, S.WALK)[step]
-    st.busy = (0, 0, 1, 3, 6, 1)[step]
-    st.waiting = 1 if step == 5 else 0
-    st.tpm = (0, 0, 6, 22, 48, 4)[step]
+    k = t % DEMO_CYCLE_MS
+    if k < 2000:
+        agents, level, waiting = 0, S.SLEEP, 0
+    elif k < 3500:
+        agents, level, waiting = 0, S.IDLE, 0
+    else:
+        # tiers 1-14 for 1.6 s each, then ULTRA for the last 4 s
+        tier = min((k - 3500) // 1600, 14) + 1
+        agents, level, waiting = DEMO_AGENTS[tier - 1], st.level, DEMO_WAITS.get(tier, 0)
+    if view == views.WAITING:
+        waiting = 2                              # so Waiting focus always has something to show
+    st.level = level
+    st.busy, st.subagents = agents, 0
+    st.set_agents(agents)
+    st.waiting = waiting
+    st.waiting_list = list(DEMO_WAITING[:waiting])
+    st.idle = 2
+    st.sessions = agents + waiting + 2
+    st.tpm = min(60, 4 * st.tier)
     st.tools = 1234
     st.online = True
     st.net = ""
@@ -291,6 +317,8 @@ def handle_buttons(t):
             # undocumented: demo with no on-screen tag, for videos and talks
             fired = True
             demo = 0 if demo else 2
+            if demo and prefs["theme"] != DEMO_THEME:
+                switch(name=DEMO_THEME)
             wink_until = time.ticks_add(t, 350)
         elif held(BUTTON_DOWN) >= DEMO_HOLD_MS and BUTTON_UP not in down and len(down) == 1:
             fired = True
@@ -300,6 +328,8 @@ def handle_buttons(t):
         elif held(BUTTON_UP) >= DEMO_HOLD_MS and BUTTON_DOWN not in down:
             fired = True
             demo = 0 if demo else 1
+            if demo and prefs["theme"] != DEMO_THEME:
+                switch(name=DEMO_THEME)
             show_toast("DEMO ON" if demo else "DEMO OFF")
         elif held(BUTTON_B) >= PORTAL_HOLD_MS and len(down) == 1:
             fired = True
@@ -461,6 +491,8 @@ def update():
     if tether.demo_req is not None:
         globals()["demo"] = tether.demo_req % 3
         tether.demo_req = None
+        if demo and prefs["theme"] != DEMO_THEME:
+            switch(name=DEMO_THEME)
     if tether.view_req is not None:
         globals()["view"] = tether.view_req % 4
         tether.view_req = None
