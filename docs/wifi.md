@@ -10,6 +10,9 @@ so it can hear the bridge's beacon.
   and shows the result on its screen: the network name and IP address with SUCCESS, then it
   returns to the main screen by itself. If the join fails (wrong password, network not seen) it
   says why and goes back to setup so you can retry.
+  The setup hotspot has no password the first time, when no Wi-Fi is saved yet. After that it
+  uses an 8-digit password (the shortest WPA2 allows) shown on the badge as `WIFI PASS`; the QR
+  code includes it, so you only type it if you join by hand.
 - **From the Mac:** edit `badge/secrets.py`, then run `python3 tools/deploy.py`.
 - **No discovery?** If your network blocks broadcasts, set a fixed bridge address
   (`BRIDGE = "192.168.x.y:8787"` in `secrets.py`, or the portal's bridge field).

@@ -163,7 +163,7 @@ assert ap.cfg["ssid"] == pt.ssid and "S:HeartsLeft-AB12;" in pt.qr.text
 pt, ap = make_portal(33)
 assert pt.ssid == "Hearts-AB12", pt.ssid               # too wide: shorter, and it is the real name
 assert ap.cfg["ssid"] == "Hearts-AB12" and "S:Hearts-AB12;" in pt.qr.text
-assert pt.psk.startswith("hearts") and "P:" + pt.psk in pt.qr.text
+assert len(pt.psk) == 8 and pt.psk.isdigit() and "P:" + pt.psk in pt.qr.text, pt.psk   # WPA2 minimum, digits only
 print("PASS hotspot name: full when it fits, shorter real name otherwise; QR matches")
 
 # --- nothing saved yet: open hotspot, no password anywhere

@@ -91,7 +91,10 @@ class Portal:
         # First-time setup (no Wi-Fi saved yet) uses an open hotspot so there is nothing to type or
         # scan past; once a network is saved the hotspot gets a password.
         self.open = not config.networks()
-        self.psk = "" if self.open else "hearts%02x%02x%02x" % (uid[-3], uid[-2], uid[-1])
+        # 8 digits: the shortest WPA2 password, and easy to type on a phone keypad. It comes from
+        # the chip id, so it stays the same for this badge and a phone that saved it keeps working.
+        n = ((uid[-4] << 24) | (uid[-3] << 16) | (uid[-2] << 8) | uid[-1]) % 100000000
+        self.psk = "" if self.open else "%08d" % n
         # The screen is small: use the full hotspot name when it fits beside the QR code,
         # otherwise a shorter real name, so what is shown is exactly what the phone sees.
         self.ssid = "HeartsLeft-%02X%02X" % (uid[-2], uid[-1])
