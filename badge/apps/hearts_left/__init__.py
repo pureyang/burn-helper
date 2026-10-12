@@ -5,7 +5,8 @@
 #
 # Buttons
 #   A / C      previous / next theme
-#   B          Desktop mode -> Wi-Fi debug screen -> close; hold 2 s for phone setup
+#   B          animation -> Desktop mode -> Paged mode -> Waiting focus -> animation;
+#              hold 2 s for phone setup. In Paged mode A/C turn pages (the last is Wi-Fi debug)
 #              (on the debug screen UP rescans and retries Wi-Fi right away)
 #   hold UP    demo mode for 2 s (cycles every level, shows a DEMO tag)
 #   DOWN       brightness (10 levels); hold 2 s to switch the case LEDs on or off (off by default)
@@ -28,7 +29,7 @@ import gfx  # noqa: E402
 import net  # noqa: E402
 import scene as S  # noqa: E402
 import usb  # noqa: E402
-import debugview  # noqa: E402
+import views  # noqa: E402
 
 THEMES = ("hero", "gameshow", "chocolates")
 LABELS = {"hero": "HYRULE", "gameshow": "RUNNING MAN", "chocolates": "FORREST"}
@@ -55,7 +56,9 @@ st = S.Status()
 link = net.Net(config.networks(), config.bridge())
 tether = usb.UsbLink()
 themes = {}
-view = 0        # 0 theme, 1 Desktop mode, 2 Wi-Fi debug
+view = 0        # 0 animation, then views.DESKTOP, views.PAGED, views.WAITING
+page = 0        # the page shown in Paged mode
+wait_since = None        # ticks_ms when a session started waiting (for Waiting focus)
 demo = 0            # 0 off, 1 demo with a DEMO tag, 2 demo with no tag
 DEMO_HOLD_MS = 2000      # hold UP alone
 HIDDEN_HOLD_MS = 3000    # hold UP + DOWN together
@@ -77,6 +80,7 @@ frame_t = time.ticks_ms()
 toast = None
 toast_t = 0
 perf = [0.0, 0.0]   # moving averages: draw ms, frame-to-frame ms
+ctx = views.Ctx(st, link, tether)
 
 
 def set_brightness(i):
@@ -204,46 +208,6 @@ def lights(t):
         badge.caselights(*[0.5 if i == k else 0.05 for i in range(4)])
 
 
-def draw_info(t):
-    gfx.box(0, 0, 160, 120, (12, 14, 20))
-    gfx.box(0, 0, 160, 11, (217, 119, 87))
-    gfx.text("DESKTOP MODE", 3, -1, (12, 14, 20), font.sins)
-    rows = []
-    if demo:
-        rows.append("DATA DEMO%s" % (" (NO TAG)" if demo == 2 else ""))
-    else:
-        rows.append("DATA %s" % ({"usb": "USB CABLE", "net": "WI-FI"}.get(source, "NONE") if st.online else "OFFLINE"))
-    if demo:
-        rows.append("WIFI home-wifi  192.168.1.50")      # example values: demo mode never shows the real network
-    elif link.state == "up":
-        rows.append("WIFI %s  %s" % (link.ssid[:10], link.ip))
-    else:
-        rows.append("WIFI " + (link.label() or link.state)[:22])
-    b = link.bridge
-    age = "" if link.ok_t is None else " %ds" % (net.since(link.ok_t) // 1000)
-    if demo:
-        rows.append("BRDG 192.168.1.20:8787 1s")
-    else:
-        rows.append("BRDG %s%s" % ("%s:%d" % b if b else "searching", age))
-    rows.append("BUSY %d  WAIT %d  IDLE %d" % (st.busy, st.waiting, st.idle))
-    rows.append("TOOLS/MIN %d  TODAY %d" % (st.tpm, st.tools))
-    for label, used, left in (("5H", st.used5, st.left5), ("7D", st.used7, st.left7)):
-        pct = "--" if used is None else "%d%%" % int(used)
-        when = gfx.countdown(left)
-        rows.append("%s %s USED%s" % (label, pct, "" if left is None else
-                                      (", RESET IN " + when if left > 0 else ", " + when)))
-    try:
-        bat = "USB" if badge.usb_connected() else "%d%%" % badge.battery_level()
-    except Exception:  # noqa: BLE001
-        bat = "?"
-    rows.append("BATT %s  LVL %d  %s" % (bat, st.level, st.clock))
-    if link.err:
-        rows.append("ERR " + link.err[:22])
-    y = 13
-    for r in rows[:9]:
-        gfx.text(r, 4, y, (230, 230, 230), font.sins)
-        y += 10
-    gfx.text("HOLD B: PHONE SETUP", 4, 107, (120, 120, 130), font.sins)
 
 
 def is_up(b, t):
@@ -256,15 +220,23 @@ def is_up(b, t):
         return False
 
 
+def wifi_trouble():
+    return not tether.fresh() and link.state != "up"
+
+
 def short_press(b):
-    global view, dimmed
-    if b == BUTTON_A:
+    global view, page
+    if view == views.PAGED and b in (BUTTON_A, BUTTON_C):
+        page = (page + (1 if b == BUTTON_C else -1)) % len(views.PAGES)
+    elif b == BUTTON_A:
         switch(-1)
     elif b == BUTTON_C:
         switch(1)
     elif b == BUTTON_B:
-        view = (view + 1) % 3
-    elif b == BUTTON_UP and view == 2:
+        view = (view + 1) % 4
+        if view == views.PAGED and wifi_trouble():
+            page = views.WIFI_PAGE      # the badge's "PRESS B x2" hint leads straight here
+    elif b == BUTTON_UP and view == views.PAGED and page == views.WIFI_PAGE:
         link.rescan()
         show_toast("RESCANNING")
     elif b == BUTTON_DOWN:
@@ -383,7 +355,7 @@ def pace(t):
     global frame_t
     target = 90 if (st.level == S.SLEEP and not st.waiting) else 40
     if view:
-        target = 100       # info/debug screens: nothing animates, 10 fps still catches a quick tap
+        target = 100       # static screens: nothing animates, 10 fps still catches a quick tap
     spent = time.ticks_diff(time.ticks_ms(), frame_t)
     try:
         if spent < target:
@@ -401,7 +373,27 @@ def pace(t):
     frame_t = now
 
 
+def draw_frame(t):
+    if view == 0:
+        th = theme_obj(prefs["theme"])
+        th.draw(st, t)
+        if demo == 1:
+            gfx.text("DEMO", 136, 96, (255, 255, 255), font.sins, shadow=(0, 0, 0))
+    else:
+        # Desktop, Paged and Waiting focus are opaque: the animation is paused behind them (no
+        # theme drawing, and pace() slows the loop). They are redrawn every frame because the
+        # firmware does not keep the previous one.
+        ctx.link, ctx.source, ctx.demo, ctx.wait_since = link, source, demo, wait_since
+        views.draw(view, page, ctx, t)
+    if toast is not None and time.ticks_diff(t, toast_t) < 1500:
+        w = gfx.width(toast, font.sins) + 8
+        gfx.box(80 - w // 2, 48, w, 13, (0, 0, 0))
+        gfx.box(80 - w // 2, 48, w, 1, (217, 119, 87))
+        gfx.ctext(toast, 80, 48, (255, 255, 255), font.sins)
+
+
 def update():
+    global wait_since
     t = time.ticks_ms()
     t_start = t
     handle_buttons(t)
@@ -421,24 +413,12 @@ def update():
         demo_status(t)
     else:
         st.tick()
-    if view == 0:
-        # The info and debug screens are opaque and static: pause the animation underneath
-        # (no theme drawing, and pace() slows the loop) to save CPU and battery.
-        th = theme_obj(prefs["theme"])
-        th.draw(st, t)
-    if toast is not None and time.ticks_diff(t, toast_t) < 1500:
-        w = gfx.width(toast, font.sins) + 8
-        gfx.box(80 - w // 2, 48, w, 13, (0, 0, 0))
-        gfx.box(80 - w // 2, 48, w, 1, (217, 119, 87))
-        gfx.ctext(toast, 80, 48, (255, 255, 255), font.sins)
-    if demo == 1:
-        gfx.text("DEMO", 136, 96, (255, 255, 255), font.sins, shadow=(0, 0, 0))
-    # These screens are drawn every frame (the firmware does not keep the previous frame), but
-    # without the animation underneath and at 10 fps, so they cost a fraction of a theme.
-    if view == 1:
-        draw_info(t)
-    elif view == 2:
-        debugview.draw(link, tether, source, t)
+    if st.waiting > 0:
+        if wait_since is None:
+            wait_since = t
+    else:
+        wait_since = None
+    draw_frame(t)
     lights(t)
     power_save(t)
     perf[0] = perf[0] * 0.9 + time.ticks_diff(time.ticks_ms(), t_start) * 0.1
@@ -446,8 +426,11 @@ def update():
         globals()["demo"] = tether.demo_req % 3
         tether.demo_req = None
     if tether.view_req is not None:
-        globals()["view"] = tether.view_req % 3
+        globals()["view"] = tether.view_req % 4
         tether.view_req = None
+    if tether.page_req is not None:
+        globals()["page"] = tether.page_req % len(views.PAGES)
+        tether.page_req = None
     if tether.netlog_req:
         tether.netlog_req = False
         try:

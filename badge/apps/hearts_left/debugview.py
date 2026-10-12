@@ -1,4 +1,4 @@
-# Wi-Fi debug screen (press B twice). Shows what the badge sees and why a
+# Wi-Fi debug screen (the last page of Paged mode: press B twice). Shows what the badge sees and why a
 # network is failing, in plain words. The same text is available on the Mac
 # with: python3 tools/netdebug.py
 
@@ -22,11 +22,12 @@ def _fnt():
     return font.desert
 
 
-def draw(link, tether, source, t):
+def draw(link, tether, source, t, page=None):
+    """page: "4/4" when shown as a page of Paged mode (changes the title and footer)."""
     f = _fnt()
     gfx.box(0, 0, 160, 120, BG)
     gfx.box(0, 0, 160, 11, ACCENT)
-    gfx.text("WI-FI DEBUG", 3, 0, BG, f)
+    gfx.text("WI-FI DEBUG" + (" " + page if page else ""), 3, 0, BG, f)
     st = link.state.upper()
     gfx.text(st, 157 - gfx.width(st, f), 0, BG, f)
     y = 12
@@ -74,4 +75,4 @@ def draw(link, tether, source, t):
     gfx.box(0, y - 2, 160, 120 - y + 2, (34, 28, 16))
     for r in rows:
         line(r, WARN)
-    gfx.text("UP: RESCAN NOW   B: CLOSE", 3, 111, DIM, f)
+    gfx.text("UP:RESCAN A/C:PAGE B:NEXT" if page else "UP: RESCAN NOW   B: CLOSE", 3, 111, DIM, f)

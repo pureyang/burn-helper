@@ -21,6 +21,7 @@ class UsbLink:
         self.shot_req = False
         self.netlog_req = False
         self.view_req = None
+        self.page_req = None
         self.demo_req = None
         try:
             self.poller = select.poll()
@@ -62,6 +63,12 @@ class UsbLink:
         if line.startswith("@DEMO "):
             try:
                 self.demo_req = int(line[6:].strip())
+            except ValueError:
+                pass
+            return
+        if line.startswith("@PAGE "):
+            try:
+                self.page_req = int(line[6:].strip())
             except ValueError:
                 pass
             return
