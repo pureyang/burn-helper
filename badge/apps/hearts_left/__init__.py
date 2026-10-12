@@ -496,6 +496,11 @@ def update():
     if tether.view_req is not None:
         globals()["view"] = tether.view_req % 4
         tether.view_req = None
+    if tether.key_req is not None:
+        key = {"A": BUTTON_A, "B": BUTTON_B, "C": BUTTON_C, "UP": BUTTON_UP, "DOWN": BUTTON_DOWN}.get(tether.key_req)
+        tether.key_req = None
+        if key is not None:
+            short_press(key)
     if tether.page_req is not None:
         globals()["page"] = tether.page_req % len(views.PAGES)
         tether.page_req = None

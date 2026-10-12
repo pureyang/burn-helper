@@ -22,6 +22,7 @@ class UsbLink:
         self.netlog_req = False
         self.view_req = None
         self.page_req = None
+        self.key_req = None      # "A", "B", "C", "UP" or "DOWN": act as a short press (testing)
         self.demo_req = None
         try:
             self.poller = select.poll()
@@ -65,6 +66,9 @@ class UsbLink:
                 self.demo_req = int(line[6:].strip())
             except ValueError:
                 pass
+            return
+        if line.startswith("@KEY "):
+            self.key_req = line[5:].strip().upper()
             return
         if line.startswith("@PAGE "):
             try:
