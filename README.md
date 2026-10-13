@@ -46,6 +46,19 @@ on once it responds.
 Handy options (after `| bash -s --`): `--yes` (no questions), `--no-flash`, `--dry-run`,
 `--uninstall`. Wi-Fi not connecting? See [Wi-Fi troubleshooting](docs/wifi.md#wi-fi-troubleshooting).
 
+### Claude Code on other computers too
+
+The badge only counts sessions on the Mac until you point your other computers at it. On each
+Windows PC where you run Claude Code, in PowerShell:
+
+```powershell
+git clone https://github.com/pureyang/burn-helper $HOME\burn-helper
+py $HOME\burn-helper\bridge\install.py --bridge http://<your-mac>:8787
+```
+
+Then restart Claude Code there. With the Mac's Tailscale name as `<your-mac>` it works away from
+home too. Linux, other Macs and how to check it: [agents on other computers](docs/other-computers.md).
+
 ## What the badge shows
 
 The character speeds up with the number of agents working (busy sessions plus running
@@ -116,6 +129,7 @@ Away from home, the badge can reach your Mac through your own Tailscale account:
 | [Making themes](docs/themes.md) | The theme contract, memory and build-time budgets, how to add one |
 | [Development](docs/development.md) | Simulator, tools, tests, repo layout |
 | [Away from home](docs/relay.md) | Reaching your Mac from any Wi-Fi through your Tailscale account |
+| [Other computers](docs/other-computers.md) | Counting the agents you run on Windows, Linux or another Mac |
 | [Demo video](docs/video.md) | Recording the 20-second demo take the badge plays on its own |
 | [Bridge](bridge/README.md) | The Mac-side server and its API |
 | [Desk stand](stand/README.md) | A 3D-printable stand that keeps the badge upright with the USB-C cable plugged in, with an optional two-colour heart meter |

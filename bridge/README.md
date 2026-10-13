@@ -77,13 +77,16 @@ change without reconfiguring anything.
 
 ## Other machines
 
-Install the same hooks and status line on another computer and point them at
-this Mac:
+Install the same hooks and status line on another computer (Windows, Linux or a Mac) and
+point them at this Mac:
 
 ```sh
-export BURN_HELPER_BRIDGE_URL=http://<mac-ip>:8787
-export BURN_HELPER_TOKEN=<shared secret>     # optional; set the same value for the bridge
+python3 bridge/install.py --bridge http://<mac>:8787 [--token <shared secret>]
 ```
+
+That writes `BURN_HELPER_BRIDGE_URL` (and `BURN_HELPER_TOKEN`) into that computer's
+`~/.claude/settings.json` `env`; if you use a token, set the same `BURN_HELPER_TOKEN` for the
+bridge. Step by step, including PowerShell: [docs/other-computers.md](../docs/other-computers.md).
 
 Events from another host count as remote sessions: busy for 90 seconds after
 their last event. Cloud sessions on claude.ai/code cannot reach a home LAN, so
