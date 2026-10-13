@@ -112,7 +112,7 @@ def build():
   <h2>%s <small>%s</small></h2>
   <h3>Today</h3>
   <div class="grid today">%s</div>
-  <h3>Proposed: one-shot animations for agent activity</h3>
+  <h3>One-shot animations for what the agents do</h3>
   <div class="grid ideas">%s</div>
 </section>""" % (name, label, html.escape(what), today, ideas))
 
@@ -206,10 +206,10 @@ td a { text-decoration: none; border-bottom: 1px dotted var(--dim); }
 </head>
 <body>
 <main>
-<h1>Burn Helper animation ideas</h1>
-<p class="lede">Today the badge shows how many agents are working and whether a session needs you. These ideas add a
-short animation for what the agents are actually doing: a sword combo when one edits a file, a bomb when it runs a
-command, and so on. Every frame below is rendered by the simulator with the badge's own drawing code.</p>
+<h1>Burn Helper animations</h1>
+<p class="lede">The badge shows how many agents are working and whether a session needs you, and it acts out what the
+agents are doing: a sword combo when one edits a file, a bomb when it runs a command, and so on. Every frame below is
+rendered by the simulator with the badge's own drawing code.</p>
 
 <nav class="top" aria-label="Themes">
   <a href="#activities">Activities</a><a href="#hero">Hero</a><a href="#gameshow">Game show</a>
@@ -229,8 +229,8 @@ command, and so on. Every frame below is rendered by the simulator with the badg
 </div>
 
 <h2 id="activities">Activities and what each theme does</h2>
-<p class="lede">The bridge already receives every one of these from Claude Code's hooks; it only needs to pass the
-latest few on to the badge.</p>
+<p class="lede">The bridge gets each of these from Claude Code's hooks and passes the latest few on to the badge,
+as categories only.</p>
 <div class="tablewrap"><table>
 <thead><tr><th scope="col">Activity</th>@@THEADS@@</tr></thead>
 <tbody>@@ROWS@@</tbody>
@@ -239,22 +239,20 @@ latest few on to the badge.</p>
 @@SECTIONS@@
 
 <section class="theme" id="build">
-  <h2>What it takes</h2>
+  <h2>How it works</h2>
   <div class="how" style="margin-top:14px">
-    <div><b>Bridge</b>Sort each hook event into one of the activities above and add the last few to <code>/status</code>
-    with a running number, for example <code>"ev": [[812, "edit"], [813, "shell"]]</code>. Only the category is sent:
-    no file names, commands or URLs.</div>
-    <div><b>Badge</b>Remember the last number it played, queue anything newer, and play the most telling one. Each
-    theme gets an <code>action(key, t)</code> hook in its draw code. The refill needs nothing from the bridge.</div>
-    <div><b>Cost</b>A handful of extra poses and small sprites per theme, built once at start-up: tens of kilobytes
-    against the badge's 8 MB. Drawing stays within today's frame budget.</div>
-    <div><b>Settings</b>An on/off switch in the phone panel for anyone who prefers the calmer version, and the demo
-    mode would show every animation in turn.</div>
+    <div><b>Bridge</b>Sorts each hook event into one of the activities above and sends the latest few in
+    <code>/status</code> with a running number and their age, for example <code>"ev": [[812, "edit", 1800]]</code>.
+    Only the category is sent: no file names, commands or URLs.</div>
+    <div><b>Badge</b>Remembers the last number it saw, queues the most telling new one, and plays it when the theme is
+    free. Anything older than 6 seconds is skipped. The refill needs nothing from the bridge: the hearts jump back up.</div>
+    <div><b>Cost</b>Extra poses and small sprites built once when a theme loads: about 290-650 KB per theme of the
+    badge's 8 MB, and a few more seconds on the LOADING screen. Drawing stays at 25 frames a second.</div>
+    <div><b>Demos</b>Demo 1 plays every hero animation in turn; the video take uses four of them.</div>
   </div>
 </section>
 
-<p class="foot">Rendered with tools/sim/proto_*.py; nothing here is on the badge yet. Pick the ones you like and they
-can move into the theme modules as they are.</p>
+<p class="foot">Rendered with tools/sim/proto_*.py from the badge's theme modules.</p>
 </main>
 <script>
 (function () {
