@@ -7,8 +7,9 @@ status line feeds the usage hearts.
 
 ## Join a computer to the bridge
 
-At the end of the bridge's install, the installer shows the line to run, with the bridge's
-address filled in. To see it again, on the bridge run
+Run the **join line** on each of these computers, not the bridge's one-liner: there is only
+one bridge. At the end of the bridge's install, the installer shows the join line with the
+bridge's address filled in. To see it again, on the bridge run
 `python3 ~/burn-helper/bridge/install.py --join-help` (on Windows:
 `py $HOME\burn-helper\bridge\install.py --join-help`). The lines look like this.
 

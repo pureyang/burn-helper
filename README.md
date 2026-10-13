@@ -23,29 +23,41 @@ network details):
 
 ## Install
 
-There is one **bridge**: the computer the badge talks to, a Mac or a Windows PC. Any other
-computers you run Claude Code on report to it. There are three setups, from simplest to most
-involved. Everyone starts with the first; the other two add to it, on their own or together:
+There are two one-line installers, one for each role a computer can have:
 
-| Setup | What it gives you | What you add |
+- The **bridge line** goes on **one** computer, first, with the badge plugged into it. That
+  computer becomes the bridge: the one the badge talks to. It can be a Mac or a Windows PC.
+- The **join line** goes on **every other** computer you run Claude Code on, once the bridge is
+  set up. It sends that computer's activity to the bridge; no badge needed there.
+
+| Which line | Mac | Windows (PowerShell) | Linux |
+|---|---|---|---|
+| **Bridge line**: one computer, first | `install.sh \| bash` | `install.ps1 \| iex` | not supported |
+| **Join line**: each other computer | `install.sh \| bash -s -- --join http://<bridge>:8787` | `$env:BURN_HELPER_JOIN='http://<bridge>:8787'; install.ps1 \| iex` | same as Mac |
+
+The full lines are below. There are three setups, from simplest to most involved. Everyone
+starts with the first; the other two add to it, on their own or together:
+
+| Setup | What it gives you | What you run |
 |---|---|---|
-| [1. One computer, at home](#1-one-computer-at-home) | The badge shows the agents on that computer, over the USB cable or your home Wi-Fi | The one-line installer, which makes it the bridge |
-| [2. Away from home](#2-away-from-home) | The badge works on any Wi-Fi with internet, such as a phone hotspot or a conference network, while the bridge stays home | A free Tailscale account and one command on the bridge |
-| [3. More computers](#3-more-computers) | The agents on your other computers, Mac, Windows or Linux, count too | The one-line installer on each one, joining the bridge |
+| [1. One computer, at home](#1-one-computer-at-home) | The badge shows the agents on that computer, over the USB cable or your home Wi-Fi | The **bridge line**, on that computer |
+| [2. Away from home](#2-away-from-home) | The badge works on any Wi-Fi with internet, such as a phone hotspot or a conference network, while the bridge stays home | A free Tailscale account and one command, on the bridge |
+| [3. More computers](#3-more-computers) | The agents on your other computers, Mac, Windows or Linux, count too | The **join line**, on each other computer |
 
 ### 1. One computer, at home
 
 You need a Mac or a Windows PC, the badge, a USB-C **data** cable, and Claude Code already set
 up (run it once). On Windows you also need Python 3 (`winget install -e --id Python.Python.3.12`).
-Plug the badge in, then run one line.
+Plug the badge in, then run the **bridge line** on this computer. Run it on one computer only:
+the badge talks to a single bridge.
 
-On a Mac, in Terminal:
+**Bridge line** on a Mac, in Terminal:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash
 ```
 
-On Windows, in PowerShell:
+**Bridge line** on Windows, in PowerShell:
 
 ```
 irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
@@ -61,7 +73,7 @@ The installer asks before each change. It:
    typo is caught now. A combined 2.4/5 GHz network is fine: use its normal name, because the
    badge joins the 2.4 GHz side. Skip it and set Wi-Fi from your phone later (hold **B**).
 4. Copies the app onto the badge and checks that it starts.
-5. Shows the line to run on your other computers ([setup 3](#3-more-computers)), with this
+5. Shows the **join line** for your other computers ([setup 3](#3-more-computers)), with this
    computer's address filled in.
 
 On the cable the badge needs no Wi-Fi at all; unplugged, it finds the bridge on your network by
@@ -93,15 +105,16 @@ troubleshooting: [away from home](docs/relay.md).
 
 ### 3. More computers
 
-On each other computer, run the line the bridge's install showed you. It looks like this.
+On each other computer, run the **join line**, not the bridge line. The bridge's install showed
+it to you with `<bridge>` filled in; it looks like this.
 
-On a Mac or Linux, in Terminal:
+**Join line** on a Mac or Linux, in Terminal:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join http://<bridge>:8787
 ```
 
-On Windows, in PowerShell:
+**Join line** on Windows, in PowerShell:
 
 ```
 $env:BURN_HELPER_JOIN='http://<bridge>:8787'; irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
