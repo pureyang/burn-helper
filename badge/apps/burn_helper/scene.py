@@ -73,6 +73,11 @@ class Status:
         self.net = "BOOTING"    # short network state for overlays
         self.clock = ""
         self.demo = False
+        # One thing an agent just did, for the theme to animate once (see Theme.ACTIONS). Only
+        # the demos set it for now.
+        self.act = None         # "edit", "read", "shell", "web", "spawn", "fail", "done", "prompt", "arrive", "refill"
+        self.act_t = 0          # ticks_ms when it happened
+        self.act_seq = 0        # a new number for every new activity
         self.used5 = None       # percent used, as reported
         self.used7 = None
         self.reset5 = None      # epoch seconds when each window resets
@@ -173,6 +178,7 @@ class Layer:
 class Theme:
     name = "base"
     label = "BASE"
+    ACTIONS = {}        # activity (Status.act) -> how long its one-shot animation plays, in ms
 
     def __init__(self):
         self.ready = False
@@ -180,6 +186,23 @@ class Theme:
         self.last_t = None
         self.level_since = 0
         self.shown_level = None
+        self.action = None      # the activity animation playing, if any
+        self.action_t0 = 0
+        self.act_seen = 0
+
+    def start_action(self, key, t0, st):
+        self.action = key
+        self.action_t0 = t0
+
+    def acting(self, t):
+        """How far (0..1) the activity animation is, or None when none is playing."""
+        if self.action is None:
+            return None
+        p = (t - self.action_t0) / self.ACTIONS[self.action]
+        if p >= 1:
+            self.action = None
+            return None
+        return p if p >= 0 else None
 
     def build(self):
         pass
@@ -202,6 +225,10 @@ class Theme:
         if not self.ready:
             self.build()
             self.ready = True
+        if st.act_seq != self.act_seen:
+            self.act_seen = st.act_seq
+            if st.act in self.ACTIONS:
+                self.start_action(st.act, st.act_t, st)
         self.advance(st, t)
         self.render(st, t)
         if st.tier:
