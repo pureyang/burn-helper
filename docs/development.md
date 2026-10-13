@@ -17,7 +17,7 @@ python3 scripts/badge.py exec "print(1)"        # raw REPL one-liner
 
 While the app runs it also takes test commands on the USB serial port: `@VIEW n` (0 animation,
 1 Desktop, 2 Paged, 3 Waiting focus), `@PAGE n`, `@DEMO n`, `@KEY A|B|C|UP|DOWN` (a short
-press), `@SHOT` (a screenshot) and `@NETLOG` (the Wi-Fi report).
+press), `@RELAY 1|0` (use the internet relay even at home, or stop), `@SHOT` (a screenshot) and `@NETLOG` (the Wi-Fi report).
 
 The simulator (`tools/sim/pvshim.py`) re-implements the badge's `picovector` drawing calls
 with the pixel rules measured on the device. These are nearest-neighbour blits and flips, and

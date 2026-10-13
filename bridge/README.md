@@ -85,3 +85,12 @@ they only show up through the account-wide usage hearts.
   your LAN can read it and change the theme. Set `BURN_HELPER_TOKEN` to stop other LAN
   devices from posting fake activity.
 - `.key` files in `~/.claude/sessions` are never opened.
+
+## Internet relay
+
+`python3 bridge/relay.py on` adds a second listener on `127.0.0.1:8788` and publishes it through
+Tailscale Funnel ([setup and details](../docs/relay.md)). It answers only `GET /status`, with
+the header `X-Burn-Helper-Key: <key>` (or `?key=`); anything else gets 404. It speaks HTTP/1.1
+keep-alive so a badge reuses one TLS connection. The address and key live in
+`~/.claude/burn-helper/relay.json` (mode 600) and go to a USB-connected badge as a `relay` field
+in the `@TUFTY` line, never over Wi-Fi.

@@ -100,6 +100,8 @@ and the badge must be on the same network as the Mac. Hold **B** for 2 seconds t
 from your phone: setup stays open, joins the network on the badge and shows the result. A wrong
 password never reports an error on this radio, the badge just stays in "joining". Details,
 troubleshooting and shipping badges with an event network are in [docs/wifi.md](docs/wifi.md).
+Away from home, the badge can reach your Mac through your own Tailscale account: see
+[docs/relay.md](docs/relay.md).
 
 ## Documentation
 
@@ -111,6 +113,7 @@ troubleshooting and shipping badges with an event network are in [docs/wifi.md](
 | [How it works](docs/how-it-works.md) | Bridge, badge app, activity levels, usage meters, every theme |
 | [Making themes](docs/themes.md) | The theme contract, memory and build-time budgets, how to add one |
 | [Development](docs/development.md) | Simulator, tools, tests, repo layout |
+| [Away from home](docs/relay.md) | Reaching your Mac from any Wi-Fi through your Tailscale account |
 | [Demo video](docs/video.md) | Recording the 20-second demo take the badge plays on its own |
 | [Bridge](bridge/README.md) | The Mac-side server and its API |
 | [Desk stand](stand/README.md) | A 3D-printable stand that keeps the badge upright with the USB-C cable plugged in, with an optional two-colour heart meter |
