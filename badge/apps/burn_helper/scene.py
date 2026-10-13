@@ -63,7 +63,7 @@ class Status:
         self.agents = 0         # busy sessions + running subagents
         self.tier = 0           # 0 none working, 1..MAX_TIER (see tier_for)
         self.waiting = 0
-        self.waiting_list = []  # [(session name, seconds waiting)], longest first, if the bridge sends it
+        self.waiting_list = []  # [{n: name, s: seconds waiting, d: folder, w: why, a: session age}], longest first
         self.idle = 0
         self.sessions = 0
         self.subagents = 0
@@ -100,7 +100,9 @@ class Status:
         wl = []
         for w in d.get("waiting_list") or []:
             try:
-                wl.append((str(w.get("n") or "session")[:24], int(w.get("s") or 0)))
+                wl.append({"n": str(w.get("n") or "session")[:24], "s": int(w.get("s") or 0),
+                           "d": str(w.get("d") or "")[:24], "w": str(w.get("w") or "")[:24],
+                           "a": int(w.get("a") or 0)})
             except (AttributeError, TypeError, ValueError):
                 pass
         self.waiting_list = wl[:4]
