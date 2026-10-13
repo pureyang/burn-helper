@@ -90,7 +90,8 @@ they only show up through the account-wide usage hearts.
 
 `python3 bridge/relay.py on` adds a second listener on `127.0.0.1:8788` and publishes it through
 Tailscale Funnel ([setup and details](../docs/relay.md)). It answers only `GET /status`, with
-the header `X-Burn-Helper-Key: <key>` (or `?key=`); anything else gets 404. It speaks HTTP/1.1
+the header `X-Burn-Helper-Key: <key>` (never in the URL, which would end up in logs); anything
+else gets 404. It holds at most 8 connections at a time and drops idle ones after 20 seconds. It speaks HTTP/1.1
 keep-alive so a badge reuses one TLS connection. The address and key live in
 `~/.claude/burn-helper/relay.json` (mode 600) and go to a USB-connected badge as a `relay` field
 in the `@TUFTY` line, never over Wi-Fi.

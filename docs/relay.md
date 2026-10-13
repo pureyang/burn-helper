@@ -61,5 +61,12 @@ again makes a new key, so plug the badge in once more after that.
 - **Testing at home.** Send `@RELAY 1` over USB to make the badge use the relay even when the
   local bridge is there, and `@RELAY 0` to go back (see [development](development.md)).
 
+## If you lose the badge
+
+The key is stored on the badge, and anyone with the badge and a USB cable can read it. With it
+they could see your status, but never change anything. Make a new key so the old one stops
+working: `relay.py off`, then `relay.py on`, and plug your badge in once.
+
 The relay's address includes your Mac's and tailnet's names, so treat it as semi-private; what
-it serves (agent counts, usage, and the names of sessions waiting for you) needs the key.
+it serves (agent counts, usage, and the names of sessions waiting for you) needs the key. The
+bridge hands the key to any USB device that says it is a Tufty, so only plug in badges you trust.
