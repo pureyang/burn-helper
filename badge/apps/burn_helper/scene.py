@@ -11,6 +11,12 @@ H = gfx.H
 # activity levels reported by the bridge
 SLEEP, IDLE, WALK, RUN, SPRINT = 0, 1, 2, 3, 4
 
+# What an agent just did (the bridge's "ev" feed), most telling first: when several arrive
+# together, the badge plays the first of them.
+ACT_ORDER = ("fail", "done", "spawn", "back", "prompt", "arrive", "refill", "shell", "web", "edit", "read")
+ACT_RANK = dict((k, i) for i, k in enumerate(ACT_ORDER))
+ACT_FRESH_MS = 6000     # older than this when it arrives (or while it waits its turn): skip it
+
 # hero gait per level and frames-per-second of its cycle
 GAIT = {WALK: ("walk", 9), RUN: ("run", 13), SPRINT: ("sprint", 16)}
 # background scroll speed in pixels per second
@@ -73,11 +79,14 @@ class Status:
         self.net = "BOOTING"    # short network state for overlays
         self.clock = ""
         self.demo = False
-        # One thing an agent just did, for the theme to animate once (see Theme.ACTIONS). Only
-        # the demos set it for now.
-        self.act = None         # "edit", "read", "shell", "web", "spawn", "fail", "done", "prompt", "arrive", "refill"
-        self.act_t = 0          # ticks_ms when it happened
+        # One thing an agent just did, for the theme to animate once (see Theme.ACTIONS). The
+        # app moves `pending` into `act` when the theme is free; the demos set `act` directly.
+        self.act = None         # "edit", "read", "shell", "web", "spawn", "back", "fail", "done", "prompt", "arrive", "refill"
+        self.act_t = 0          # ticks_ms when it started
         self.act_seq = 0        # a new number for every new activity
+        self.pending = None     # the most telling activity not played yet
+        self.pending_t = 0
+        self.ev_seen = None     # the bridge's number for the newest activity already handled
         self.used5 = None       # percent used, as reported
         self.used7 = None
         self.reset5 = None      # epoch seconds when each window resets
@@ -92,7 +101,11 @@ class Status:
 
     def update(self, d):
         self.level = int(d.get("level") or 0)
+        old = self.hearts
         self.hearts = d.get("hearts")
+        if old is not None and self.hearts is not None and self.hearts >= old + 6:
+            self.queue("refill")            # the 5-hour window reset: the hearts jumped back up
+        self.take_events(d.get("ev"))
         wk = d.get("seven_day")
         self.week = None if not wk else max(0.0, min(1.0, (100.0 - float(wk.get("used", 0))) / 100.0))
         fh = d.get("five_hour") or {}
@@ -145,6 +158,57 @@ class Status:
         # ticks_us wraps after about 9 minutes; use it only while it is valid
         us = time.ticks_diff(time.ticks_us(), self._at_us) if ms < 500000 else ms * 1000
         return self._now_ms * 1000 + us
+
+    def take_events(self, ev):
+        """Queue the most telling new activity from the bridge's feed: [[number, kind, ms ago]]."""
+        if ev is None:
+            return                          # an older bridge without the feed
+        if not ev:
+            if self.ev_seen is None:
+                self.ev_seen = 0            # nothing recent: whatever comes next is new
+            return
+        top = None
+        best = None
+        for e in ev:
+            try:
+                n, kind, age = int(e[0]), str(e[1]), int(e[2])
+            except (TypeError, ValueError, IndexError):
+                continue
+            if top is None or n > top:
+                top = n
+            if self.ev_seen is not None and n > self.ev_seen and age < ACT_FRESH_MS and kind in ACT_RANK:
+                if best is None or ACT_RANK[kind] < ACT_RANK[best]:
+                    best = kind
+        if top is None:
+            return
+        if self.ev_seen is None or top < self.ev_seen:
+            # first contact, or the bridge restarted and counts from 1 again: catch up quietly
+            self.ev_seen = top
+            return
+        self.ev_seen = top
+        if best is not None:
+            self.queue(best)
+
+    def queue(self, kind):
+        now = time.ticks_ms()
+        if (self.pending is None or time.ticks_diff(now, self.pending_t) > ACT_FRESH_MS
+                or ACT_RANK[kind] <= ACT_RANK[self.pending]):
+            self.pending = kind
+            self.pending_t = now
+
+    def next_act(self, t, free):
+        """Start the pending activity at t if the theme is free (nothing playing, 2 s since the
+        last one). Returns True when one started."""
+        if self.pending is None:
+            return False
+        if time.ticks_diff(t, self.pending_t) > ACT_FRESH_MS:
+            self.pending = None
+            return False
+        if not free:
+            return False
+        self.act, self.act_t, self.act_seq = self.pending, t, t
+        self.pending = None
+        return True
 
     def set_agents(self, n):
         """Set the working-agent count; while any work, the tier picks the gait."""

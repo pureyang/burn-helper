@@ -12,6 +12,10 @@
 #   DOWN       brightness: 10 levels, then 0% (screen off, badge still running), then full again;
 #              hold 2 s to switch the case LEDs on or off (off by default)
 #   HOME       switch to the stock app menu (HOME again comes back here)
+#
+# What the agents do (the bridge's activity feed) plays as short one-shot animations on top
+# of the walk or run: a sword combo for an edit, a bomb for a command, and so on (see the
+# themes' ACTIONS).
 
 import gc
 import math
@@ -40,6 +44,7 @@ LABELS = {"hero": "HYRULE", "gameshow": "RUNNING MAN", "chocolates": "FORREST"}
 BRIGHT = (1.0, 0.85, 0.7, 0.57, 0.46, 0.36, 0.28, 0.21, 0.15, 0.1, 0.0)
 OFF = len(BRIGHT) - 1
 SCREEN_OFF_NOTE_MS = 3000            # how long the "screen turning off" note shows first
+ACT_GAP_MS = 2000                    # at most one activity animation every 2 s
 OLD_BRIGHT = (1.0, 0.7, 0.45, 0.25)   # the four levels used before
 MENU_FLAG = "/state/.burn_helper_menu"
 
@@ -78,6 +83,7 @@ SHORT_MS = 700           # longer than this is a hold, not a press
 down = {}                # button -> ticks when it went down
 fired = False            # a hold fired; ignore releases until every button is up
 wink_until = 0
+last_act = 0            # ticks_ms when the last activity animation started
 portal = None
 portal_arm = False       # B is still down from the hold that opened setup; its release must not cancel
 b_down_t = None
@@ -519,9 +525,14 @@ def pace(t):
 
 
 def draw_frame(t):
-    global wait_sel
+    global wait_sel, last_act
     if view == 0:
         th = theme_obj(prefs["theme"])
+        if not demo:
+            # what the agents just did, played one at a time (the demos script their own)
+            free = th.acting(t) is None and time.ticks_diff(t, last_act) >= ACT_GAP_MS
+            if st.next_act(t, free):
+                last_act = t
         th.draw(st, t)
         if demo == 1:
             gfx.text("DEMO", 136, 96, (255, 255, 255), font.sins, shadow=(0, 0, 0))
@@ -607,8 +618,8 @@ def update():
     if tether.shot_req:
         tether.shot_req = False
         try:
-            usb.send_screenshot("draw_ms=%.1f frame_ms=%.1f theme=%s level=%d src=%s" % (
-                perf[0], perf[1], prefs["theme"], st.level, source))
+            usb.send_screenshot("draw_ms=%.1f frame_ms=%.1f theme=%s level=%d src=%s act=%s" % (
+                perf[0], perf[1], prefs["theme"], st.level, source, st.act))
         except Exception as e:  # noqa: BLE001
             print("@SHOTERR", e)
     pace(t)
