@@ -83,6 +83,15 @@ class Client:
         self.out = ("GET %s HTTP/1.1\r\nHost: %s\r\nX-Burn-Helper-Key: %s\r\nConnection: keep-alive\r\n\r\n"
                     % (path, self.host, self.key)).encode()
         if self.sock is None:
+            if time.localtime()[0] < 2025:
+                # TLS checks certificate dates, and the badge's clock starts in 2021 after a power
+                # cycle: set it from an internet time server first (about 50 ms)
+                try:
+                    import ntptime
+                    ntptime.settime()
+                except Exception as e:  # noqa: BLE001
+                    self._fail("clock: %r" % (e,))
+                    return
             try:
                 addr = socket.getaddrinfo(self.host, 443)[0][-1]    # DNS, about 30 ms
                 s = socket.socket()
