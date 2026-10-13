@@ -31,6 +31,9 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import portable  # noqa: E402
+
 
 def env(name, default=None):
     """BURN_HELPER_<name>, or the older HEARTS_LEFT_<name> or TUFTY_<name>, or default."""
@@ -197,12 +200,13 @@ class Bridge:
         hit = self._ps_cache.get(key)
         if hit is not None:
             return hit
-        try:
-            out = subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True,
-                                 text=True, timeout=2).stdout
-            ok = "claude" in out.lower()
-        except (OSError, subprocess.SubprocessError):
-            ok = False
+        cmd = portable.pid_command(pid).lower()
+        if portable.WINDOWS:
+            # only the program's path is known there: claude.exe, or node/bun running Claude Code
+            name = os.path.basename(cmd)
+            ok = "claude" in cmd or name in ("node.exe", "bun.exe")
+        else:
+            ok = "claude" in cmd
         self._ps_cache[key] = ok
         return ok
 
@@ -226,15 +230,7 @@ class Bridge:
             if not isinstance(d, dict):
                 continue
             pid = d.get("pid")
-            if not isinstance(pid, int) or pid <= 0:
-                continue
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                continue
-            except PermissionError:
-                pass
-            except OSError:
+            if not portable.pid_alive(pid):
                 continue
             started = d.get("startedAt")
             live_keys.add((pid, started))
@@ -314,7 +310,9 @@ class Bridge:
                     self.subagents.pop(sid, None)
                 elif sid in self.subagents:
                     self.subagents[sid][1] = now
-                if host and host != HOSTNAME:
+                if (host and host != HOSTNAME) or not os.path.isdir(SESSIONS_DIR):
+                    # another computer, or a Claude Code without session files here: count the
+                    # session from its hook events instead
                     if event in ("Stop", "SessionEnd"):
                         state = "idle"
                     elif event == "Notification":
@@ -682,7 +680,9 @@ def beacon_loop(port):
 
 
 def find_badge_ports():
-    """Serial ports of plugged-in Tufty badges, found by USB product name."""
+    """Serial ports of plugged-in Tufty badges, found by USB product name on macOS."""
+    if not portable.MAC:
+        return portable.find_ports()
     try:
         out = subprocess.run(["ioreg", "-p", "IOUSB", "-l", "-w0"], capture_output=True,
                              text=True, timeout=5).stdout
@@ -709,15 +709,16 @@ def usb_locked():
     try:
         with open(USB_LOCK) as f:
             pid = int(f.read().strip() or 0)
-        os.kill(pid, 0)
-        return True
     except (OSError, ValueError):
         return False
+    return portable.pid_alive(pid)
 
 
 def usb_loop():
-    import termios
-    import tty
+    missing = portable.serial_missing()
+    if missing:
+        log("usb: the USB cable link is off: %s. Wi-Fi still works." % missing)
+        return
     fd = None
     port = None
     last_find = 0.0
@@ -725,7 +726,7 @@ def usb_loop():
         try:
             if usb_locked():
                 if fd is not None:
-                    os.close(fd)
+                    fd.close()
                     fd = None
                     log("usb: paused while a badge tool uses %s" % port)
                 time.sleep(1.0)
@@ -736,8 +737,7 @@ def usb_loop():
                 ports = find_badge_ports()
                 if ports:
                     port = ports[0]
-                    fd = os.open(port, os.O_WRONLY | os.O_NOCTTY | os.O_NONBLOCK)
-                    tty.setraw(fd)
+                    fd = portable.Port(port, write_only=True)
                     log("usb: tethered to badge on %s" % port)
             if fd is not None:
                 s = BRIDGE.status()
@@ -745,16 +745,10 @@ def usb_loop():
                     # the relay address and key go to the badge over the cable only, never over Wi-Fi
                     s = dict(s, relay=RELAY)
                 line = "@TUFTY " + json.dumps(s, separators=(",", ":")) + "\n"
-                try:
-                    os.write(fd, line.encode())
-                except BlockingIOError:
-                    pass
+                fd.write(line.encode(), wait=False)   # never stall the bridge on a busy port
         except OSError as e:
             if fd is not None:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
+                fd.close()
                 fd = None
                 log("usb: badge on %s went away (%s)" % (port, e.__class__.__name__))
         time.sleep(USB_INTERVAL)
@@ -779,8 +773,14 @@ def main():
     ap.add_argument("--no-beacon", action="store_true", help="do not broadcast the UDP discovery beacon")
     ap.add_argument("--no-usb", action="store_true", help="do not push status to a USB-connected badge")
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--log", metavar="PATH", help="append the log here instead of printing it")
     args = ap.parse_args()
     VERBOSE = args.verbose
+    if args.log or sys.stderr is None:
+        # the Windows login item runs pythonw, which has no console to print to
+        path = args.log or os.path.join(STATE_DIR, "bridge.log")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        sys.stderr = sys.stdout = open(path, "a", encoding="utf-8", buffering=1)
     for old in OLD_STATE_DIRS:
         if not os.path.exists(STATE_DIR) and os.path.isdir(old) and not env("STATE_DIR"):
             try:
@@ -788,6 +788,12 @@ def main():
                 log("moved state from %s to %s" % (old, STATE_DIR))
             except OSError:
                 pass
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(os.path.join(STATE_DIR, "bridge.pid"), "w") as f:
+            f.write(str(os.getpid()))      # so the installer can restart it where there is no launchd
+    except OSError as e:
+        log("could not write bridge.pid: %s" % e)
     BRIDGE = Bridge()
     BRIDGE.scan()
     threading.Thread(target=scan_loop, daemon=True).start()
