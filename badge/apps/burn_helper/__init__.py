@@ -183,7 +183,8 @@ def apply_bridge():
 
 # Two demos, both on the hero theme only, each starting from its first frame:
 #   demo 1 (hold UP 2 s, DEMO tag): a 30-second ramp from asleep through every activity level
-#     up to ULTRA, with sessions waiting for you now and then, on a 90-second usage window.
+#     up to ULTRA, with sessions waiting for you now and then and every activity animation
+#     along the way, on a 90-second usage window (the hearts refill when it resets).
 #   demo 2 (hold UP + DOWN 3 s, no tag): a 20-second take for the launch video, timed to the
 #     shot list in docs/video.md.
 DEMO_THEME = "hero"
@@ -192,6 +193,12 @@ DEMO_AGENTS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 40, 63, 88, 128)   # one count
 DEMO_WAITS = {3: 1, 7: 2, 12: 1}             # tier -> sessions waiting while it runs
 DEMO_WAITING = ({"n": "api-server refactor", "s": 95, "d": "api-server", "w": "PERMISSION: BASH", "a": 7800},
                 {"n": "docs-site", "s": 12, "d": "docs-site", "w": "YOUR REPLY", "a": 1500})
+# (ms into the 30-second cycle, activity) for demo 1: one after another, each 1-2 s long
+DEMO_ACTS = ((2000, "arrive"), (3900, "prompt"), (5600, "edit"), (7300, "read"), (9200, "shell"),
+             (11100, "web"), (12800, "spawn"), (15100, "edit"), (16800, "fail"), (18100, "edit"),
+             (19800, "shell"), (21700, "read"), (23400, "done"))
+DEMO_USAGE_MS = 90000
+DEMO_RESET_MS = 75000       # into the usage window: the 5-hour countdown runs out, hearts refill
 VIDEO_MS = 20000
 # (second it starts, level when no agents work, agents working, sessions waiting)
 VIDEO_STEPS = ((0.0, S.SLEEP, 0, 0),     # asleep
@@ -200,9 +207,15 @@ VIDEO_STEPS = ((0.0, S.SLEEP, 0, 0),     # asleep
                (7.0, S.WALK, 5, 0),      # five: runs
                (8.5, S.WALK, 9, 0),      # nine: sprints
                (10.0, S.WALK, 9, 1),     # a session needs you: "HEY! LISTEN!"
+               (12.4, S.WALK, 9, 0),     # you answered it (the new quest scroll below)
                (13.0, S.WALK, 40, 0),    # 26-50 band: sparks
                (15.0, S.WALK, 88, 0),    # 76-100 band: pulsing edge
                (16.0, S.WALK, 128, 0))   # over 100: hyperspace until the end
+# (second it starts, activity) for demo 2
+VIDEO_ACTS = ((3.0, "arrive"),           # steps out of a cave: a session starts
+              (5.6, "edit"),             # sword combo: the agent edits a file
+              (12.4, "prompt"),          # you answered: a new quest scroll
+              (14.0, "done"))            # item get: QUEST COMPLETE!
 
 
 def set_demo(kind):
@@ -216,14 +229,25 @@ def set_demo(kind):
 
 def demo_status(t):
     k = time.ticks_diff(t, demo_t0)
+    since = k
+    act = None
     if demo == 2:
         k %= VIDEO_MS
         level, agents, waiting = S.SLEEP, 0, 0
         for start, lv, n, w in VIDEO_STEPS:
             if k >= start * 1000:
                 level, agents, waiting = lv, n, w
+        for start, key in VIDEO_ACTS:
+            if k >= start * 1000:
+                act, at = key, t - (k - int(start * 1000))
     else:
+        win = since % DEMO_USAGE_MS
         k %= DEMO_CYCLE_MS
+        for start, key in DEMO_ACTS:
+            if k >= start:
+                act, at = key, t - (k - start)
+        if DEMO_RESET_MS <= win < DEMO_RESET_MS + 2500:
+            act, at = "refill", t - (win - DEMO_RESET_MS)
         if k < 2000:
             agents, level, waiting = 0, S.SLEEP, 0
         elif k < 3500:
@@ -260,6 +284,8 @@ def demo_status(t):
         st.left5 = 75 * 1000000 - into
         st.hearts = 20 if st.left5 <= 0 else max(0, 20 - into // 3750000)
     st.used5 = (20 - st.hearts) * 5
+    if act is not None and at != st.act_seq:
+        st.act, st.act_t, st.act_seq = act, at, at      # its start time doubles as its number
 
 
 def lights(t):
