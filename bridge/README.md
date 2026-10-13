@@ -43,6 +43,7 @@ change without reconfiguring anything.
 ```json
 {"v":1,"ts":1791575121,"level":4,"busy":6,"waiting":1,"idle":3,"sessions":9,
  "waiting_list":[{"n":"api-server refactor","s":95,"d":"api-server","w":"PERMISSION: BASH","a":7800}],
+ "ev":[[41,"edit",1800],[42,"shell",300]],
  "subagents":1,"tpm":2,"tools_today":2,
  "five_hour":{"used":38.0,"resets_at":1791578721},
  "seven_day":{"used":12.0,"resets_at":1791834321},
@@ -62,6 +63,11 @@ change without reconfiguring anything.
   waited, `d` its folder's name (not the path), `w` what it needs (`PERMISSION: <TOOL>`,
   `YOUR REPLY`, or empty when unknown) and `a` how many seconds the session has been running
   (0 when unknown). Remote sessions are counted in `waiting` but not named.
+- `ev`: what the agents just did, for the badge's one-shot animations, oldest first: the latest
+  6 from the last 10 seconds, each `[number, category, ms ago]`. Categories: `edit`, `read`,
+  `shell`, `web` (from the tool of a PostToolUse), `fail` (PostToolUseFailure), `spawn` and
+  `back` (SubagentStart/Stop), `done` (Stop), `prompt` (UserPromptSubmit) and `arrive`
+  (SessionStart). The number counts up from 1 each time the bridge starts.
 - `theme` is set from the phone panel (`POST /theme {"theme": "hero" | "gameshow" | "chocolates" | "auto"}`).
   `theme_seq` increases on every change so the badge can tell a new choice from an old one.
 
@@ -85,11 +91,11 @@ they only show up through the account-wide usage hearts.
   hostname, plus for a notification whether Claude wants permission (and for which
   tool) or your reply. Tool inputs and outputs and the notification's text never
   leave the machine.
-- `/status` is mostly counts. For sessions waiting for you it also has their title
-  or folder name, the folder's name and what they need (see `waiting_list`); never
-  full paths, prompts or tool inputs. Anyone on your LAN can read it and change the
-  theme. Set `BURN_HELPER_TOKEN` to stop other LAN
-  devices from posting fake activity.
+- `/status` is mostly counts, plus the categories of recent activity (`ev`). For sessions
+  waiting for you it also has their title or folder name, the folder's name and what they
+  need (see `waiting_list`); never full paths, prompts or tool inputs. Anyone on your LAN
+  can read it and change the theme. Set `BURN_HELPER_TOKEN` to stop other LAN devices from
+  posting fake activity.
 - `.key` files in `~/.claude/sessions` are never opened.
 
 ## Internet relay

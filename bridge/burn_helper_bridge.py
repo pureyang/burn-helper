@@ -62,6 +62,15 @@ LEGACY_THEMES = {"zelda": "hero", "runningman": "gameshow", "forrest": "chocolat
 COUNTED_KINDS = ("interactive", "bg", "daemon-worker")
 BUSY_EVENTS = ("UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "SubagentStart", "SessionStart")
 TOOL_EVENTS = ("PostToolUse", "PostToolUseFailure")
+# What the agents just did, for the badge's one-shot animations. Only these category names
+# leave the bridge: never file names, commands, URLs or prompts.
+TOOL_ACTIVITY = {"Edit": "edit", "Write": "edit", "MultiEdit": "edit", "NotebookEdit": "edit",
+                 "Read": "read", "Grep": "read", "Glob": "read", "LS": "read",
+                 "Bash": "shell", "WebFetch": "web", "WebSearch": "web"}
+EVENT_ACTIVITY = {"PostToolUseFailure": "fail", "Stop": "done", "UserPromptSubmit": "prompt",
+                  "SubagentStart": "spawn", "SubagentStop": "back", "SessionStart": "arrive"}
+ACTIVITY_KEPT = 6              # the latest few go out in /status
+ACTIVITY_MAX_AGE_S = 10
 
 HOME = os.path.expanduser(env("HOME") or "~")
 SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
@@ -118,6 +127,8 @@ class Bridge:
         self.subagents = {}            # session_id -> [count, last_event_ts]
         self.remote = {}               # session_id -> {"state": busy|idle|waiting, "ts": float}
         self.why = {}                  # session_id -> "PERMISSION: BASH" / "YOUR REPLY", from its last notification
+        self.activity = []             # [(number, "edit" | "read" | ..., ts)], the latest ACTIVITY_KEPT
+        self.activity_seq = 0
         # usage
         self.five_hour = None          # {"used": float, "resets_at": int, "rx": float}
         self.seven_day = None
@@ -262,6 +273,11 @@ class Bridge:
             if event in TOOL_EVENTS:
                 self.tool_times.append(now)
                 self.tools_today += 1
+            kind = EVENT_ACTIVITY.get(event) or (TOOL_ACTIVITY.get(str(d.get("tool") or ""))
+                                                 if event == "PostToolUse" else None)
+            if kind:
+                self.activity_seq += 1
+                self.activity = (self.activity + [(self.activity_seq, kind, now)])[-ACTIVITY_KEPT:]
             if sid:
                 if event == "Notification":
                     why, tool = str(d.get("why") or ""), str(d.get("tool") or "")
@@ -368,6 +384,8 @@ class Bridge:
             for sid in [s for s in self.why if s not in live and s not in self.remote]:
                 del self.why[sid]
             why = dict(self.why)
+            activity = [[n, kind, int((now - ts) * 1000)] for n, kind, ts in self.activity
+                        if now - ts <= ACTIVITY_MAX_AGE_S]
 
         busy = loc["busy"] + loc["shell"] + remote_busy
         waiting = loc["waiting"] + remote_waiting
@@ -401,6 +419,8 @@ class Bridge:
                               "a": max(0, int(now - started)) if started else 0}
                              for n, since, folder, sid, started in loc.get("waiting_list", [])],
             "idle": loc["idle"],
+            # what the agents just did: [number, category, ms ago], oldest first (badge animations)
+            "ev": activity,
             "sessions": loc["sessions"] + remote_live,
             "subagents": subagents,
             "tpm": tpm,
