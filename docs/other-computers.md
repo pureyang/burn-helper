@@ -30,12 +30,14 @@ that the bridge answers. Then restart Claude Code on that computer.
 
 ## Which address
 
-- **The bridge's Tailscale name**, with both computers on your tailnet: works at home and away.
-  `tailscale status` lists it. This is what the bridge's install suggests when Tailscale runs there.
+- **The bridge's Tailscale address** (`100.x.y.z`; `tailscale ip -4` on the bridge shows it), with
+  both computers on your tailnet: works at home and away. This is what the bridge's install
+  suggests when Tailscale runs there.
 - **The bridge's IP address**, when both are on the same home network. It can change, though.
-- Not the relay's `https://` address from [away from home](relay.md): that one is read-only on
-  purpose, for the badge. The Tailscale name with `http://` and port 8787 is the right one; it
-  only answers computers on your tailnet.
+- Not the bridge's Tailscale name (`<name>.<tailnet>.ts.net`). With the relay from
+  [away from home](relay.md) on, public DNS answers that name with the relay's address, which is
+  read-only and has no port 8787, so a computer that isn't using Tailscale's DNS can't connect
+  ("Unable to connect to the remote server").
 
 This works with the badge at home or away from home: the computers report to the bridge, and
 the badge reads from the bridge however it reaches it.

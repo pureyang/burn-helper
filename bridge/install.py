@@ -304,7 +304,9 @@ def restart_bridge():
 
 
 def this_computer():
-    """(address on the local network, Tailscale name or None): where other computers reach this bridge."""
+    """(address on the local network, Tailscale address or None): where other computers reach this
+    bridge. The Tailscale IP, not its name: with the relay on, public DNS answers the name with
+    the relay's address, so a computer not using Tailscale's DNS would get the wrong one."""
     import socket
     lan = None
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -323,7 +325,8 @@ def this_computer():
             out = subprocess.run([t, "status", "--json"], capture_output=True, text=True, timeout=5).stdout
             st = json.loads(out)
             if st.get("BackendState") == "Running":
-                name = ((st.get("Self") or {}).get("DNSName") or "").rstrip(".") or None
+                ips = (st.get("Self") or {}).get("TailscaleIPs") or []
+                name = next((ip for ip in ips if "." in ip), None)
     except Exception:  # noqa: BLE001
         pass
     return lan, name
@@ -342,11 +345,12 @@ def join_lines(lan, name, port=8787, windows=WINDOWS):
              "    $env:BURN_HELPER_JOIN='%s'; irm %s | iex" % (url, INSTALL_PS1),
              ""]
     if name and lan:
-        lines += ["%s is this computer's Tailscale name, so this works from anywhere for computers on" % name,
+        lines += ["%s is this computer's Tailscale address, so this works from anywhere for computers on" % name,
                   "your tailnet. One that isn't on it can use http://%s:%d while on this network." % (lan, port)]
     elif lan:
         lines += ["%s is this computer's address on this network, and it can change. With Tailscale on" % lan,
-                  "both computers, use this computer's Tailscale name instead: it works from anywhere."]
+                  "both computers, use this computer's Tailscale address instead (tailscale ip -4): it works",
+                  "from anywhere."]
     lines.append("To see this again: " + again)
     return lines
 

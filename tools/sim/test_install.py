@@ -98,9 +98,9 @@ print("PASS bridge on Windows: login item runs pythonw with --log, Tailscale fou
       "install / dry run / uninstall rehearsed")
 
 # ---------------------------------------------------------------- joining a bridge
-lines = "\n".join(install.join_lines("192.168.1.20", "my-mac.tailnet.ts.net"))
-assert "bash -s -- --join http://my-mac.tailnet.ts.net:8787" in lines, lines
-assert "$env:BURN_HELPER_JOIN='http://my-mac.tailnet.ts.net:8787'; irm " in lines and "install.ps1 | iex" in lines
+lines = "\n".join(install.join_lines("192.168.1.20", "100.64.1.2"))
+assert "bash -s -- --join http://100.64.1.2:8787" in lines, lines
+assert "$env:BURN_HELPER_JOIN='http://100.64.1.2:8787'; irm " in lines and "install.ps1 | iex" in lines
 assert "http://192.168.1.20:8787" in lines, "names the local address too"
 lines = "\n".join(install.join_lines("192.168.1.20", None, windows=True))
 assert "--join http://192.168.1.20:8787" in lines and "can change" in lines and "py " in lines, lines
@@ -127,4 +127,4 @@ url = "http://127.0.0.1:%d" % srv.server_address[1]
 assert "answers" in install.check_bridge(url), install.check_bridge(url)
 srv.shutdown()
 assert "Can't reach" in install.check_bridge("http://127.0.0.1:9"), "nothing listening"
-print("PASS join: the lines to run on other computers, Tailscale name first; the bridge check")
+print("PASS join: the lines to run on other computers, Tailscale address first; the bridge check")

@@ -121,9 +121,10 @@ $env:BURN_HELPER_JOIN='http://<bridge>:8787'; irm https://raw.githubusercontent.
 ```
 
 It adds only the hooks and status line (no badge, no login item) and checks that the bridge
-answers. Then restart Claude Code on that computer. For `<bridge>`, the bridge's Tailscale name
-works from anywhere for computers on your tailnet; its IP address works on your home network.
-(The relay's `https://` address from setup 2 won't do: it is read-only, for the badge.) To see
+answers. Then restart Claude Code on that computer. For `<bridge>`, the bridge's Tailscale
+address (`100.x.y.z`, from `tailscale ip -4`) works from anywhere for computers on your tailnet;
+its IP address works on your home network. Avoid its `ts.net` name: with the relay on, that name
+can point at the relay's public address, which is read-only. To see
 the line again, run `install.py --join-help` on the bridge. More:
 [other computers](docs/other-computers.md).
 
