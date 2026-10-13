@@ -60,8 +60,10 @@ subagents), over 15 levels:
 | 11-25, 26-50, 51-75, 76-100 | 11 to 14 | sprinting, with sparks, then heat haze, then a pulsing edge |
 | over 100 | 15, ULTRA | flying through hyperspace |
 
-Every level adds speed and speed lines, so all 15 look different. When a session is waiting
-for your input the character calls for you, and the optional case LEDs flash. Ten icons show the 5-hour usage limit left, a bar shows the weekly limit, and a
+Every level adds speed and speed lines, so all 15 look different. The character also acts out
+what the agents do: a sword combo when one edits a file, a bomb when it runs a command, item get
+when it finishes its turn ([all of them](docs/how-it-works.md#what-the-agents-are-doing)). When a
+session is waiting for your input the character calls for you, and the optional case LEDs flash. Ten icons show the 5-hour usage limit left, a bar shows the weekly limit, and a
 countdown runs to the next reset. See [how it works](docs/how-it-works.md) for the meters and
 every theme and level, and [all 15 levels](docs/img/tiers_hero.png) side by side.
 

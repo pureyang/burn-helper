@@ -55,6 +55,30 @@ run. The bridge sends each one's title or folder name, cut to 20 plain character
 reason only as a category and tool name, never the notification text. These details are shown
 on the badge and in the bridge's `/status` JSON on your network. The badge's four case LEDs can blink too, but they are off by default (hold DOWN for 2 s to switch them on).
 
+## What the agents are doing
+
+The badge also acts out what the agents just did. Each activity plays a short animation once,
+on top of the walk or run, then the character carries on:
+
+| Activity | From Claude Code | Zelda | Running Man | Forrest |
+|---|---|---|---|---|
+| edits a file | Edit, Write, MultiEdit, NotebookEdit | sword combo on a slime | counterattack on a stalker | ping-pong rally |
+| reads or searches | Read, Grep, Glob, LS | the lens of truth finds a rupee | searchlights; hides behind a crate | opens the box of chocolates |
+| runs a command | Bash | a bomb | barrel blast | shrimp net |
+| goes on the web | WebFetch, WebSearch | hookshot | drone cam, "LIVE" | reporters: "WHY ARE YOU RUNNING?" |
+| sends out a subagent | SubagentStart | boomerang out and back | a second runner joins | a new follower falls in (and peels off when it is done) |
+| a tool call fails | PostToolUseFailure | knocked back, "OUCH!" | zapped, "ZAP!" | shot in the buttocks, "OW!" |
+| finishes its turn | Stop | item get, "QUEST COMPLETE!" | the applause sign | turns around at the ocean |
+| you send a prompt | UserPromptSubmit | a new quest scroll | the host: "NEXT ROUND!" | drill sergeant: "YES, DRILL SERGEANT!" |
+| a session starts | SessionStart | out of a cave | "NEW CONTESTANT" | the bus-stop bench: "HELLO." |
+| the usage resets | the hearts jump back up | a heart container | commercial break | a new box of chocolates |
+
+At most one plays every 2 seconds. When several arrive together the badge plays the most
+telling: a failure first, then a finished turn, a subagent, your prompt, a new session, and
+then tool calls. Anything older than 6 seconds is skipped, so a badge that was away doesn't
+replay a backlog. The bridge passes on only the category (`ev` in `/status`), never file names,
+commands, URLs or prompts. Both demo modes show them all.
+
 ## Usage meters
 
 In the Zelda theme the three counters at the top left are: green gem = tool calls today,
