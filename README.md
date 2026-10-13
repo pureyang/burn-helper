@@ -23,72 +23,96 @@ network details):
 
 ## Install
 
-There are three ways to set it up, from simplest to most involved. Everyone starts with the first;
-the other two add to it, on their own or together:
+There is one **bridge**: the computer the badge talks to, a Mac or a Windows PC. Any other
+computers you run Claude Code on report to it. There are three setups, from simplest to most
+involved. Everyone starts with the first; the other two add to it, on their own or together:
 
 | Setup | What it gives you | What you add |
 |---|---|---|
-| [1. One Mac, at home](#1-one-mac-at-home) | The badge shows the agents on your Mac, over the USB cable or your home Wi-Fi | The one-line installer |
-| [2. Away from home](#2-away-from-home) | The badge works on any Wi-Fi with internet, such as a phone hotspot or a conference network, while the Mac stays home | A free Tailscale account and one command on the Mac |
-| [3. More computers](#3-more-computers) | Agents on your Windows PCs, Linux boxes or other Macs count too | One command on each computer |
+| [1. One computer, at home](#1-one-computer-at-home) | The badge shows the agents on that computer, over the USB cable or your home Wi-Fi | The one-line installer, which makes it the bridge |
+| [2. Away from home](#2-away-from-home) | The badge works on any Wi-Fi with internet, such as a phone hotspot or a conference network, while the bridge stays home | A free Tailscale account and one command on the bridge |
+| [3. More computers](#3-more-computers) | The agents on your other computers, Mac, Windows or Linux, count too | The one-line installer on each one, joining the bridge |
 
-### 1. One Mac, at home
+### 1. One computer, at home
 
-You need a Mac, the badge, a USB-C **data** cable, and Claude Code already set up (run it once).
-Plug the badge in, then paste this into Terminal:
+You need a Mac or a Windows PC, the badge, a USB-C **data** cable, and Claude Code already set
+up (run it once). On Windows you also need Python 3 (`winget install -e --id Python.Python.3.12`).
+Plug the badge in, then run one line.
+
+On a Mac, in Terminal:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash
 ```
 
+On Windows, in PowerShell:
+
+```
+irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
+```
+
 The installer asks before each change. It:
 
-1. Installs the Mac bridge (async Claude Code hooks, a hearts status line, a login item;
-   `~/.claude/settings.json` is backed up first).
+1. Makes this computer the bridge: async Claude Code hooks, a hearts status line and a login
+   item (`~/.claude/settings.json` is backed up first). On Windows it also asks to let the badge
+   through Windows Firewall, the one step that needs admin approval.
 2. If the badge isn't on stock firmware, backs up its whole flash and then flashes Pimoroni's.
 3. Asks for your Wi-Fi name and password and **tests the join from the badge itself**, so a
    typo is caught now. A combined 2.4/5 GHz network is fine: use its normal name, because the
    badge joins the 2.4 GHz side. Skip it and set Wi-Fi from your phone later (hold **B**).
 4. Copies the app onto the badge and checks that it starts.
+5. Shows the line to run on your other computers ([setup 3](#3-more-computers)), with this
+   computer's address filled in.
 
-That's all for this setup. On the cable the badge needs no Wi-Fi at all; unplugged, it finds the
-bridge on your network by itself. If the badge stops answering during the install, the installer
-asks you to press its **RESET** button and carries on once it responds.
+On the cable the badge needs no Wi-Fi at all; unplugged, it finds the bridge on your network by
+itself. If the badge stops answering during the install, the installer asks you to press its
+**RESET** button and carries on once it responds. Windows support is newer and less tested than
+the Mac.
 
-Handy options (after `| bash -s --`): `--yes` (no questions), `--no-flash`, `--dry-run`,
-`--uninstall`. Wi-Fi not connecting? See [Wi-Fi troubleshooting](docs/wifi.md#wi-fi-troubleshooting).
+Options on a Mac go after `| bash -s --`: `--yes` (no questions), `--no-flash`, `--dry-run`,
+`--uninstall`. On Windows, set them first, for example `$env:BURN_HELPER_YES=1` (the rest are in
+[install.ps1](install.ps1)). Wi-Fi not connecting? See
+[Wi-Fi troubleshooting](docs/wifi.md#wi-fi-troubleshooting).
 
 ### 2. Away from home
 
-On another network the badge can't find the bridge by itself, so the Mac publishes a small
+On another network the badge can't find the bridge by itself, so the bridge publishes a small
 read-only relay through your own Tailscale account. The badge switches to it after about 10
 seconds without the bridge nearby, and back again when you're home.
 
-1. Install [Tailscale](https://tailscale.com/download) on the Mac and sign in (the free plan works).
-2. On the Mac: `python3 ~/burn-helper/bridge/relay.py on`
-3. Plug the badge into the Mac once. It shows **INTERNET RELAY READY**.
+1. Install [Tailscale](https://tailscale.com/download) on the bridge and sign in (the free plan works).
+2. On the bridge, turn the relay on. On a Mac: `python3 ~/burn-helper/bridge/relay.py on`.
+   On Windows: `py $HOME\burn-helper\bridge\relay.py on`.
+3. Plug the badge into the bridge once. It shows **INTERNET RELAY READY**.
 4. Wherever you are, join the badge to the local Wi-Fi from your phone (hold **B**). A phone
    hotspot works; on iPhone, turn on *Maximize Compatibility* so it runs at 2.4 GHz.
 
-Keep the Mac awake and online while you're away. The first time, Tailscale's public address
+Keep the bridge awake and online while you're away. The first time, Tailscale's public address
 can take 10 to 20 minutes to appear; `relay.py status` tells you when it answers. Details and
 troubleshooting: [away from home](docs/relay.md).
 
 ### 3. More computers
 
-The badge counts the sessions on the Mac. To count the agents you run on other computers too,
-point each one at the Mac. It needs Python 3 there (`py --version`). On Windows, in PowerShell:
+On each other computer, run the line the bridge's install showed you. It looks like this.
 
-```powershell
-git clone https://github.com/pureyang/burn-helper $HOME\burn-helper
-py $HOME\burn-helper\bridge\install.py --bridge http://<your-mac>:8787
+On a Mac or Linux, in Terminal:
+
+```
+curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join http://<bridge>:8787
 ```
 
-On Linux or another Mac it's the same with `python3`. Then restart Claude Code on that computer.
-For `<your-mac>`, use the Mac's IP address if the computer is only ever on your home network, or
-the Mac's Tailscale name if it's on your tailnet, which works from anywhere. (The relay from
-setup 2 won't do here: its `https://` address is read-only, for the badge.) Step by step, with a check that it
-works: [other computers](docs/other-computers.md).
+On Windows, in PowerShell:
+
+```
+$env:BURN_HELPER_JOIN='http://<bridge>:8787'; irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
+```
+
+It adds only the hooks and status line (no badge, no login item) and checks that the bridge
+answers. Then restart Claude Code on that computer. For `<bridge>`, the bridge's Tailscale name
+works from anywhere for computers on your tailnet; its IP address works on your home network.
+(The relay's `https://` address from setup 2 won't do: it is read-only, for the badge.) To see
+the line again, run `install.py --join-help` on the bridge. More:
+[other computers](docs/other-computers.md).
 
 ## What the badge shows
 
@@ -142,7 +166,7 @@ Short presses act when you let go, so holding a button never also triggers its p
 ## Wi-Fi in short
 
 The badge's radio is 2.4 GHz only. A combined 2.4/5 GHz network works under its normal name.
-At home the badge must be on the same network as the Mac. Hold **B** for 2 seconds to set Wi-Fi up
+At home the badge must be on the same network as the bridge. Hold **B** for 2 seconds to set Wi-Fi up
 from your phone: setup stays open, joins the network on the badge and shows the result. A wrong
 password never reports an error on this radio, the badge just stays in "joining". Details,
 troubleshooting and shipping badges with an event network are in [docs/wifi.md](docs/wifi.md).
@@ -152,16 +176,16 @@ Away from home, see [setup 2](#2-away-from-home).
 
 | Page | What is in it |
 |---|---|
-| [Hardware and compatibility](docs/hardware.md) | The tested setup, supported and unsupported devices, networks and Macs |
+| [Hardware and compatibility](docs/hardware.md) | The tested setup, supported and unsupported devices, networks and computers |
 | [Install](docs/manual-install.md) | What the installer does, its options, and the manual steps |
 | [Wi-Fi](docs/wifi.md) | Setup from the phone, event networks, troubleshooting |
 | [How it works](docs/how-it-works.md) | Bridge, badge app, activity levels, usage meters, every theme |
 | [Making themes](docs/themes.md) | The theme contract, memory and build-time budgets, how to add one |
 | [Development](docs/development.md) | Simulator, tools, tests, repo layout |
-| [Away from home](docs/relay.md) | Reaching your Mac from any Wi-Fi through your Tailscale account |
-| [Other computers](docs/other-computers.md) | Counting the agents you run on Windows, Linux or another Mac |
+| [Away from home](docs/relay.md) | Reaching the bridge from any Wi-Fi through your Tailscale account |
+| [Other computers](docs/other-computers.md) | Counting the agents on your other computers: joining them to the bridge |
 | [Demo video](docs/video.md) | Recording the 20-second demo take the badge plays on its own |
-| [Bridge](bridge/README.md) | The Mac-side server and its API |
+| [Bridge](bridge/README.md) | The bridge server and its API |
 | [Desk stand](stand/README.md) | A 3D-printable stand that keeps the badge upright with the USB-C cable plugged in, with an optional two-colour heart meter |
 
 ## License

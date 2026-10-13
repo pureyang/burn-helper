@@ -1,13 +1,14 @@
 # Burn Helper bridge
 
-A small server on your Mac that tells the badge how busy your Claude Code agents
-are and how much of your usage budget is left. Python 3.9 standard library only.
+A small server on one computer, a Mac or a Windows PC, that tells the badge how busy your
+Claude Code agents are and how much of your usage budget is left. Python 3.9+ standard
+library only, plus pyserial on Windows for the USB cable.
 
 ## What it reads
 
 - **Live sessions** from `~/.claude/sessions/*.json`, the registry every running
   Claude Code process keeps. Each session reports `busy`, `shell`, `idle` or
-  `waiting`. This needs no setup and covers every session on this Mac.
+  `waiting`. This needs no setup and covers every session on this computer.
 - **Hook events** from `cc_hook.py`: tool calls (for calls per minute and calls
   today), subagent starts and stops, and sessions on other machines.
 - **Usage limits** from `cc_statusline.py`: the five-hour and seven-day

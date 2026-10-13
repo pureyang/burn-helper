@@ -27,8 +27,10 @@ stays in "joining"). See [Wi-Fi](wifi.md#wi-fi-troubleshooting).
 | Badger 2350 (e-ink), Blinky 2350 (LED matrix) | Not supported. They run the same framework, but the themes are drawn for the Tufty's colour screen |
 | Tufty 2040 (older badge) | Not supported: no Wi-Fi and a different firmware/API |
 | Other Macs on recent macOS with `/usr/bin/python3` 3.9+ | Should work. Only the Mac above is tested |
-| Linux / Windows as the bridge host | Not supported yet. The server is plain Python, but install, USB detection and the login item are macOS-specific (`launchd`, `ioreg`) |
+| Windows 10/11 as the bridge | Supported, newer and less tested than the Mac: `install.ps1`, Python 3 and pyserial (the installer adds it), a login item under your user, and a Windows Firewall rule for port 8787 |
+| Linux as the bridge | Not supported. A Linux computer can join a bridge ([other computers](other-computers.md)) |
+| Any computer joining the bridge | Mac, Windows or Linux with Python 3 ([other computers](other-computers.md)) |
 | Claude Code versions | Needs a version that writes `~/.claude/sessions/*.json` and puts `rate_limits` in the status-line JSON. 2.1.295+ does |
 | Wi-Fi: 2.4 GHz, WPA2 (or WPA2/WPA3 mixed) with a password | Supported |
 | Wi-Fi: 5 GHz only, WPA3 only, enterprise (802.1X, eduroam) or captive-portal hotel/conference networks | Not supported by the badge |
-| Phone hotspot | Supported. On iPhone turn on *Maximize Compatibility* so it runs at 2.4 GHz. The Mac joins the same hotspot, or stays home with the [internet relay](relay.md) |
+| Phone hotspot | Supported. On iPhone turn on *Maximize Compatibility* so it runs at 2.4 GHz. The bridge joins the same hotspot, or stays home with the [internet relay](relay.md) |
