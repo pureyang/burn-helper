@@ -14,6 +14,12 @@ import sys
 import urllib.request
 
 
+def read_input(limit):
+    """Claude Code's JSON on stdin, as UTF-8 whatever the system's default encoding (Windows)."""
+    data = sys.stdin.buffer.read(limit) if hasattr(sys.stdin, "buffer") else sys.stdin.read(limit).encode()
+    return data.decode("utf-8", "replace")
+
+
 def env(name, default=None):
     """BURN_HELPER_<name>, or the older HEARTS_LEFT_<name> or TUFTY_<name>, or default."""
     return (os.environ.get("BURN_HELPER_" + name) or os.environ.get("HEARTS_LEFT_" + name)
@@ -34,7 +40,7 @@ def why_waiting(d):
 
 def main():
     try:
-        raw = sys.stdin.read(1024 * 1024)
+        raw = read_input(1024 * 1024)
         d = json.loads(raw) if raw.strip() else {}
         if not isinstance(d, dict):
             d = {}
