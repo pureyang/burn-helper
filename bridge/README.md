@@ -58,6 +58,10 @@ change without reconfiguring anything.
   4 sprinting (load 4+ or 40+ tool calls a minute). Load is busy sessions plus
   half of each shell session and each subagent. While any agent is working, the badge
   replaces this with its own 15 levels based on `busy` + `subagents` (see docs/how-it-works.md).
+- `busy` counts local sessions whose status is busy or shell (a background command), plus busy
+  sessions on other machines. A local session that has said busy or shell for 30 minutes with no
+  hook event from it is counted as idle instead: its status is stuck, or what is running is a
+  server rather than an agent.
 - `waiting_list`: the local sessions waiting for you, longest first, at most 4: `n` is the
   session's title (or its folder name) cut to 20 plain characters, `s` how many seconds it has
   waited, `d` its folder's name (not the path), `w` what it needs (`PERMISSION: <TOOL>`,

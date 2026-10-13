@@ -52,6 +52,10 @@ LEVEL3_TPM = 15
 RECENT_ACTIVE_S = 300          # level 1 window after the last activity
 REMOTE_BUSY_S = 90             # remote session counts as busy this long after an event
 SUBAGENT_EXPIRE_S = 600        # forget subagent counts after this long without events
+# A local session whose file has said "busy" or "shell" this long, with no hook event from it
+# either, is stuck (Claude Code left the status behind, or a background server is running in
+# an otherwise idle session): count it as idle, not as an agent working.
+STALE_S = 1800
 REMOTE_EXPIRE_S = 3600         # forget remote sessions entirely after this long
 TPM_WINDOW_S = 60
 USB_INTERVAL = 2.0
@@ -128,6 +132,7 @@ class Bridge:
         self.remote = {}               # session_id -> {"state": busy|idle|waiting, "ts": float}
         self.why = {}                  # session_id -> "PERMISSION: BASH" / "YOUR REPLY", from its last notification
         self.activity = []             # [(number, "edit" | "read" | ..., ts)], the latest ACTIVITY_KEPT
+        self.last_hook = {}            # session_id -> ts of its last hook event (to spot stuck statuses)
         self.activity_seq = 0
         # usage
         self.five_hour = None          # {"used": float, "resets_at": int, "rx": float}
@@ -202,7 +207,8 @@ class Bridge:
         return ok
 
     def scan(self):
-        counts = {"busy": 0, "shell": 0, "waiting": 0, "idle": 0, "sessions": 0}
+        counts = {"busy": 0, "shell": 0, "waiting": 0, "idle": 0, "sessions": 0, "stale": 0}
+        now = time.time()
         waiting_list = []      # (display name, epoch seconds it started waiting)
         live_keys = set()
         try:
@@ -238,6 +244,13 @@ class Bridge:
                 continue
             status = d.get("status")
             counts["sessions"] += 1
+            if status in ("busy", "shell"):
+                changed = d.get("statusUpdatedAt")
+                seen = max(changed / 1000.0 if isinstance(changed, (int, float)) else 0.0,
+                           self.last_hook.get(str(d.get("sessionId") or ""), 0.0))
+                if now - seen > STALE_S:
+                    counts["stale"] += 1
+                    status = "idle"
             if status in ("busy", "shell", "waiting"):
                 counts[status] += 1
                 if status == "waiting":
@@ -267,6 +280,11 @@ class Bridge:
         event = str(d.get("event") or "")[:64]
         host = str(d.get("host") or "")[:255]
         with self.lock:
+            if sid:
+                self.last_hook[sid] = now
+                if len(self.last_hook) > 200:
+                    for k in [k for k, ts in self.last_hook.items() if now - ts > STALE_S]:
+                        del self.last_hook[k]
             today = self._today()
             if today != self.tools_date:
                 self.tools_date, self.tools_today = today, 0
@@ -636,9 +654,9 @@ def scan_loop():
             if now - last_summary >= 60:
                 last_summary = now
                 s = BRIDGE.status()
-                log("level=%d busy=%d waiting=%d sessions=%d subagents=%d tpm=%d today=%d hearts=%s theme=%s" % (
-                    s["level"], s["busy"], s["waiting"], s["sessions"], s["subagents"], s["tpm"],
-                    s["tools_today"], s["hearts"], s["theme"]))
+                log("level=%d busy=%d waiting=%d sessions=%d stuck=%d subagents=%d tpm=%d today=%d hearts=%s theme=%s" % (
+                    s["level"], s["busy"], s["waiting"], s["sessions"], BRIDGE.local.get("stale", 0), s["subagents"],
+                    s["tpm"], s["tools_today"], s["hearts"], s["theme"]))
         except Exception as e:  # noqa: BLE001
             log("scan error: %r" % e)
         time.sleep(SCAN_INTERVAL)
