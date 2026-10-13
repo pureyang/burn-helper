@@ -333,7 +333,8 @@ def join_lines(lan, name, port=8787, windows=WINDOWS):
     """What to run on another computer so that it reports to this bridge."""
     url = "http://%s:%d" % (name or lan or "<this-computer>", port)
     again = "%s %s --join-help" % ("py" if windows else "python3", os.path.join(HERE, "install.py"))
-    lines = ["To add another computer, so its Claude Code agents show on the badge too, run this on it:",
+    lines = ["To add another computer, so its Claude Code agents show on the badge too, run the join",
+             "line on it (not the bridge line you just ran: there is only one bridge):",
              "",
              "  Mac or Linux, in Terminal:",
              "    curl -fsSL %s | bash -s -- --join %s" % (INSTALL_SH, url),

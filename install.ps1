@@ -227,6 +227,9 @@ function Install-BurnHelper {
 
   # 2. this PC's side: the bridge, and a way through the firewall for the badge
   if (-not $noBridge) {
+    Say "This makes this PC the bridge: the one computer the badge talks to. If another computer"
+    Say "already is your bridge, stop here (Ctrl+C) and run the join line on this one instead:"
+    Say "  `$env:BURN_HELPER_JOIN='http://<bridge>:8787'; irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex"
     if ($dry) {
       Invoke-Py @($installPy, "--dry-run")
       if (-not (Test-FirewallRule)) {

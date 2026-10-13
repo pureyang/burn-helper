@@ -133,6 +133,9 @@ fi
 
 # 2. the Mac side
 if [ "$NO_BRIDGE" = 0 ]; then
+  say "This makes this Mac the bridge: the one computer the badge talks to. If another computer"
+  say "already is your bridge, stop here (Ctrl-C) and run the join line on this one instead:"
+  say "  curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join http://<bridge>:8787"
   if [ "$DRY" = 1 ]; then
     "$PY" "$ROOT/bridge/install.py" --dry-run
   else
