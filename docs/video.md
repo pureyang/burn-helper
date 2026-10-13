@@ -1,8 +1,8 @@
 # Recording the 20-second demo video
 
 The badge has a hidden demo built for this video: a 20-second take that goes from asleep to
-hyperspace on its own, with a session asking for you in the middle and the hearts draining to
-the end. It shows example numbers only, so nothing personal ends up on camera, and it needs no
+hyperspace on its own, with a sword fight, a session asking for you in the middle, a finished
+quest and the hearts draining to the end. It shows example numbers only, so nothing personal ends up on camera, and it needs no
 Mac, bridge or Wi-Fi. It loops every 20 seconds, so you can record a few loops and keep the best.
 
 ![The take, one frame per beat](img/video_storyboard.png)
@@ -42,24 +42,26 @@ The times are the badge's. Record one continuous shot; the moves below are optio
 | Time | On the badge | Camera | On-screen text (add in the edit) |
 |---|---|---|---|
 | 0-3 s | Asleep under the stars, "LINK IS ASLEEP... ZZZ" | Wide, still | "My conference badge watches my AI agents" |
-| 3-4.5 s | Wakes up and stands | Still | |
-| 4.5-7 s | 1 agent: walks | Start a slow push in | "1 agent: walking" |
+| 3-4.8 s | A session starts: steps out of a cave, "A NEW SESSION BEGINS" | Still | |
+| 4.8-5.6 s | 1 agent: walks | Start a slow push in | "1 agent: walking" |
+| 5.6-7 s | It edits a file: a sword combo on a slime | Push in | "It edits a file: he fights" |
 | 7-8.5 s | 5 agents: runs | Push in | "5 agents: running" |
 | 8.5-10 s | 9 agents: sprints, sword out | Hold | "9: sprinting" |
-| 10-13 s | A session needs you: "HEY! LISTEN!", the waiting counter goes to 1 | Hold | "A session needs me" |
-| 13-16 s | 40, then 88 agents: sparks, then a red pulsing edge | Hold | "40... 88 agents" |
+| 10-12.4 s | A session needs you: "HEY! LISTEN!", the waiting counter goes to 1 | Hold | "A session needs me" |
+| 12.4-14 s | You answer: a new quest scroll drops in, "A NEW QUEST!" | Hold | |
+| 14-16 s | The turn is done: treasure overhead, "QUEST COMPLETE!", while 40 then 88 agents add sparks and a pulsing edge | Hold | "Turn done" |
 | 16-20 s | 128 agents: hyperspace; the hearts are almost gone and the countdown runs out | Slowly to the hearts | "100+ agents: hyperspace. Hearts = usage left" |
 
 End card (1-2 s, added in the edit): **Burn Helper**, "works with Claude Code, open source",
 `github.com/pureyang/burn-helper`.
 
-## Optional voiceover (about 45 words)
+## Optional voiceover (about 55 words)
 
 Record it on the phone afterwards and lay it under the clip:
 
 > "This is the badge from my last conference. Now it watches my Claude Code agents. One agent,
-> he walks. Five, he runs. When a session needs me, he calls me. Over a hundred agents: hyperspace.
-> And the hearts? That's the usage I have left."
+> he walks, and when it edits a file, he fights. Five, he runs. When a session needs me, he calls
+> me. Over a hundred agents: hyperspace. And the hearts? That's the usage I have left."
 
 ## Edit and export
 
