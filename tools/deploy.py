@@ -5,8 +5,8 @@
     python3 tools/deploy.py --all      copy everything
     python3 tools/deploy.py --no-reset leave the badge at the REPL afterwards
     python3 tools/deploy.py --shot out.png   restart, wait, then pull a screenshot
-    python3 tools/deploy.py --shot-only out.png [--view 0-3] [--page 0-3] [--demo 0|1|2]
-        screenshot now (view 1 Desktop, 2 Paged, 3 Waiting focus; page 3 = Wi-Fi debug;
+    python3 tools/deploy.py --shot-only out.png [--view 0-2] [--page 0-2] [--demo 0|1|2]
+        screenshot now (view 1 Desktop, 2 Debug; page 2 of Debug = Wi-Fi debug;
         demo 1 = tagged demo, 2 = untagged)
 
 The stock firmware mounts /system read-only. Outside USB disk mode nothing else

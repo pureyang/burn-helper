@@ -1,7 +1,9 @@
-# The screens B cycles through after the animation: Desktop mode (everything on one screen),
-# Paged mode (one topic per page, A/C turn pages) and Waiting focus (which sessions need you).
-# They are opaque and the animation is paused behind them, so they cost little CPU. Usage is
-# always shown as what is LEFT, never what is used. None of them turns the screen off.
+# The screens B steps through after the animation, both opaque with the animation paused
+# behind them (so they cost little CPU), and neither turns the screen off:
+#   Desktop: usage left and who is waiting for you; A/C step through the waiting sessions,
+#            one detail card each.
+#   Debug:   everything on one page, then the connection and the Wi-Fi debug pages (A/C).
+# Usage is always shown as what is LEFT, never what is used.
 
 import gfx
 import debugview
@@ -18,9 +20,9 @@ WARN = (255, 214, 90)
 BAD = (255, 110, 100)
 MUTED = (60, 64, 76)
 
-DESKTOP, PAGED, WAITING = 1, 2, 3
-PAGES = ("STATUS", "USAGE LEFT", "CONNECTION", "WI-FI")
-WIFI_PAGE = 3
+DESKTOP, DEBUG = 1, 2
+PAGES = ("DEBUG", "CONNECTION", "WI-FI")      # Debug mode's pages
+WIFI_PAGE = 2
 LEVEL_NAMES = ("ASLEEP", "IDLE", "WALKING", "RUNNING", "SPRINTING")
 
 
@@ -31,18 +33,17 @@ class Ctx:
         self.st = st
         self.link = link
         self.tether = tether
-        self.source = None      # "usb" or "net"
+        self.source = None      # "usb", "net" or "relay"
         self.demo = 0
         self.wait_since = None  # ticks_ms when the badge first saw a session waiting
+        self.wait_sel = None    # Desktop: index of the waiting session shown in detail, or None
 
 
 def draw(view, page, c, t):
     if view == DESKTOP:
         desktop(c, t)
-    elif view == PAGED:
-        paged(page, c, t)
-    elif view == WAITING:
-        waiting(c, t)
+    elif view == DEBUG:
+        debug(page, c, t)
 
 
 # ------------------------------------------------------------ shared pieces
@@ -136,7 +137,82 @@ def duration(s):
 # ------------------------------------------------------------ Desktop mode
 def desktop(c, t):
     st = c.st
-    header("DESKTOP MODE")
+    wl = st.waiting_list
+    if c.wait_sel is not None and 0 <= c.wait_sel < len(wl):
+        _session(c, c.wait_sel)
+        return
+    header("DESKTOP", "%d WORKING" % st.agents if st.online else "OFFLINE")
+    # usage left
+    for label, p, left, y in (("5 HOURS", left5(st), st.left5, 10), ("WEEK", left7(st), st.left7, 34)):
+        colour = pct_colour(p)
+        big = "--" if p is None else "%d%% LEFT" % p
+        gfx.text(label, 4, y, FG, font.sins)
+        gfx.text(big, 156 - gfx.width(big, font.sins), y, colour, font.sins)
+        gfx.meter(4, y + 12, 152, 3, None if p is None else p / 100.0, colour, MUTED)
+        gfx.text(resets(left) or "NO RESET TIME YET", 4, y + 13, gfx.countdown_color(left, DIM), font.sins)
+    gfx.box(4, 59, 152, 1, MUTED)
+    # waiting for you
+    if not st.online and not c.demo:
+        gfx.text("NO DATA YET", 4, 59, BAD, font.sins)
+        gfx.text(gfx.fit(st.net or "WAITING FOR THE BRIDGE", 152, font.sins), 4, 70, DIM, font.sins)
+        footer("B: DEBUG   HOLD B: SETUP")
+    elif st.waiting > 0:
+        gfx.text("%d WAITING FOR YOU" % st.waiting, 4, 59, WARN, font.sins)
+        y = 70
+        shown = wl[:2] if len(wl) > 3 else wl
+        for w in shown:
+            a = duration(w["s"])
+            gfx.text(gfx.fit(w["n"], 146 - gfx.width(a, font.sins), font.sins), 4, y, FG, font.sins)
+            gfx.text(a, 156 - gfx.width(a, font.sins), y, WARN, font.sins)
+            y += 11
+        if len(wl) > len(shown):
+            gfx.text("+%d MORE" % (len(wl) - len(shown)), 4, y, DIM, font.sins)
+        elif not wl:
+            gfx.text("ANSWER IN CLAUDE CODE", 4, y, DIM, font.sins)
+        footer("A/C: SESSION DETAILS" if wl else "B: DEBUG")
+    else:
+        gfx.text("NOTHING WAITING FOR YOU", 4, 59, GOOD, font.sins)
+        footer("B: DEBUG   HOLD B: SETUP")
+
+
+def _session(c, i):
+    """One waiting session in detail (A/C step through them)."""
+    wl = c.st.waiting_list
+    w = wl[i]
+    header("WAITING %d/%d" % (i + 1, len(wl)), "", WARN)
+    y = 11
+    for ln in gfx.wrap(w["n"], 152, font.sins)[:2]:
+        gfx.text(ln, 4, y, FG, font.sins)
+        y += 11
+    rows = (("WAITING", duration(w["s"]), WARN),
+            ("NEEDS", w["w"] or "-", WARN),
+            ("FOLDER", w["d"] or "-", FG),
+            ("RUNNING", duration(w["a"]) if w["a"] else "-", FG))
+    y = 37
+    for k, v, colour in rows:
+        gfx.text(k, 4, y, DIM, font.sins)
+        gfx.text(gfx.fit(v, 96, font.sins), 60, y, colour, font.sins)
+        y += 12
+    footer("A/C: NEXT   B: DEBUG" if len(wl) > 1 else "A/C: BACK   B: DEBUG")
+
+
+# ------------------------------------------------------------ Debug mode
+def debug(page, c, t):
+    right = "%d/%d" % (page + 1, len(PAGES))
+    if page == WIFI_PAGE:
+        debugview.draw(c.link, c.tether, c.source, t, page=right)
+        return
+    header(PAGES[page], right)
+    if page == 0:
+        _overview(c)
+    else:
+        _connection(c)
+    footer("A/C: PAGE   B: ANIMATION")
+
+
+def _overview(c):
+    """Everything on one page (this was Desktop mode)."""
+    st = c.st
     name, ip = wifi_name_ip(c)
     brg, age = bridge_text(c)
     rows = [
@@ -144,6 +220,7 @@ def desktop(c, t):
         "WIFI %s  %s" % (name[:10], ip),
         "BRDG %s %s" % (brg, age.replace(" AGO", "").lower()),
         "BUSY %d  WAIT %d  IDLE %d" % (st.busy, st.waiting, st.idle),
+        "LEVEL " + activity(st),
         "TOOLS/MIN %d  TODAY %d" % (st.tpm, st.tools),
     ]
     for label, p, left in (("5H", left5(st), st.left5), ("7D", left7(st), st.left7)):
@@ -151,62 +228,12 @@ def desktop(c, t):
         rows.append("%s %s LEFT%s" % (label, "--" if p is None else "%d%%" % p,
                                       "" if left is None else (", RESET IN " + when if left > 0 else ", " + when)))
     rows.append("BATT " + power.text())
-    rows.insert(4, "LEVEL " + activity(st))
     if c.link.err and not c.demo:
         rows.append("ERR " + c.link.err[:22])
     y = 13
     for r in rows[:9]:
         gfx.text(gfx.fit(r, 154, font.sins), 4, y, FG, font.sins)
         y += 10
-    footer("HOLD B: PHONE SETUP")
-
-
-# ------------------------------------------------------------ Paged mode
-def paged(page, c, t):
-    right = "%d/%d" % (page + 1, len(PAGES))
-    if page == WIFI_PAGE:
-        debugview.draw(c.link, c.tether, c.source, t, page=right)
-        return
-    header(PAGES[page], right)
-    if page == 0:
-        _status(c)
-    elif page == 1:
-        _usage(c)
-    else:
-        _connection(c)
-    footer("A/C: PAGE   B: NEXT")
-
-
-def _status(c):
-    st = c.st
-    cols = (("WORKING", st.busy, GOOD), ("WAITING", st.waiting, WARN), ("IDLE", st.idle, DIM))
-    for i, (label, n, colour) in enumerate(cols):
-        cx = 27 + i * 53
-        gfx.ctext(label, cx, 13, DIM, font.sins)
-        gfx.ctext(str(n), cx, 25, colour if n else DIM, font.futile)
-    rows = ["LEVEL " + activity(st),
-            "TOOLS/MIN %d   TODAY %d" % (st.tpm, st.tools),
-            "SESSIONS %d   SUBAGENTS %d" % (st.sessions, st.subagents)]
-    y = 54
-    for r in rows:
-        gfx.text(r, 4, y, FG, font.sins)
-        y += 12
-    if not st.online:
-        gfx.text(gfx.fit("NO DATA: " + (st.net or "WAITING FOR BRIDGE"), 154, font.sins), 4, 92, BAD, font.sins)
-
-
-def _usage(c):
-    st = c.st
-    blocks = (("5-HOUR LIMIT", left5(st), st.left5, 14), ("WEEKLY LIMIT", left7(st), st.left7, 59))
-    for label, p, left, y in blocks:
-        colour = pct_colour(p)
-        gfx.text(label, 4, y, FG, font.sins)
-        big = "--" if p is None else "%d%%" % p
-        gfx.text(big, 156 - gfx.width(big, font.unfair), y - 1, colour, font.unfair)
-        gfx.meter(4, y + 20, 152, 6, None if p is None else p / 100.0, colour, MUTED)
-        gfx.text(resets(left) or "NO RESET TIME YET", 4, y + 28, gfx.countdown_color(left, DIM), font.sins)
-    if left5(st) is None and left7(st) is None:
-        gfx.text("NO USAGE DATA YET", 4, 96, DIM, font.sins)
 
 
 def _connection(c):
@@ -230,34 +257,3 @@ def _connection(c):
         gfx.text(k, 4, y, DIM, font.sins)
         gfx.text(gfx.fit(v, 100, font.sins), 56, y, FG, font.sins)
         y += 11
-
-
-# ------------------------------------------------------------ Waiting focus
-def waiting(c, t):
-    st = c.st
-    n = st.waiting
-    if n <= 0:
-        header("WAITING FOCUS", "", MUTED)
-        gfx.ctext("ALL CLEAR", 80, 26, GOOD, font.badgewaremax)
-        gfx.ctext("NOTHING IS WAITING FOR YOU", 80, 54, DIM, font.sins)
-        busy = st.agents
-        gfx.ctext("%d AGENT%s WORKING" % (busy, "" if busy == 1 else "S"), 80, 68, FG, font.sins)
-        footer("B: BACK TO ANIMATION")
-        return
-    header("WAITING FOR YOU", "", WARN)
-    gfx.ctext(str(n), 80, 13, WARN, font.futile)
-    gfx.ctext("SESSION NEEDS YOU" if n == 1 else "SESSIONS NEED YOU", 80, 38, FG, font.sins)
-    ages = [a for _, a in st.waiting_list]
-    longest = max(ages) if ages else (None if c.wait_since is None else net.since(c.wait_since) // 1000)
-    if longest is not None:
-        gfx.ctext("LONGEST WAIT " + duration(longest), 80, 50, DIM, font.sins)
-    y = 64
-    if st.waiting_list:
-        for name, age in st.waiting_list[:3]:
-            a = duration(age)
-            gfx.text(gfx.fit(name, 150 - gfx.width(a, font.sins) - 8, font.sins), 6, y, FG, font.sins)
-            gfx.text(a, 154 - gfx.width(a, font.sins), y, WARN, font.sins)
-            y += 12
-    else:
-        gfx.ctext("ANSWER IT IN CLAUDE CODE", 80, y, DIM, font.sins)
-    footer("B: BACK TO ANIMATION")

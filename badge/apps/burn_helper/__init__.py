@@ -4,10 +4,10 @@
 # one of three themes by activity level, with hearts for the remaining usage.
 #
 # Buttons
-#   A / C      previous / next theme
-#   B          animation -> Desktop mode -> Paged mode -> Waiting focus -> animation;
-#              hold 2 s for phone setup. In Paged mode A/C turn pages (the last is Wi-Fi debug)
-#              (on the debug screen UP rescans and retries Wi-Fi right away)
+#   A / C      on the animation: previous / next theme. In Desktop mode: step through the
+#              sessions waiting for you. In Debug mode: turn pages (the last is Wi-Fi debug,
+#              where UP rescans and retries Wi-Fi right away)
+#   B          animation -> Desktop mode -> Debug mode -> animation; hold 2 s for phone setup
 #   hold UP    demo mode for 2 s (cycles every level, shows a DEMO tag)
 #   DOWN       brightness: 10 levels, then 0% (screen off, badge still running), then full again;
 #              hold 2 s to switch the case LEDs on or off (off by default)
@@ -64,9 +64,10 @@ st = S.Status()
 link = net.Net(config.networks(), config.bridge(), relay=config.load_relay())
 tether = usb.UsbLink()
 themes = {}
-view = 0        # 0 animation, then views.DESKTOP, views.PAGED, views.WAITING
-page = 0        # the page shown in Paged mode
-wait_since = None        # ticks_ms when a session started waiting (for Waiting focus)
+view = 0        # 0 animation, then views.DESKTOP, views.DEBUG
+page = 0        # the page shown in Debug mode
+wait_sel = None # Desktop mode: which waiting session is shown in detail (None: the summary)
+wait_since = None        # ticks_ms when a session started waiting
 screen_off_at = None     # ticks_ms when the backlight goes off after the 0% note
 demo = 0            # 0 off, 1 demo with a DEMO tag, 2 the hidden 20-second video take
 demo_t0 = 0         # ticks_ms when the demo started
@@ -189,7 +190,8 @@ DEMO_THEME = "hero"
 DEMO_CYCLE_MS = 30000
 DEMO_AGENTS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 40, 63, 88, 128)   # one count inside each tier
 DEMO_WAITS = {3: 1, 7: 2, 12: 1}             # tier -> sessions waiting while it runs
-DEMO_WAITING = (("api-server", 95), ("docs-site", 12))
+DEMO_WAITING = ({"n": "api-server refactor", "s": 95, "d": "api-server", "w": "PERMISSION: BASH", "a": 7800},
+                {"n": "docs-site", "s": 12, "d": "docs-site", "w": "YOUR REPLY", "a": 1500})
 VIDEO_MS = 20000
 # (second it starts, level when no agents work, agents working, sessions waiting)
 VIDEO_STEPS = ((0.0, S.SLEEP, 0, 0),     # asleep
@@ -230,8 +232,8 @@ def demo_status(t):
             # tiers 1-14 for 1.6 s each, then ULTRA for the last 4 s
             tier = min((k - 3500) // 1600, 14) + 1
             agents, level, waiting = DEMO_AGENTS[tier - 1], S.WALK, DEMO_WAITS.get(tier, 0)
-    if view == views.WAITING:
-        waiting = 2                              # so Waiting focus always has something to show
+    if view == views.DESKTOP:
+        waiting = 2                              # so Desktop mode always has sessions to show
     st.level = level
     st.busy, st.subagents = agents, 0
     st.set_agents(agents)
@@ -307,19 +309,31 @@ def wifi_trouble():
     return not tether.fresh() and link.state != "up"
 
 
+def step_waiting(d):
+    """Desktop mode's A/C: summary -> each waiting session in turn -> summary."""
+    global wait_sel
+    n = len(st.waiting_list)
+    i = -1 if wait_sel is None else wait_sel
+    i = (i + 1 + d) % (n + 1) - 1          # -1 is the summary
+    wait_sel = None if i < 0 else i
+
+
 def short_press(b):
-    global view, page, screen_off_at
-    if view == views.PAGED and b in (BUTTON_A, BUTTON_C):
-        page = (page + (1 if b == BUTTON_C else -1)) % len(views.PAGES)
-    elif b == BUTTON_A:
-        switch(-1)
-    elif b == BUTTON_C:
-        switch(1)
+    global view, page, wait_sel, screen_off_at
+    if b in (BUTTON_A, BUTTON_C):
+        d = 1 if b == BUTTON_C else -1
+        if view == views.DEBUG:
+            page = (page + d) % len(views.PAGES)
+        elif view == views.DESKTOP:
+            step_waiting(d)
+        else:
+            switch(d)                   # themes change only on the animation
     elif b == BUTTON_B:
-        view = (view + 1) % 4
-        if view == views.PAGED and wifi_trouble():
+        view = (view + 1) % 3
+        wait_sel = None
+        if view == views.DEBUG and wifi_trouble():
             page = views.WIFI_PAGE      # the badge's "PRESS B x2" hint leads straight here
-    elif b == BUTTON_UP and view == views.PAGED and page == views.WIFI_PAGE:
+    elif b == BUTTON_UP and view == views.DEBUG and page == views.WIFI_PAGE:
         link.rescan()
         show_toast("RESCANNING")
     elif b == BUTTON_DOWN:
@@ -479,16 +493,20 @@ def pace(t):
 
 
 def draw_frame(t):
+    global wait_sel
     if view == 0:
         th = theme_obj(prefs["theme"])
         th.draw(st, t)
         if demo == 1:
             gfx.text("DEMO", 136, 96, (255, 255, 255), font.sins, shadow=(0, 0, 0))
     else:
-        # Desktop, Paged and Waiting focus are opaque: the animation is paused behind them (no
-        # theme drawing, and pace() slows the loop). They are redrawn every frame because the
+        # Desktop and Debug mode are opaque: the animation is paused behind them (no theme
+        # drawing, and pace() slows the loop). They are redrawn every frame because the
         # firmware does not keep the previous one.
+        if wait_sel is not None and wait_sel >= len(st.waiting_list):
+            wait_sel = len(st.waiting_list) - 1 if st.waiting_list else None   # one was answered
         ctx.link, ctx.source, ctx.demo, ctx.wait_since = link, source, demo, wait_since
+        ctx.wait_sel = wait_sel
         views.draw(view, page, ctx, t)
     if toast is not None and time.ticks_diff(t, toast_t) < 1500:
         w = gfx.width(toast, font.sins) + 8
@@ -538,7 +556,7 @@ def update():
         set_demo(tether.demo_req % 3)
         tether.demo_req = None
     if tether.view_req is not None:
-        globals()["view"] = tether.view_req % 4
+        globals()["view"] = tether.view_req % 3
         tether.view_req = None
     if tether.key_req is not None:
         key = {"A": BUTTON_A, "B": BUTTON_B, "C": BUTTON_C, "UP": BUTTON_UP, "DOWN": BUTTON_DOWN}.get(tether.key_req)

@@ -1,4 +1,4 @@
-# Wi-Fi debug screen (the last page of Paged mode: press B twice). Shows what the badge sees and why a
+# Wi-Fi debug screen (the last page of Debug mode: press B twice). Shows what the badge sees and why a
 # network is failing, in plain words. The same text is available on the Mac
 # with: python3 tools/netdebug.py
 
@@ -23,7 +23,7 @@ def _fnt():
 
 
 def draw(link, tether, source, t, page=None):
-    """page: "4/4" when shown as a page of Paged mode (changes the title and footer)."""
+    """page: "3/3" when shown as a page of Debug mode (changes the title and footer)."""
     f = _fnt()
     gfx.box(0, 0, 160, 120, BG)
     gfx.box(0, 0, 160, 11, ACCENT)
