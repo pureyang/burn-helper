@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-"""Install or remove the Burn Helper bridge integration for Claude Code on this Mac.
+"""Install or remove the Burn Helper integration for Claude Code.
 
+On the Mac that runs the bridge (the badge talks to it):
     python3 bridge/install.py              add hooks + status line, start the bridge at login
     python3 bridge/install.py --dry-run    show the settings.json diff and plist, change nothing
     python3 bridge/install.py --uninstall  remove only what this script added
+
+On any other computer where you run Claude Code (Windows, Linux or another Mac), so its
+sessions show on the badge too:
+    python bridge/install.py --bridge http://<mac>:8787
+This adds the hooks and status line only, and puts the bridge's address in settings.json's
+"env", where every Claude Code session (and so every hook) picks it up. See
+docs/other-computers.md.
 
 Set BURN_HELPER_HOME to point at a different home directory (used for testing).
 With it set, launchctl is never called. Installs from older versions (the
@@ -19,9 +27,23 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PY = "/usr/bin/python3"
-HOOK_CMD = "%s %s" % (PY, os.path.join(HERE, "cc_hook.py"))
-STATUS_CMD = "%s %s" % (PY, os.path.join(HERE, "cc_statusline.py"))
+MAC = sys.platform == "darwin"
+WINDOWS = os.name == "nt"
+PY = "/usr/bin/python3" if MAC else sys.executable
+
+
+def command(script, py=PY, here=HERE, windows=WINDOWS):
+    """The command line Claude Code runs. On Windows: quoted, with forward slashes, which
+    work the same whichever shell runs it."""
+    path = os.path.join(here, script)
+    if windows:
+        return '"%s" "%s"' % (py.replace("\\", "/"), path.replace("\\", "/"))
+    return "%s %s" % (py, path)
+
+
+HOOK_CMD = command("cc_hook.py")
+STATUS_CMD = command("cc_statusline.py")
+ENV_KEYS = ("BURN_HELPER_BRIDGE_URL", "BURN_HELPER_TOKEN")      # set by --bridge / --token
 BRIDGE = os.path.join(HERE, "burn_helper_bridge.py")
 LABEL = "com.burnhelper.bridge"
 OLD_LABELS = ("com.heartsleft.bridge", "com.lexco.tufty-bridge")
@@ -39,7 +61,10 @@ LOGFILE = os.path.join(HOME, "Library", "Logs", "burn-helper.log")
 def is_ours(cmd):
     # Match by script name wherever the repo lives, so reinstalling from another
     # clone (the one-line installer uses ~/burn-helper) replaces the old entries.
-    return isinstance(cmd, str) and ("/bridge/cc_hook.py" in cmd or "/bridge/cc_statusline.py" in cmd)
+    if not isinstance(cmd, str):
+        return False
+    cmd = cmd.replace("\\", "/")
+    return "/bridge/cc_hook.py" in cmd or "/bridge/cc_statusline.py" in cmd
 
 
 def our_hook():
@@ -48,7 +73,7 @@ def our_hook():
 
 def load_settings():
     try:
-        with open(SETTINGS) as f:
+        with open(SETTINGS, encoding="utf-8") as f:
             text = f.read()
     except FileNotFoundError:
         return {}, ""
@@ -82,12 +107,23 @@ def strip_ours(settings):
     sl = settings.get("statusLine")
     if isinstance(sl, dict) and is_ours(sl.get("command")):
         del settings["statusLine"]
+    env = settings.get("env")
+    if isinstance(env, dict):
+        for k in ENV_KEYS:
+            env.pop(k, None)
+        if not env:
+            del settings["env"]
     return settings
 
 
-def add_ours(settings):
+def add_ours(settings, bridge_url=None, token=None):
     notes = []
     settings = strip_ours(settings)          # idempotent: remove then add once
+    if bridge_url:
+        env = settings.setdefault("env", {})
+        env["BURN_HELPER_BRIDGE_URL"] = bridge_url
+        if token:
+            env["BURN_HELPER_TOKEN"] = token
     hooks = settings.setdefault("hooks", {})
     for event in EVENTS:
         group = {"hooks": [our_hook()]}
@@ -131,7 +167,7 @@ def write_settings(settings, old_text):
         shutil.copy2(SETTINGS, bak)
         print("Backed up settings to", bak)
     tmp = SETTINGS + ".tmp-burn-helper"
-    with open(tmp, "w") as f:
+    with open(tmp, "w", encoding="utf-8") as f:
         f.write(json.dumps(settings, indent=2) + "\n")
     os.replace(tmp, SETTINGS)
     print("Updated", SETTINGS)
@@ -164,11 +200,25 @@ def main():
     ap.add_argument("--uninstall", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-launchd", action="store_true", help="only edit settings.json")
+    ap.add_argument("--bridge", metavar="URL",
+                    help="the bridge runs on another computer (your Mac): send this computer's events there")
+    ap.add_argument("--token", help="the bridge's BURN_HELPER_TOKEN, if you set one")
     args = ap.parse_args()
+    if args.bridge:
+        if not args.bridge.startswith(("http://", "https://")):
+            args.bridge = "http://" + args.bridge
+        if args.bridge.rstrip("/").count(":") < 2:
+            args.bridge = args.bridge.rstrip("/") + ":8787"
+        args.no_launchd = True               # the bridge runs elsewhere
+    elif not MAC and not args.uninstall:
+        sys.exit("The bridge runs on a Mac. On this computer, point the hooks at it instead:\n"
+                 "    python bridge/install.py --bridge http://<your-mac>:8787")
+    if not MAC:
+        args.no_launchd = True
 
     settings, old_text = load_settings()
     original = json.loads(old_text) if old_text.strip() else {}
-    domain = "gui/%d" % os.getuid()
+    domain = "gui/%d" % os.getuid() if MAC else ""
 
     if args.uninstall:
         new = strip_ours(settings)
@@ -185,7 +235,7 @@ def main():
                 remove_agent(domain, label)
         return 0
 
-    new, notes = add_ours(settings)
+    new, notes = add_ours(settings, args.bridge, args.token)
     if args.dry_run:
         print(diff(old_text, new) or "settings.json: already up to date")
         if not args.no_launchd:
@@ -215,7 +265,11 @@ def main():
             print("Bridge started. Logs:", LOGFILE)
     for n in notes:
         print("Note:", n)
-    print("Open sessions pick up the hooks automatically; restart them if events do not arrive.")
+    if args.bridge:
+        print("This computer now reports to the bridge at %s." % args.bridge)
+        print("Restart open Claude Code sessions so they pick up the new address.")
+    else:
+        print("Open sessions pick up the hooks automatically; restart them if events do not arrive.")
     return 0
 
 
