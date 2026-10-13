@@ -2,10 +2,13 @@
 """Claude Code hook: forward a minimal activity event to the Burn Helper bridge.
 
 Only session_id, event name, tool name, agent id and hostname leave this
-machine. Tool inputs and outputs are never sent. Always exits 0.
+machine, plus, for a notification, why Claude is waiting: "permission" (and for
+which tool) or "input". The notification's text, tool inputs and outputs are
+never sent. Always exits 0.
 """
 import json
 import os
+import re
 import socket
 import sys
 import urllib.request
@@ -15,6 +18,18 @@ def env(name, default=None):
     """BURN_HELPER_<name>, or the older HEARTS_LEFT_<name> or TUFTY_<name>, or default."""
     return (os.environ.get("BURN_HELPER_" + name) or os.environ.get("HEARTS_LEFT_" + name)
             or os.environ.get("TUFTY_" + name) or default)
+
+
+def why_waiting(d):
+    """(why, tool) for a Notification: ("permission", "Bash"), ("input", None) or ("other", None)."""
+    kind = str(d.get("notification_type") or "")
+    msg = str(d.get("message") or "")
+    if kind == "permission_prompt" or "permission" in msg.lower():
+        m = re.search(r"permission to use ([A-Za-z0-9_]{1,32})", msg)
+        return "permission", (m.group(1) if m else None)
+    if kind == "idle_prompt" or "waiting for your input" in msg.lower():
+        return "input", None
+    return "other", None
 
 
 def main():
@@ -31,6 +46,9 @@ def main():
         }
         if d.get("agent_id"):
             event["agent_id"] = d.get("agent_id")
+        if event["event"] == "Notification":
+            event["why"], tool = why_waiting(d)
+            event["tool"] = event["tool"] or tool
         url = (env("BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/hook"
         headers = {"Content-Type": "application/json"}
         token = env("TOKEN")

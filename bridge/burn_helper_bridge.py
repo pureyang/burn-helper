@@ -93,6 +93,12 @@ def _num(v, default=None):
         return default
 
 
+def _plain(text, n=20):
+    """Plain ASCII, spaces collapsed, at most n characters: safe for the badge's pixel fonts."""
+    clean = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in str(text))
+    return " ".join(clean.split())[:n]
+
+
 def _badge_name(d):
     """A short, plain-ASCII name for a session: its title, else its folder name."""
     raw = d.get("name") or os.path.basename(str(d.get("cwd") or "").rstrip("/")) or "session"
@@ -111,6 +117,7 @@ class Bridge:
         self.tools_date = self._today()
         self.subagents = {}            # session_id -> [count, last_event_ts]
         self.remote = {}               # session_id -> {"state": busy|idle|waiting, "ts": float}
+        self.why = {}                  # session_id -> "PERMISSION: BASH" / "YOUR REPLY", from its last notification
         # usage
         self.five_hour = None          # {"used": float, "resets_at": int, "rx": float}
         self.seven_day = None
@@ -224,7 +231,11 @@ class Bridge:
                 counts[status] += 1
                 if status == "waiting":
                     since = d.get("statusUpdatedAt")
-                    waiting_list.append((_badge_name(d), since / 1000.0 if isinstance(since, (int, float)) else time.time()))
+                    started = d.get("startedAt")
+                    folder = os.path.basename(str(d.get("cwd") or "").rstrip("/"))
+                    waiting_list.append((_badge_name(d), since / 1000.0 if isinstance(since, (int, float)) else time.time(),
+                                         _plain(folder), str(d.get("sessionId") or ""),
+                                         started / 1000.0 if isinstance(started, (int, float)) else None))
             else:
                 counts["idle"] += 1
         # drop cache entries for processes that went away
@@ -252,6 +263,13 @@ class Bridge:
                 self.tool_times.append(now)
                 self.tools_today += 1
             if sid:
+                if event == "Notification":
+                    why, tool = str(d.get("why") or ""), str(d.get("tool") or "")
+                    tool = "".join(ch for ch in tool if ch.isalnum() or ch == "_")[:20].upper()
+                    self.why[sid] = ("PERMISSION: " + tool if tool else "PERMISSION") if why == "permission" \
+                        else ("YOUR REPLY" if why == "input" else "")
+                elif event in BUSY_EVENTS or event in ("Stop", "SessionEnd"):
+                    self.why.pop(sid, None)            # it moved on: the old reason no longer applies
                 if event == "SubagentStart":
                     c = self.subagents.get(sid, [0, now])
                     self.subagents[sid] = [c[0] + 1, now]
@@ -346,6 +364,10 @@ class Bridge:
             five = self._window(self.five_hour, now)
             seven = self._window(self.seven_day, now)
             theme, theme_seq, last_active = self.theme, self.theme_seq, self.last_active
+            live = {w[3] for w in loc.get("waiting_list", [])}
+            for sid in [s for s in self.why if s not in live and s not in self.remote]:
+                del self.why[sid]
+            why = dict(self.why)
 
         busy = loc["busy"] + loc["shell"] + remote_busy
         waiting = loc["waiting"] + remote_waiting
@@ -374,8 +396,10 @@ class Bridge:
             "level": level,
             "busy": busy,
             "waiting": waiting,
-            # which local sessions are waiting, longest first (shown on the badge's Waiting focus)
-            "waiting_list": [{"n": n, "s": max(0, int(now - since))} for n, since in loc.get("waiting_list", [])],
+            # which local sessions are waiting, longest first (shown in the badge's Desktop mode)
+            "waiting_list": [{"n": n, "s": max(0, int(now - since)), "d": folder, "w": why.get(sid, ""),
+                              "a": max(0, int(now - started)) if started else 0}
+                             for n, since, folder, sid, started in loc.get("waiting_list", [])],
             "idle": loc["idle"],
             "sessions": loc["sessions"] + remote_live,
             "subagents": subagents,

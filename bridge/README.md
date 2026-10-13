@@ -42,7 +42,7 @@ change without reconfiguring anything.
 
 ```json
 {"v":1,"ts":1791575121,"level":4,"busy":6,"waiting":1,"idle":3,"sessions":9,
- "waiting_list":[{"n":"api-server","s":95}],
+ "waiting_list":[{"n":"api-server refactor","s":95,"d":"api-server","w":"PERMISSION: BASH","a":7800}],
  "subagents":1,"tpm":2,"tools_today":2,
  "five_hour":{"used":38.0,"resets_at":1791578721},
  "seven_day":{"used":12.0,"resets_at":1791834321},
@@ -59,7 +59,9 @@ change without reconfiguring anything.
   replaces this with its own 15 levels based on `busy` + `subagents` (see docs/how-it-works.md).
 - `waiting_list`: the local sessions waiting for you, longest first, at most 4: `n` is the
   session's title (or its folder name) cut to 20 plain characters, `s` how many seconds it has
-  waited. Remote sessions are counted in `waiting` but not named.
+  waited, `d` its folder's name (not the path), `w` what it needs (`PERMISSION: <TOOL>`,
+  `YOUR REPLY`, or empty when unknown) and `a` how many seconds the session has been running
+  (0 when unknown). Remote sessions are counted in `waiting` but not named.
 - `theme` is set from the phone panel (`POST /theme {"theme": "hero" | "gameshow" | "chocolates" | "auto"}`).
   `theme_seq` increases on every change so the badge can tell a new choice from an old one.
 
@@ -80,9 +82,13 @@ they only show up through the account-wide usage hearts.
 ## Privacy
 
 - The hook sends only the session id, event name, tool name, agent id and
-  hostname. Tool inputs and outputs never leave the machine.
-- `/status` contains counts only: no session names, paths or prompts. Anyone on
-  your LAN can read it and change the theme. Set `BURN_HELPER_TOKEN` to stop other LAN
+  hostname, plus for a notification whether Claude wants permission (and for which
+  tool) or your reply. Tool inputs and outputs and the notification's text never
+  leave the machine.
+- `/status` is mostly counts. For sessions waiting for you it also has their title
+  or folder name, the folder's name and what they need (see `waiting_list`); never
+  full paths, prompts or tool inputs. Anyone on your LAN can read it and change the
+  theme. Set `BURN_HELPER_TOKEN` to stop other LAN
   devices from posting fake activity.
 - `.key` files in `~/.claude/sessions` are never opened.
 
