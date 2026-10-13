@@ -45,8 +45,8 @@ those carefully.
 
 ![Wi-Fi debug screen (simulator render, placeholder names)](img/device_debug.png)
 
-**On the badge:** press **B** twice to open Paged mode. When Wi-Fi is not working it opens on its Wi-Fi debug
-page; otherwise press **C** until page 4/4. Each saved network gets a
+**On the badge:** press **B** twice to open Debug mode. When Wi-Fi is not working it opens on its Wi-Fi debug
+page; otherwise press **C** until page 3/3. Each saved network gets a
 line with its channel, signal strength and a verdict, and a plain-language hint sits at the
 bottom. Press **UP** there to rescan and retry immediately.
 

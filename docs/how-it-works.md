@@ -48,10 +48,12 @@ The tool-call rate still adds speed. Each theme has its own scenes for the gaits
 ![All 15 levels in the Zelda theme](img/tiers_hero.png)
 
 When any session is waiting for your input, Navi shouts "HEY! LISTEN!", the Running Man
-audience votes "YOUR MOVE!", or Forrest yells "JENNY!". Waiting focus (press **B** three
-times) lists the waiting sessions by name: the bridge sends each one's title, or its folder
-name, cut to 20 plain characters. Those names are shown on the badge and in the bridge's
-`/status` JSON on your network. The badge's four case LEDs can blink too, but they are off by default (hold DOWN for 2 s to switch them on).
+audience votes "YOUR MOVE!", or Forrest yells "JENNY!". Desktop mode (press **B** once)
+lists the waiting sessions by name, and **A**/**C** show each one in detail: whether it needs
+permission for a tool (and which) or your reply, its folder, and how long it has waited and
+run. The bridge sends each one's title or folder name, cut to 20 plain characters, and the
+reason only as a category and tool name, never the notification text. These details are shown
+on the badge and in the bridge's `/status` JSON on your network. The badge's four case LEDs can blink too, but they are off by default (hold DOWN for 2 s to switch them on).
 
 ## Usage meters
 

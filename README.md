@@ -15,10 +15,11 @@ Real screenshots from the badge (Zelda, Running Man and Forrest themes):
 
 ![Zelda on the badge](docs/img/device_hero.png) ![Running Man on the badge](docs/img/device_gameshow.png) ![Forrest on the badge](docs/img/device_chocolates.png)
 
-Press **B** to step from the animation through Desktop mode, Paged mode and Waiting focus
-(shown in demo mode, with example network details):
+Press **B** for Desktop mode: usage left and the sessions waiting for you, with **A**/**C**
+to see what each one needs. **B** again for Debug mode (shown in demo mode, with example
+network details):
 
-![Desktop mode on the badge](docs/img/device_desktop.png) ![Paged mode, usage left](docs/img/device_paged.png) ![Waiting focus](docs/img/device_waiting.png)
+![Desktop mode on the badge](docs/img/device_desktop.png) ![A waiting session in detail](docs/img/device_session.png) ![Debug mode](docs/img/device_debug_overview.png)
 
 ## Quick install
 
@@ -66,16 +67,15 @@ every theme and level, and [all 15 levels](docs/img/tiers_hero.png) side by side
 
 ## Screens
 
-**B** steps through four screens. None of them turns the screen off, and the three status
-screens pause the animation to save battery. Usage is always shown as what is **left**.
+**B** steps through three modes. None of them turns the screen off, and the two status
+modes pause the animation to save battery. Usage is always shown as what is **left**.
 
-- **Animation**: the theme.
-- **Desktop mode**: everything on one screen, from the data source and Wi-Fi to the levels and
-  usage left.
-- **Paged mode**: one topic per page, with A/C to turn pages: status, usage left, connection
-  and Wi-Fi debug. When Wi-Fi is not working it opens on the Wi-Fi page.
-- **Waiting focus**: how many sessions need you, the longest wait, and which sessions they
-  are (names need the updated bridge).
+- **Animation**: the theme. A/C switch themes here, and only here.
+- **Desktop mode**: usage left on the 5-hour and weekly limits, and the sessions waiting for
+  you, longest wait first. A/C step through those sessions one at a time: what each needs
+  (permission for a tool, or your reply), its folder, and how long it has waited and run.
+- **Debug mode**: everything on one page, then the connection and Wi-Fi debug pages (A/C turn
+  pages). When Wi-Fi is not working it opens on the Wi-Fi page.
 
 ## Buttons
 
@@ -85,10 +85,10 @@ Short presses act when you let go, so holding a button never also triggers its p
 
 | Button | Action |
 |---|---|
-| A / C | previous / next theme. In Paged mode: previous / next page |
-| B | next screen: animation, Desktop mode, Paged mode, Waiting focus, then the animation again. Hold 2 s for phone setup |
+| A / C | on the animation: previous / next theme. In Desktop mode: previous / next waiting session. In Debug mode: previous / next page |
+| B | next mode: animation, Desktop mode, Debug mode, then the animation again. Hold 2 s for phone setup |
 | Hold UP 2 s | demo, hero theme only: a 30-second ramp from asleep through all 15 levels to hyperspace, with sessions waiting now and then, and a DEMO tag. Hold again to stop |
-| UP | on the Wi-Fi page of Paged mode: rescan |
+| UP | on the Wi-Fi page of Debug mode: rescan |
 | DOWN | brightness: 10 levels, then 0% (screen off, the badge keeps running; a note shows for 3 s first), then full again |
 | Hold DOWN 2 s | case LEDs on or off (off by default). When on, they pulse with activity and flash when a session is waiting for you |
 | HOME | stock app menu; HOME again comes back |

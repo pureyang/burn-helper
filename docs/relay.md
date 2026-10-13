@@ -23,8 +23,8 @@ internet (a phone hotspot works) and gets the same status over HTTPS.
    up to 10 minutes, and it took about 20 in our test.
 
 That's it. Away from home the badge switches to the relay by itself, and back on your home
-network it uses the local bridge again. Desktop mode shows `DATA INTERNET RELAY` while it is on
-the relay.
+network it uses the local bridge again. Debug mode (press **B** twice) shows `DATA INTERNET RELAY`
+while it is on the relay.
 
 ## How it works
 
