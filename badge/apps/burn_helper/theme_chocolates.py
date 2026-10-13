@@ -111,10 +111,10 @@ def _press(g, j, pose):
 
 
 ACT_JOGGER = F.Spec(torso_w=5, hair="short", hat="cap", shins=F.SKIN, extra=_props)
-ACT_BEARD = F.Spec(torso_w=5, hair="long", hat="cap", beard=True, shins=F.SKIN, extra=_props)
 PRESS = F.Spec(torso_w=4, hair="short", forearms=F.TOP, extra=_press)
 
-# arm poses for the activities: (front arm, back arm, prop). The legs keep the jog or run.
+# arm poses for the activities: (front arm, back arm, prop), on the jog at every level (so he
+# has no beard while one plays, and there are half as many frames to build).
 ARMS = {
     "paddle_ready": ((40, 30), (-20, 40), "paddle"),
     "paddle_swing": ((88, 48), (-30, 50), "paddle"),
@@ -203,15 +203,12 @@ class Theme(S.Theme):
 
     def _build_actions(self, p_run):
         """Poses and props for the activity animations, built once (so nothing hitches the
-        first time one plays): every arm pose for the jog and for the run."""
-        self.arms_jog = {}
-        self.arms_run = {}
+        first time one plays): every arm pose on the jog."""
+        self.arms = {}
         for name in ARMS:
             af, ab, prop = ARMS[name]
-            self.arms_jog[name] = [gfx.to_image(g, p_run)
-                                   for g in F.cycle(ACT_JOGGER, "jog", STRIDES, af=af, ab=ab, prop=prop)]
-            self.arms_run[name] = [gfx.to_image(g, p_run)
-                                   for g in F.cycle(ACT_BEARD, "run", STRIDES, af=af, ab=ab, prop=prop)]
+            self.arms[name] = [gfx.to_image(g, p_run)
+                               for g in F.cycle(ACT_JOGGER, "jog", STRIDES, af=af, ab=ab, prop=prop)]
         self.shrimp = gfx.sprite(SHRIMP, SHRIMP_KEYS)
         self.big_box = gfx.sprite(BIG_BOX, BIG_BOX_KEYS)
         # standing still, and saluting with his hand at the cap's brim
@@ -492,7 +489,7 @@ class Theme(S.Theme):
         if arms is None:
             frames = self.jog if lv == S.WALK else (self.run if lv == S.RUN else self.sprint)
         else:
-            frames = (self.arms_jog if lv == S.WALK else self.arms_run)[arms]
+            frames = self.arms[arms]
             fps = fps * STRIDES / 8.0          # half the frames, each shown twice as long
         followers = 0 if lv == S.WALK else min(max(st.agents - 1, 1 if lv == S.SPRINT else 0), 7)
         for i in range(followers - 1, -1, -1):
