@@ -76,6 +76,7 @@ def mac_url():
 def save(relay):
     os.makedirs(B.STATE_DIR, exist_ok=True)
     fd = os.open(B.RELAY_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)                 # also when the file already existed with wider permissions
     with os.fdopen(fd, "w") as f:
         json.dump(relay, f)
 
@@ -97,9 +98,10 @@ def check(relay):
         return ("is not reachable from the internet yet: public DNS has no address for %s. Tailscale "
                 "says this takes up to 10 minutes after Funnel starts; it has taken about 20. If it "
                 "never appears, see docs/relay.md." % host)
-    r = subprocess.run(["curl", "-s", "-m", "15", "--resolve", "%s:443:%s" % (host, ip),
-                        "-H", "X-Burn-Helper-Key: " + relay["key"], relay["url"] + "/status"],
-                       capture_output=True, text=True)
+    # the key goes to curl on stdin, not its command line, where other users could see it in ps
+    r = subprocess.run(["curl", "-s", "-m", "15", "--resolve", "%s:443:%s" % (host, ip), "-K", "-",
+                        relay["url"] + "/status"],
+                       input='header = "X-Burn-Helper-Key: %s"\n' % relay["key"], capture_output=True, text=True)
     try:
         d = json.loads(r.stdout)
         return "answers from the internet through %s (level %s, %s agents busy)" % (ip, d.get("level"), d.get("busy"))

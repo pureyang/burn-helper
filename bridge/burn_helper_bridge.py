@@ -507,9 +507,10 @@ class RelayHandler(BaseHTTPRequestHandler):
     Keeps connections open (HTTP/1.1) so a badge on the relay does one TLS handshake, not one
     per poll. Nothing here can change the bridge's state.
     """
-    server_version = "BurnHelperRelay/1"
+    server_version = "BurnHelperRelay"
+    sys_version = ""                  # do not advertise the Python version to the internet
     protocol_version = "HTTP/1.1"
-    timeout = 60                      # drop idle connections after a minute
+    timeout = 20                      # drop idle connections; the badge polls every 5 s
 
     def log_message(self, fmt, *args):
         if VERBOSE:
@@ -529,13 +530,12 @@ class RelayHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            path, _, query = self.path.partition("?")
+            path = self.path.split("?", 1)[0]
             if path == "/health":
                 self._send(200, {"ok": True})
                 return
+            # the key only in a header: a key in the URL would end up in logs
             given = self.headers.get("X-Burn-Helper-Key") or ""
-            if not given and query.startswith("key="):
-                given = query[4:]
             if path != "/status" or RELAY is None or not hmac.compare_digest(given.encode(), RELAY["key"].encode()):
                 self._send(404, {"error": "not found"})
                 return
@@ -555,6 +555,31 @@ class Server(ThreadingHTTPServer):
         host, port = self.server_address[:2]
         self.server_name = host
         self.server_port = port
+
+
+class RelayServer(Server):
+    """The relay faces the internet: cap open connections so nobody can tie up the bridge."""
+    MAX_CONNECTIONS = 8
+
+    def __init__(self, *args, **kwargs):
+        self.slots = threading.BoundedSemaphore(self.MAX_CONNECTIONS)
+        Server.__init__(self, *args, **kwargs)
+
+    def process_request(self, request, client_address):
+        if not self.slots.acquire(blocking=False):
+            self.shutdown_request(request)        # full: drop it rather than queue it
+            return
+        try:
+            Server.process_request(self, request, client_address)
+        except Exception:  # noqa: BLE001
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            Server.process_request_thread(self, request, client_address)
+        finally:
+            self.slots.release()
 
 
 def scan_loop():
@@ -710,7 +735,7 @@ def main():
         threading.Thread(target=usb_loop, daemon=True).start()
     RELAY = load_relay()
     if RELAY is not None:
-        relay = Server(("127.0.0.1", RELAY_PORT), RelayHandler)
+        relay = RelayServer(("127.0.0.1", RELAY_PORT), RelayHandler)
         threading.Thread(target=relay.serve_forever, daemon=True).start()
         log("relay: %s -> 127.0.0.1:%d (Tailscale Funnel)" % (RELAY["url"], RELAY_PORT))
     httpd = Server((args.bind, args.port), Handler)
