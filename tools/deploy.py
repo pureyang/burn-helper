@@ -14,6 +14,7 @@ is using that FAT volume, so this remounts it read-write for the copy, then
 unmounts it (flushing writes) and resets.
 
 badge/secrets.py (git-ignored) is installed as /system/secrets.py when present.
+Works on macOS, Linux and Windows (use `py` instead of `python3` there; it needs pyserial).
 """
 import base64
 import hashlib
@@ -25,6 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 from badge import Badge  # noqa: E402
+import portable  # noqa: E402  (badge.py puts bridge/ on the path)
 
 SRC = os.path.join(REPO, "badge")
 # app folders from earlier versions, removed so the launcher does not list them
@@ -127,9 +129,19 @@ def pull(b, remote, local):
     open(local, "wb").write(base64.b64decode(out.strip()))
 
 
+def wait_for_port(timeout=30.0):
+    """After a restart the badge's USB port comes back after a few seconds (longer on Windows)."""
+    end = time.time() + timeout
+    while time.time() < end:
+        if os.environ.get("BADGE_PORT") or portable.find_ports():
+            return
+        time.sleep(0.5)
+
+
 def screenshot(path, wait=12.0, view=None, demo=None, page=None):
     """Ask the running app for its current frame over USB and save it as a PNG."""
     time.sleep(wait)
+    wait_for_port()
     b = Badge()
     try:
         if demo is not None:
