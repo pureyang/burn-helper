@@ -46,3 +46,85 @@ assert install.is_ours(win) and install.is_ours('"C:\\Users\\me\\burn-helper\\br
 assert not install.is_ours("say done")
 print("PASS install --bridge: env + hooks + status line, idempotent, token, clean uninstall; "
       "quoted forward-slash commands on Windows")
+
+# ---------------------------------------------------------------- the bridge on a Windows PC
+py = "C:\\Program Files\\Python312\\python.exe"
+bridge = "C:\\Users\\me\\burn-helper\\bridge\\burn_helper_bridge.py"
+log = "C:\\Users\\me\\AppData\\Local\\burn-helper\\burn-helper.log"
+cmd = install.login_command(py, bridge, log, exists=lambda p: True)
+assert cmd == ('"C:\\Program Files\\Python312\\pythonw.exe" "C:\\Users\\me\\burn-helper\\bridge\\burn_helper_bridge.py" '
+               '--log "C:\\Users\\me\\AppData\\Local\\burn-helper\\burn-helper.log"'), cmd
+assert install.login_command(py, bridge, log, exists=lambda p: False).startswith('"%s" ' % py), "no pythonw: python.exe"
+
+import relay  # noqa: E402
+ts = "C:\\Program Files\\Tailscale\\tailscale.exe"
+assert relay.find_tailscale(which=lambda n: None, exists=lambda p: p == ts, windows=True,
+                            program_files="C:\\Program Files") == ts
+assert relay.find_tailscale(which=lambda n: "C:\\bin\\tailscale.exe", exists=lambda p: False,
+                            windows=True) == "C:\\bin\\tailscale.exe", "on PATH wins"
+assert relay.find_tailscale(which=lambda n: None, exists=lambda p: False, windows=True) is None
+assert relay.find_tailscale(which=lambda n: None, exists=lambda p: p == relay.TS_APP, windows=False) == relay.TS_APP
+
+# a whole install, rehearsed as Windows (registry and processes are skipped under BURN_HELPER_HOME)
+whome = tempfile.mkdtemp()
+wsettings = os.path.join(whome, ".claude", "settings.json")
+os.makedirs(os.path.dirname(wsettings))
+with open(wsettings, "w") as f:
+    json.dump(mine, f)
+
+
+def run_win(*args):
+    r = subprocess.run([sys.executable, os.path.join(BRIDGE, "install.py")] + list(args),
+                       env=dict(os.environ, BURN_HELPER_HOME=whome, BURN_HELPER_TEST_OS="windows"),
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    with open(wsettings) as f:
+        return json.load(f), r.stdout
+
+
+wlog = os.path.join(whome, "AppData", "Local", "burn-helper", "burn-helper.log")
+s, out = run_win("--dry-run")
+assert "Would add the login item HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Burn Helper bridge" in out, out
+assert '--log "%s"' % wlog in out and "launchctl" not in out and "plist" not in out, out
+assert s == mine, "a dry run changes nothing"
+s, out = run_win()
+hook = s["hooks"]["Stop"][-1]["hooks"][0]["command"]
+assert hook.startswith('"') and "/bridge/cc_hook.py\"" in hook, hook
+assert "skipping the registry: Run value 'Burn Helper bridge'" in out and "Bridge started. Logs: %s" % wlog in out, out
+assert "Windows Firewall" in out and "launchctl" not in out, out
+s, out = run_win("--uninstall")
+assert s == mine and "delete Run value" in out, (s, out)
+print("PASS bridge on Windows: login item runs pythonw with --log, Tailscale found in Program Files, "
+      "install / dry run / uninstall rehearsed")
+
+# ---------------------------------------------------------------- joining a bridge
+lines = "\n".join(install.join_lines("192.168.1.20", "my-mac.tailnet.ts.net"))
+assert "bash -s -- --join http://my-mac.tailnet.ts.net:8787" in lines, lines
+assert "$env:BURN_HELPER_JOIN='http://my-mac.tailnet.ts.net:8787'; irm " in lines and "install.ps1 | iex" in lines
+assert "http://192.168.1.20:8787" in lines, "names the local address too"
+lines = "\n".join(install.join_lines("192.168.1.20", None, windows=True))
+assert "--join http://192.168.1.20:8787" in lines and "can change" in lines and "py " in lines, lines
+
+import http.server  # noqa: E402
+import threading  # noqa: E402
+
+
+class Health(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = b'{"ok": true}' if self.path == "/health" else b"{}"
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+srv = http.server.HTTPServer(("127.0.0.1", 0), Health)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+url = "http://127.0.0.1:%d" % srv.server_address[1]
+assert "answers" in install.check_bridge(url), install.check_bridge(url)
+srv.shutdown()
+assert "Can't reach" in install.check_bridge("http://127.0.0.1:9"), "nothing listening"
+print("PASS join: the lines to run on other computers, Tailscale name first; the bridge check")

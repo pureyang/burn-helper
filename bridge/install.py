@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
-"""Install or remove the Burn Helper integration for Claude Code.
+r"""Install or remove the Burn Helper integration for Claude Code.
 
-On the Mac that runs the bridge (the badge talks to it):
+On the computer that runs the bridge (the badge talks to it), a Mac or a Windows PC:
     python3 bridge/install.py              add hooks + status line, start the bridge at login
-    python3 bridge/install.py --dry-run    show the settings.json diff and plist, change nothing
+    python3 bridge/install.py --dry-run    show the settings.json diff and login item, change nothing
     python3 bridge/install.py --uninstall  remove only what this script added
+(On Windows: py bridge\install.py ...) The login item is a launchd agent on macOS and a
+value under HKCU\...\CurrentVersion\Run on Windows, which starts the bridge with the
+windowless pythonw.exe; neither needs admin rights.
 
-On any other computer where you run Claude Code (Windows, Linux or another Mac), so its
+On any other computer where you run Claude Code (Windows, Linux or a Mac), so its
 sessions show on the badge too:
-    python bridge/install.py --bridge http://<mac>:8787
+    python bridge/install.py --bridge http://<bridge-computer>:8787
 This adds the hooks and status line only, and puts the bridge's address in settings.json's
 "env", where every Claude Code session (and so every hook) picks it up. See
 docs/other-computers.md.
 
 Set BURN_HELPER_HOME to point at a different home directory (used for testing).
-With it set, launchctl is never called. Installs from older versions (the
-com.heartsleft.bridge and com.lexco.tufty-bridge login items) are replaced.
+With it set, launchctl, the registry and the bridge process are never touched, and
+BURN_HELPER_TEST_OS=windows makes this behave as on Windows. Installs from older versions
+(the com.heartsleft.bridge and com.lexco.tufty-bridge login items) are replaced.
 """
 import argparse
 import difflib
 import json
+import ntpath
 import os
 import shutil
 import subprocess
@@ -27,8 +32,14 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import portable  # noqa: E402
+
+TEST_HOME = os.environ.get("BURN_HELPER_HOME") or os.environ.get("HEARTS_LEFT_HOME") or os.environ.get("TUFTY_HOME")
 MAC = sys.platform == "darwin"
 WINDOWS = os.name == "nt"
+if TEST_HOME and os.environ.get("BURN_HELPER_TEST_OS") == "windows":
+    MAC, WINDOWS = False, True             # tests only: rehearse a Windows install on any computer
 PY = "/usr/bin/python3" if MAC else sys.executable
 
 
@@ -44,6 +55,8 @@ def command(script, py=PY, here=HERE, windows=WINDOWS):
 HOOK_CMD = command("cc_hook.py")
 STATUS_CMD = command("cc_statusline.py")
 ENV_KEYS = ("BURN_HELPER_BRIDGE_URL", "BURN_HELPER_TOKEN")      # set by --bridge / --token
+INSTALL_SH = "https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh"
+INSTALL_PS1 = "https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1"
 BRIDGE = os.path.join(HERE, "burn_helper_bridge.py")
 LABEL = "com.burnhelper.bridge"
 OLD_LABELS = ("com.heartsleft.bridge", "com.lexco.tufty-bridge")
@@ -51,11 +64,19 @@ EVENTS = ("PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "Suba
           "SubagentStop", "Notification", "SessionStart", "SessionEnd")
 TOOL_EVENTS = ("PostToolUse", "PostToolUseFailure")
 
-TEST_HOME = os.environ.get("BURN_HELPER_HOME") or os.environ.get("HEARTS_LEFT_HOME") or os.environ.get("TUFTY_HOME")
 HOME = os.path.expanduser(TEST_HOME or "~")
 SETTINGS = os.path.join(HOME, ".claude", "settings.json")
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
 LOGFILE = os.path.join(HOME, "Library", "Logs", "burn-helper.log")
+# the bridge's state folder (as in burn_helper_bridge.py), where it writes its process id
+STATE_DIR = os.path.expanduser(os.environ.get("BURN_HELPER_STATE_DIR") or os.environ.get("HEARTS_LEFT_STATE_DIR")
+                               or os.environ.get("TUFTY_STATE_DIR") or os.path.join(HOME, ".claude", "burn-helper"))
+PID_FILE = os.path.join(STATE_DIR, "bridge.pid")
+# Windows: the login item and the log
+RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+RUN_VALUE = "Burn Helper bridge"
+LOCAL_APPDATA = (None if TEST_HOME else os.environ.get("LOCALAPPDATA")) or os.path.join(HOME, "AppData", "Local")
+WIN_LOG = os.path.join(LOCAL_APPDATA, "burn-helper", "burn-helper.log")
 
 
 def is_ours(cmd):
@@ -189,6 +210,161 @@ def remove_agent(domain, label):
         print("Removed", plist)
 
 
+# ---------------------------------------------------------------- Windows: login item and process
+def pythonw(py, exists=os.path.exists):
+    """The windowless pythonw.exe next to python.exe, so the bridge runs without a console."""
+    w = ntpath.join(ntpath.dirname(py), "pythonw.exe")
+    return w if exists(w) else py
+
+
+def login_command(py, bridge, log, exists=os.path.exists):
+    """What Windows runs at sign-in (the Run value): quoted, so spaces in paths are fine."""
+    return '"%s" "%s" --log "%s"' % (pythonw(py, exists), bridge, log)
+
+
+def set_run_value(cmd):
+    if TEST_HOME:
+        print("(BURN_HELPER_HOME set: skipping the registry: Run value %r = %s)" % (RUN_VALUE, cmd))
+        return
+    import winreg
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+        winreg.SetValueEx(k, RUN_VALUE, 0, winreg.REG_SZ, cmd)
+    print("Added the login item: HKCU\\%s\\%s" % (RUN_KEY, RUN_VALUE))
+
+
+def delete_run_value():
+    if TEST_HOME:
+        print("(BURN_HELPER_HOME set: skipping the registry: delete Run value %r)" % RUN_VALUE)
+        return
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
+            winreg.DeleteValue(k, RUN_VALUE)
+        print("Removed the login item: HKCU\\%s\\%s" % (RUN_KEY, RUN_VALUE))
+    except FileNotFoundError:
+        pass
+
+
+def running_bridge_pid():
+    """The process id the running bridge wrote, if that process is still a Python."""
+    try:
+        with open(PID_FILE) as f:
+            pid = int(f.read().strip())
+    except (OSError, ValueError):
+        return None
+    if not portable.pid_alive(pid) or "python" not in portable.pid_command(pid).lower():
+        return None                       # gone, or the number now belongs to something else
+    return pid
+
+
+def stop_bridge():
+    """Stop a running bridge (Windows; launchd does this on macOS). True if one was running."""
+    if TEST_HOME:
+        print("(BURN_HELPER_HOME set: skipping stopping the bridge)")
+        return False
+    pid = running_bridge_pid()
+    if pid is None:
+        return False
+    subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+    for _ in range(30):                   # wait for it to let go of port 8787
+        if not portable.pid_alive(pid):
+            break
+        time.sleep(0.1)
+    return True
+
+
+def start_bridge():
+    """Start the bridge in the background, hidden, outliving this window (Windows)."""
+    if TEST_HOME:
+        print("(BURN_HELPER_HOME set: skipping starting the bridge)")
+        return True
+    os.makedirs(os.path.dirname(WIN_LOG), exist_ok=True)
+    argv = [pythonw(PY), BRIDGE, "--log", WIN_LOG]
+    detached = 0x00000008 | 0x00000200    # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    for breakaway in (0x01000000, 0):     # CREATE_BREAKAWAY_FROM_JOB, where the console allows it
+        try:
+            subprocess.Popen(argv, creationflags=detached | breakaway, close_fds=True, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except OSError:
+            continue
+    return False
+
+
+def restart_bridge():
+    """Restart the bridge so it reads its settings again (relay.py uses this). True if it did."""
+    if MAC:
+        r = subprocess.run(["launchctl", "kickstart", "-k", "gui/%d/%s" % (os.getuid(), LABEL)],
+                           capture_output=True, text=True)
+        return r.returncode == 0
+    if WINDOWS:
+        stop_bridge()
+        return start_bridge()
+    return False
+
+
+def this_computer():
+    """(address on the local network, Tailscale name or None): where other computers reach this bridge."""
+    import socket
+    lan = None
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))
+        lan = s.getsockname()[0]
+    except OSError:
+        pass
+    finally:
+        s.close()
+    name = None
+    try:
+        import relay
+        t = relay.find_tailscale()
+        if t:
+            out = subprocess.run([t, "status", "--json"], capture_output=True, text=True, timeout=5).stdout
+            st = json.loads(out)
+            if st.get("BackendState") == "Running":
+                name = ((st.get("Self") or {}).get("DNSName") or "").rstrip(".") or None
+    except Exception:  # noqa: BLE001
+        pass
+    return lan, name
+
+
+def join_lines(lan, name, port=8787, windows=WINDOWS):
+    """What to run on another computer so that it reports to this bridge."""
+    url = "http://%s:%d" % (name or lan or "<this-computer>", port)
+    again = "%s %s --join-help" % ("py" if windows else "python3", os.path.join(HERE, "install.py"))
+    lines = ["To add another computer, so its Claude Code agents show on the badge too, run this on it:",
+             "",
+             "  Mac or Linux, in Terminal:",
+             "    curl -fsSL %s | bash -s -- --join %s" % (INSTALL_SH, url),
+             "  Windows, in PowerShell:",
+             "    $env:BURN_HELPER_JOIN='%s'; irm %s | iex" % (url, INSTALL_PS1),
+             ""]
+    if name and lan:
+        lines += ["%s is this computer's Tailscale name, so this works from anywhere for computers on" % name,
+                  "your tailnet. One that isn't on it can use http://%s:%d while on this network." % (lan, port)]
+    elif lan:
+        lines += ["%s is this computer's address on this network, and it can change. With Tailscale on" % lan,
+                  "both computers, use this computer's Tailscale name instead: it works from anywhere."]
+    lines.append("To see this again: " + again)
+    return lines
+
+
+def check_bridge(url):
+    """Ask the bridge at url whether it is there. Returns a line to print."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/health", timeout=5) as r:
+            ok = json.load(r).get("ok")
+        if ok:
+            return "The bridge at %s answers." % url
+    except Exception as e:  # noqa: BLE001
+        return ("Can't reach the bridge at %s yet (%s). Check that the bridge computer is on, that this "
+                "computer can reach it (same network, or both on your tailnet) and, for a Windows bridge, "
+                "its firewall rule. The hooks are installed either way." % (url, e.__class__.__name__))
+    return "Something answered at %s, but it isn't a Burn Helper bridge." % url
+
+
 def diff(old_text, settings):
     new_text = json.dumps(settings, indent=2) + "\n"
     return "".join(difflib.unified_diff(old_text.splitlines(True), new_text.splitlines(True),
@@ -199,21 +375,26 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--uninstall", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--no-launchd", action="store_true", help="only edit settings.json")
+    ap.add_argument("--no-launchd", action="store_true", help="only edit settings.json (no login item)")
     ap.add_argument("--bridge", metavar="URL",
-                    help="the bridge runs on another computer (your Mac): send this computer's events there")
+                    help="the bridge runs on another computer: send this computer's events there")
     ap.add_argument("--token", help="the bridge's BURN_HELPER_TOKEN, if you set one")
+    ap.add_argument("--join-help", action="store_true",
+                    help="print what to run on another computer to add it to this bridge")
     args = ap.parse_args()
+    if args.join_help:
+        print("\n".join(join_lines(*this_computer())))
+        return 0
     if args.bridge:
         if not args.bridge.startswith(("http://", "https://")):
             args.bridge = "http://" + args.bridge
         if args.bridge.rstrip("/").count(":") < 2:
             args.bridge = args.bridge.rstrip("/") + ":8787"
         args.no_launchd = True               # the bridge runs elsewhere
-    elif not MAC and not args.uninstall:
-        sys.exit("The bridge runs on a Mac. On this computer, point the hooks at it instead:\n"
-                 "    python bridge/install.py --bridge http://<your-mac>:8787")
-    if not MAC:
+    elif not (MAC or WINDOWS) and not args.uninstall:
+        sys.exit("The bridge runs on a Mac or a Windows PC. On this computer, point the hooks at one:\n"
+                 "    python3 bridge/install.py --bridge http://<bridge-computer>:8787")
+    if not (MAC or WINDOWS):
         args.no_launchd = True
 
     settings, old_text = load_settings()
@@ -224,23 +405,36 @@ def main():
         new = strip_ours(settings)
         if args.dry_run:
             print(diff(old_text, new) or "settings.json: nothing to remove")
-            print("Would remove", PLIST, "and run launchctl bootout", domain + "/" + LABEL)
+            if WINDOWS:
+                print("Would remove the login item HKCU\\%s\\%s and stop the bridge" % (RUN_KEY, RUN_VALUE))
+            else:
+                print("Would remove", PLIST, "and run launchctl bootout", domain + "/" + LABEL)
             return 0
         if new != original:
             write_settings(new, old_text)
         else:
             print("settings.json: nothing of ours to remove")
         if not args.no_launchd:
-            for label in (LABEL,) + OLD_LABELS:
-                remove_agent(domain, label)
+            if WINDOWS:
+                delete_run_value()
+                if stop_bridge():
+                    print("Stopped the bridge.")
+            else:
+                for label in (LABEL,) + OLD_LABELS:
+                    remove_agent(domain, label)
         return 0
 
     new, notes = add_ours(settings, args.bridge, args.token)
     if args.dry_run:
         print(diff(old_text, new) or "settings.json: already up to date")
         if not args.no_launchd:
-            print("\nWould write %s:\n%s" % (PLIST, plist_text()))
-            print("Would run: launchctl bootout %s/%s ; launchctl bootstrap %s %s" % (domain, LABEL, domain, PLIST))
+            if WINDOWS:
+                print("\nWould add the login item HKCU\\%s\\%s:\n  %s"
+                      % (RUN_KEY, RUN_VALUE, login_command(PY, BRIDGE, WIN_LOG)))
+                print("Would stop a running bridge and start it now, logging to", WIN_LOG)
+            else:
+                print("\nWould write %s:\n%s" % (PLIST, plist_text()))
+                print("Would run: launchctl bootout %s/%s ; launchctl bootstrap %s %s" % (domain, LABEL, domain, PLIST))
         for n in notes:
             print("Note:", n)
         return 0
@@ -249,7 +443,17 @@ def main():
         write_settings(new, old_text)
     else:
         print("settings.json already up to date")
-    if not args.no_launchd:
+    if not args.no_launchd and WINDOWS:
+        set_run_value(login_command(PY, BRIDGE, WIN_LOG))
+        if stop_bridge():
+            print("Stopped the bridge that was running.")
+        if start_bridge():
+            print("Bridge started. Logs:", WIN_LOG)
+        else:
+            print("Could not start the bridge; it starts at your next sign-in. Logs:", WIN_LOG)
+        notes.append("Windows Firewall must let the badge reach this PC: inbound TCP port 8787 on a Private "
+                     "network (install.ps1 offers to add the rule).")
+    elif not args.no_launchd:
         os.makedirs(os.path.dirname(PLIST), exist_ok=True)
         os.makedirs(os.path.dirname(LOGFILE), exist_ok=True)
         with open(PLIST, "w") as f:
@@ -267,6 +471,7 @@ def main():
         print("Note:", n)
     if args.bridge:
         print("This computer now reports to the bridge at %s." % args.bridge)
+        print(check_bridge(args.bridge))
         print("Restart open Claude Code sessions so they pick up the new address.")
     else:
         print("Open sessions pick up the hooks automatically; restart them if events do not arrive.")
