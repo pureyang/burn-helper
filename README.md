@@ -21,7 +21,18 @@ network details):
 
 ![Desktop mode on the badge](docs/img/device_desktop.png) ![A waiting session in detail](docs/img/device_session.png) ![Debug mode](docs/img/device_debug_overview.png)
 
-## Quick install
+## Install
+
+There are three ways to set it up, from simplest to most involved. Everyone starts with the first;
+the other two add to it, on their own or together:
+
+| Setup | What it gives you | What you add |
+|---|---|---|
+| [1. One Mac, at home](#1-one-mac-at-home) | The badge shows the agents on your Mac, over the USB cable or your home Wi-Fi | The one-line installer |
+| [2. Away from home](#2-away-from-home) | The badge works on any Wi-Fi with internet, such as a phone hotspot or a conference network, while the Mac stays home | A free Tailscale account and one command on the Mac |
+| [3. More computers](#3-more-computers) | Agents on your Windows PCs, Linux boxes or other Macs count too | One command on each computer |
+
+### 1. One Mac, at home
 
 You need a Mac, the badge, a USB-C **data** cable, and Claude Code already set up (run it once).
 Plug the badge in, then paste this into Terminal:
@@ -40,24 +51,44 @@ The installer asks before each change. It:
    badge joins the 2.4 GHz side. Skip it and set Wi-Fi from your phone later (hold **B**).
 4. Copies the app onto the badge and checks that it starts.
 
-If the badge stops answering, the installer asks you to press its **RESET** button and carries
-on once it responds.
+That's all for this setup. On the cable the badge needs no Wi-Fi at all; unplugged, it finds the
+bridge on your network by itself. If the badge stops answering during the install, the installer
+asks you to press its **RESET** button and carries on once it responds.
 
 Handy options (after `| bash -s --`): `--yes` (no questions), `--no-flash`, `--dry-run`,
 `--uninstall`. Wi-Fi not connecting? See [Wi-Fi troubleshooting](docs/wifi.md#wi-fi-troubleshooting).
 
-### Claude Code on other computers too
+### 2. Away from home
 
-The badge only counts sessions on the Mac until you point your other computers at it. On each
-Windows PC where you run Claude Code, in PowerShell:
+On another network the badge can't find the bridge by itself, so the Mac publishes a small
+read-only relay through your own Tailscale account. The badge switches to it after about 10
+seconds without the bridge nearby, and back again when you're home.
+
+1. Install [Tailscale](https://tailscale.com/download) on the Mac and sign in (the free plan works).
+2. On the Mac: `python3 ~/burn-helper/bridge/relay.py on`
+3. Plug the badge into the Mac once. It shows **INTERNET RELAY READY**.
+4. Wherever you are, join the badge to the local Wi-Fi from your phone (hold **B**). A phone
+   hotspot works; on iPhone, turn on *Maximize Compatibility* so it runs at 2.4 GHz.
+
+Keep the Mac awake and online while you're away. The first time, Tailscale's public address
+can take 10 to 20 minutes to appear; `relay.py status` tells you when it answers. Details and
+troubleshooting: [away from home](docs/relay.md).
+
+### 3. More computers
+
+The badge counts the sessions on the Mac. To count the agents you run on other computers too,
+point each one at the Mac. It needs Python 3 there (`py --version`). On Windows, in PowerShell:
 
 ```powershell
 git clone https://github.com/pureyang/burn-helper $HOME\burn-helper
 py $HOME\burn-helper\bridge\install.py --bridge http://<your-mac>:8787
 ```
 
-Then restart Claude Code there. With the Mac's Tailscale name as `<your-mac>` it works away from
-home too. Linux, other Macs and how to check it: [agents on other computers](docs/other-computers.md).
+On Linux or another Mac it's the same with `python3`. Then restart Claude Code on that computer.
+For `<your-mac>`, use the Mac's IP address if the computer is only ever on your home network, or
+the Mac's Tailscale name if it's on your tailnet, which works from anywhere. (The relay from
+setup 2 won't do here: its `https://` address is read-only, for the badge.) Step by step, with a check that it
+works: [other computers](docs/other-computers.md).
 
 ## What the badge shows
 
@@ -110,13 +141,12 @@ Short presses act when you let go, so holding a button never also triggers its p
 
 ## Wi-Fi in short
 
-The badge's radio is 2.4 GHz only. A combined 2.4/5 GHz network works under its normal name,
-and the badge must be on the same network as the Mac. Hold **B** for 2 seconds to set Wi-Fi up
+The badge's radio is 2.4 GHz only. A combined 2.4/5 GHz network works under its normal name.
+At home the badge must be on the same network as the Mac. Hold **B** for 2 seconds to set Wi-Fi up
 from your phone: setup stays open, joins the network on the badge and shows the result. A wrong
 password never reports an error on this radio, the badge just stays in "joining". Details,
 troubleshooting and shipping badges with an event network are in [docs/wifi.md](docs/wifi.md).
-Away from home, the badge can reach your Mac through your own Tailscale account: see
-[docs/relay.md](docs/relay.md).
+Away from home, see [setup 2](#2-away-from-home).
 
 ## Documentation
 

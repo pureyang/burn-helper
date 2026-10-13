@@ -12,7 +12,12 @@ activity animations, and their status line feeds the usage hearts.
   tailnet, use the Mac's Tailscale name (`tailscale status` lists it), and it works at home and
   away. On the same home network, the Mac's IP address also works (System Settings → Network),
   but it can change.
-- Not the relay's public `ts.net` address: that one is read-only on purpose, for the badge.
+- Not the relay's `https://` address from [away from home](relay.md): that one is read-only on
+  purpose, for the badge. The Mac's Tailscale name with `http://` and port 8787 is the right one;
+  it only answers computers on your tailnet.
+
+This works with the badge at home or [away from home](relay.md): the computers report to the
+Mac, and the badge reads from the Mac however it reaches it.
 
 ## Windows (PowerShell)
 
