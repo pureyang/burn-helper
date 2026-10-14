@@ -25,11 +25,13 @@ import views  # noqa: E402
 THEMES = (("hero", "Hero", theme_hero), ("gameshow", "Game show", theme_gameshow),
           ("chocolates", "Chocolates", theme_chocolates))
 # the sessions waiting in the examples, longest wait first, as the bridge sends them
+# (names: one set with /rename, one Claude Code made up, one from another computer's hook, and one
+# with no name at all, which only an older Claude Code leaves)
 ALL = [
     {"n": "api-server refactor", "s": 720, "d": "api-server", "w": "PERMISSION: BASH", "a": 7800, "i": "22441a", "u": 0},
-    {"n": "docs-site", "s": 360, "d": "docs-site", "w": "YOUR REPLY", "a": 1500, "i": "9b1e04", "u": 0},
-    {"n": "web-app", "s": 180, "d": "web-app", "w": "YOUR REPLY", "a": 600, "i": "7f3a2c", "u": 1},
-    {"n": "laptop", "s": 60, "d": "laptop", "w": "YOUR REPLY", "a": 0, "i": "c0d5aa", "u": 1},
+    {"n": "docs-site-amber-42", "s": 360, "d": "docs-site", "w": "YOUR REPLY", "a": 1500, "i": "9b1e04", "u": 0},
+    {"n": "math homework helper", "s": 180, "d": "math", "w": "YOUR REPLY", "a": 0, "i": "c0d5aa", "u": 0},
+    {"n": "web-app", "s": 60, "d": "web-app", "w": "YOUR REPLY", "a": 600, "i": "7f3a2c", "u": 1},
 ]
 COUNTS = (0, 1, 3, 4)
 OUT = os.path.join(P.OUT, "wbar")
@@ -92,7 +94,7 @@ def render_all():
 
 # screenshots from the badge itself, if they were taken (tools/deploy.py --shot-only), and what they show
 DEVICE = (("device_dev_wait1.png", "One waiting: its name stays"),
-          ("device_dev_wait2a.png", "Two waiting: an unnamed one, in grey, 2/2"),
+          ("device_dev_wait2a.png", "Two waiting: they take turns, with a counter"),
           ("device_dev_detail_unnamed.png", "Desktop mode, the same session in detail"))
 
 
@@ -104,7 +106,7 @@ def device_strip():
                    % (uri(os.path.join(OUT, f)), c, c) for f, c in have)
     return ('<section class="view" aria-labelledby="dev-h"><h2 id="dev-h">On the badge itself</h2>'
             '<div class="pair three">%s</div><p class="small muted">Screenshots taken from the badge running its '
-            'demo, which has two sessions waiting, one of them unnamed.</p></section>' % figs)
+            'demo, which has two sessions waiting.</p></section>' % figs)
 
 
 def build():
@@ -187,19 +189,19 @@ p{margin:0;max-width:72ch}
   <header style="display:grid;gap:10px">
     <div class="eyebrow">Burn Helper badge · animation screen and Desktop mode <span class="chip">on the badge now</span></div>
     <h1>Show which sessions are waiting on you</h1>
-    <p class="muted">When a session needs your input, the badge's caption line turns into a waiting bar with its name.
-    Several waiting sessions take turns. Sessions you never named get a readable fallback. Every screen below is
-    drawn by the badge's own code; pick a state and the screens follow.</p>
+    <p class="muted">When a session needs your input, the badge's caption line turns into a waiting bar with the
+    session's name, the same name Claude Code shows. Several waiting sessions take turns every 2 seconds. Every screen
+    below is drawn by the badge's own code; pick a state and the screens follow.</p>
   </header>
 
   <div class="controls" role="group" aria-label="Badge state">
     <div class="ctl"><span>Sessions waiting</span>
       <div class="seg" id="count"><button type="button" data-n="0">None</button><button type="button" data-n="1">One</button><button type="button" data-n="3" aria-pressed="true">Three</button><button type="button" data-n="4">Four</button></div></div>
     <div class="ctl"><span>Names</span>
-      <label class="toggle"><input type="checkbox" id="unnamed" checked> Include unnamed sessions</label></div>
+      <label class="toggle"><input type="checkbox" id="unnamed" checked> Include one with no name</label></div>
     <div class="ctl"><span>Theme</span><div class="seg" id="theme"></div></div>
     <div class="ctl"><span>Cycle</span>
-      <div class="seg" id="speed"><button type="button" data-ms="2000">Fast</button><button type="button" data-ms="4000" aria-pressed="true">Normal (the badge)</button><button type="button" data-ms="0">Paused</button></div></div>
+      <div class="seg" id="speed"><button type="button" data-ms="2000" aria-pressed="true">Fast (the badge)</button><button type="button" data-ms="4000">Slow</button><button type="button" data-ms="0">Paused</button></div></div>
   </div>
 
   <div class="views">
@@ -214,9 +216,9 @@ p{margin:0;max-width:72ch}
       <h2 id="d-h">Desktop mode (press B)</h2>
       <div class="pair">
         <figure><img id="desk" alt="Desktop mode: usage left and the sessions waiting" width="160" height="120"><figcaption>The list, longest wait first</figcaption></figure>
-        <figure id="detailfig"><img id="detail" alt="Desktop mode: one waiting session in detail" width="160" height="120"><figcaption>A/C: one in detail (an unnamed one here)</figcaption></figure>
+        <figure id="detailfig"><img id="detail" alt="Desktop mode: one waiting session in detail" width="160" height="120"><figcaption>A/C: one in detail (the one from another computer here)</figcaption></figure>
       </div>
-      <p class="small muted">Desktop mode uses the same names, so an unnamed session reads the same in both places.</p>
+      <p class="small muted">Desktop mode uses the same names, so a session reads the same in both places.</p>
     </section>
   </div>
 
@@ -228,13 +230,13 @@ p{margin:0;max-width:72ch}
       <li>Shown as <span class="mono">WAITING name</span>, the label in amber.</li>
       <li>Gone as soon as you answer it.</li></ul></div>
     <div class="rule"><h3>Several waiting</h3><ul>
-      <li>Names take turns every 4 s, longest wait first, with a counter (<span class="mono">2/3</span>).</li>
+      <li>Names take turns every 2 s, longest wait first, with a counter (<span class="mono">2/3</span>).</li>
       <li>Up to 4 at a time, the same 4 Desktop mode lists.</li>
-      <li>Sessions on your other computers count too.</li></ul></div>
-    <div class="rule"><h3>No name given</h3><ul>
-      <li>Falls back to the folder plus the start of the session id: <span class="mono">web-app · 7f3a2c</span>, in grey.</li>
-      <li>A long folder is shortened, never the id, so two sessions in one folder stay apart.</li>
-      <li>A session on another computer shows that computer's name and id.</li></ul></div>
+      <li>Sessions on your other computers count too, under their own names.</li></ul></div>
+    <div class="rule"><h3>Which name</h3><ul>
+      <li>The session's Claude Code name: the one you set with <span class="mono">/rename</span>, or the one Claude Code gave it (<span class="mono">docs-site-amber-42</span>).</li>
+      <li>Sent whole, up to 40 characters; the badge fits it to the screen.</li>
+      <li>Only a session with no name at all (an older Claude Code) shows its folder and id in grey: <span class="mono">web-app · 7f3a2c</span>.</li></ul></div>
   </section>
 
   <section class="how" aria-labelledby="how-h">
@@ -243,9 +245,9 @@ p{margin:0;max-width:72ch}
       <li>The bridge reads Claude Code's session files and hook events, and sends the waiting sessions in
       <span class="mono">/status</span>: name, how long each has waited, folder, what it needs, the first 6
       characters of its id, and whether it has a name of its own.</li>
-      <li>Names come from what you set with <span class="mono">/rename</span>. Without one, the badge shows the
-      folder and the id. Sessions on joined computers have no folder there, so they show the computer's name.</li>
-      <li>The badge picks which name to show from the clock, so the bar turns every 4 seconds without any extra
+      <li>The name is the one in Claude Code's session file. On a joined computer, its hook looks the name up in
+      that computer's session files and sends it with the "waiting" event; nothing else about the session goes along.</li>
+      <li>The badge picks which name to show from the clock, so the bar turns every 2 seconds without any extra
       traffic. Nothing changes on screen when no session is waiting.</li>
     </ol>
   </section>
@@ -253,7 +255,7 @@ p{margin:0;max-width:72ch}
 <script>
 (function () {
   var D = @@DATA@@;
-  var state = {n: 3, unnamed: true, theme: D.themes[0][0], ms: 4000, i: 0}, timer = null;
+  var state = {n: 3, unnamed: true, theme: D.themes[0][0], ms: D.cycle, i: 0}, timer = null;
   var themeSeg = document.getElementById("theme");
   D.themes.forEach(function (t, k) {
     var b = document.createElement("button"); b.type = "button"; b.dataset.t = t[0]; b.textContent = t[1];
