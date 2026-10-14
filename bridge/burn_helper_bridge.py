@@ -344,6 +344,12 @@ class Bridge:
                 if used is None:
                     continue
                 resets = int(_num(w.get("resets_at"), 0) or 0)
+                old = getattr(self, key)
+                if old and resets and old.get("resets_at"):
+                    if resets < old["resets_at"]:
+                        continue        # an idle session still reporting a window that has ended
+                    if resets == old["resets_at"]:
+                        used = max(used, old["used"])   # same window: usage only goes up
                 setattr(self, key, {"used": round(used, 1), "resets_at": resets, "rx": now})
                 changed = True
             if changed:
