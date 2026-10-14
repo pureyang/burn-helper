@@ -67,7 +67,9 @@ Linux, shows when the connection gets through.
   and hearts status line the bridge uses, plus `BURN_HELPER_BRIDGE_URL` in its `env` section, so
   every Claude Code session there knows where to send. Nothing runs in the background on it.
 - What it sends: the session id, event name, tool name and the computer's name, plus the usage
-  numbers from the status line. Never prompts, file names, commands or tool output.
+  numbers from the status line. When a session starts waiting for you, also its name (as Claude
+  Code shows it) and its folder's name, so the badge can say which one. Never prompts, file
+  names, commands or tool output.
 - If you already have a status line there, it is left alone, and that computer's usage won't
   feed the hearts. That is also the way to go if it signs into a different Claude account, so
   the hearts don't mix two accounts.

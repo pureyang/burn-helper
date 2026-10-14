@@ -63,13 +63,14 @@ change without reconfiguring anything.
   sessions on other machines. A local session that has said busy or shell for 30 minutes with no
   hook event from it is counted as idle instead: its status is stuck, or what is running is a
   server rather than an agent.
-- `waiting_list`: the local sessions waiting for you, longest first, at most 4: `n` is the
-  session's title (or its folder name) cut to 20 plain characters, `s` how many seconds it has
+- `waiting_list`: the sessions waiting for you, longest first, at most 4: `n` is the
+  session's name as Claude Code shows it (set with /rename, or the one Claude Code made up), in
+  plain characters, whole up to 40, `s` how many seconds it has
   waited, `d` its folder's name (not the path), `w` what it needs (`PERMISSION: <TOOL>`,
   `YOUR REPLY`, or empty when unknown), `a` how many seconds the session has been running
   (0 when unknown), `i` the first 6 characters of its id and `u` 1 when it has no name of its own
-  (the badge then shows "folder · id"). Sessions waiting on joined computers are listed under
-  their computer's name.
+  (the badge then shows "folder · id"). Sessions waiting on joined computers are listed by the
+  name their computer's hook sends with the waiting event, or the computer's name.
 - `ev`: what the agents just did, for the badge's one-shot animations, oldest first: the latest
   6 from the last 10 seconds, each `[number, category, ms ago]`. Categories: `edit`, `read`,
   `shell`, `web` (from the tool of a PostToolUse), `fail` (PostToolUseFailure), `spawn` and
