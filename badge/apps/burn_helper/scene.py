@@ -69,7 +69,8 @@ class Status:
         self.agents = 0         # busy sessions + running subagents
         self.tier = 0           # 0 none working, 1..MAX_TIER (see tier_for)
         self.waiting = 0
-        self.waiting_list = []  # [{n: name, s: seconds waiting, d: folder, w: why, a: session age}], longest first
+        self.waiting_list = []  # [{n: name, s: seconds waiting, d: folder, w: why, a: session age,
+        #                           i: start of its id, u: 1 when unnamed}], longest first
         self.idle = 0
         self.sessions = 0
         self.subagents = 0
@@ -120,7 +121,7 @@ class Status:
             try:
                 wl.append({"n": str(w.get("n") or "session")[:24], "s": int(w.get("s") or 0),
                            "d": str(w.get("d") or "")[:24], "w": str(w.get("w") or "")[:24],
-                           "a": int(w.get("a") or 0)})
+                           "a": int(w.get("a") or 0), "i": str(w.get("i") or "")[:6], "u": 1 if w.get("u") else 0})
             except (AttributeError, TypeError, ValueError):
                 pass
         self.waiting_list = wl[:4]
@@ -300,6 +301,51 @@ class Theme:
 
     def render(self, st, t):
         pass
+
+
+# The waiting bar: while sessions wait for you, the caption line names them, one at a time.
+WAIT_CYCLE_MS = 4000
+WAIT_AMBER = (251, 191, 36)
+WAIT_BG = (20, 18, 14)
+WAIT_DIM = (150, 156, 168)
+
+
+def session_label(w):
+    """A waiting session's name, or "folder · id" when it has none of its own."""
+    if w.get("u") and w.get("i"):
+        return "%s \xb7 %s" % (w.get("d") or w.get("n") or "session", w["i"])
+    return w.get("n") or "session"
+
+
+def draw_waiting_bar(st, t, y=108):
+    """The caption line while sessions wait for you. One waiting: its name stays. Several: they
+    take turns every 4 s, longest wait first, with a counter. Unnamed ones show "folder · id"
+    in grey."""
+    wl = st.waiting_list
+    gfx.box(0, y, 160, 12, WAIT_BG)
+    gfx.box(0, y, 3, 12, WAIT_AMBER)
+    x = 6
+    gfx.text("WAITING", x, y - 1, WAIT_AMBER, font.sins)
+    x += gfx.width("WAITING", font.sins) + 5
+    if not wl:              # an older bridge sends only the count
+        gfx.text("%d SESSION%s" % (st.waiting, "" if st.waiting == 1 else "S"), x, y - 1, (255, 255, 255), font.sins)
+        return
+    n = len(wl)
+    k = (t // WAIT_CYCLE_MS) % n
+    w = wl[k]
+    count = "%d/%d" % (k + 1, n) if n > 1 else ""
+    right = 157 - gfx.width(count, font.sins) if count else 157
+    room = right - x - 4
+    if w.get("u") and w.get("i"):
+        # unnamed: shorten the folder, never the id (it tells two sessions in one folder apart)
+        tail = " \xb7 " + w["i"]
+        folder = w.get("d") or w.get("n") or "session"
+        name = gfx.fit(folder, room - gfx.width(tail, font.sins), font.sins) + tail
+    else:
+        name = gfx.fit(session_label(w), room, font.sins)
+    gfx.text(name, x, y - 1, WAIT_DIM if w.get("u") else (255, 255, 255), font.sins)
+    if count:
+        gfx.text(count, right, y - 1, WAIT_DIM, font.sins)
 
 
 def blink(t, period=500):

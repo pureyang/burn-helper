@@ -407,6 +407,9 @@ class Theme(S.Theme):
             gfx.text("?", 62, 4, RED, font.sins)
 
     def draw_caption(self, st, t):
+        if st.online and st.waiting:
+            S.draw_waiting_bar(st, t)     # who is waiting, one name at a time
+            return
         gfx.box(0, 108, 160, 12, BLACK)
         msg = self.caption(st, t)
         gfx.ctext(gfx.fit(msg, 156, font.sins), 80, 107, WHITE, font.sins)
@@ -416,8 +419,6 @@ class Theme(S.Theme):
             return st.net or "SEARCHING FOR BRIDGE..."
         if self.action in CAPTIONS and self.acting(t) is not None:
             return CAPTIONS[self.action]
-        if st.waiting and (t // 2500) % 2 == 0:
-            return ("1 QUEST NEEDS YOU!" if st.waiting == 1 else "%d QUESTS NEED YOU!" % st.waiting)
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
             return "LOW HEARTS! REFILL IN " + gfx.countdown(st.left5)
         tc = S.tier_caption(st, t, "HYPERSPACE JUMP!")

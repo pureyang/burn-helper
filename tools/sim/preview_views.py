@@ -31,7 +31,7 @@ def status(waiting=0):
     st.waiting_list = [
         {"n": "api-server refactor", "s": 95, "d": "api-server", "w": "PERMISSION: BASH", "a": 7800},
         {"n": "docs-site", "s": 12, "d": "docs-site", "w": "YOUR REPLY", "a": 1500},
-        {"n": "fix flaky login test on ci", "s": 8, "d": "web-app", "w": "", "a": 0},
+        {"n": "web-app", "s": 8, "d": "web-app", "w": "", "a": 0, "i": "7f3a2c", "u": 1},
         {"n": "notes", "s": 3, "d": "notes", "w": "YOUR REPLY", "a": 60},
     ][:waiting]
     return st

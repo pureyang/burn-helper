@@ -198,7 +198,7 @@ DEMO_CYCLE_MS = 30000
 DEMO_AGENTS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 40, 63, 88, 128)   # one count inside each tier
 DEMO_WAITS = {3: 1, 7: 2, 12: 1}             # tier -> sessions waiting while it runs
 DEMO_WAITING = ({"n": "api-server refactor", "s": 95, "d": "api-server", "w": "PERMISSION: BASH", "a": 7800},
-                {"n": "docs-site", "s": 12, "d": "docs-site", "w": "YOUR REPLY", "a": 1500})
+                {"n": "docs-site", "s": 12, "d": "docs-site", "w": "YOUR REPLY", "a": 1500, "i": "7f3a2c", "u": 1})
 # (ms into the 30-second cycle, activity) for demo 1: one after another, each 1-2 s long
 DEMO_ACTS = ((2000, "arrive"), (3900, "prompt"), (5600, "edit"), (7300, "read"), (9200, "shell"),
              (11100, "web"), (12800, "spawn"), (15100, "edit"), (16800, "fail"), (18100, "edit"),

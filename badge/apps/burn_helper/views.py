@@ -162,7 +162,8 @@ def desktop(c, t):  # noqa: ARG001
         shown = wl[:2] if len(wl) > 3 else wl
         for w in shown:
             a = duration(w["s"])
-            gfx.text(gfx.fit(w["n"], 146 - gfx.width(a, font.sins), font.sins), 4, y, FG, font.sins)
+            gfx.text(gfx.fit(S.session_label(w), 146 - gfx.width(a, font.sins), font.sins), 4, y,
+                     DIM if w.get("u") else FG, font.sins)
             gfx.text(a, 156 - gfx.width(a, font.sins), y, WARN, font.sins)
             y += 11
         if len(wl) > len(shown):
@@ -181,8 +182,8 @@ def _session(c, i):
     w = wl[i]
     header("WAITING %d/%d" % (i + 1, len(wl)), "", WARN)
     y = 11
-    for ln in gfx.wrap(w["n"], 152, font.sins)[:2]:
-        gfx.text(ln, 4, y, FG, font.sins)
+    for ln in gfx.wrap(S.session_label(w), 152, font.sins)[:2]:
+        gfx.text(ln, 4, y, DIM if w.get("u") else FG, font.sins)
         y += 11
     rows = (("WAITING", duration(w["s"]), WARN),
             ("NEEDS", w["w"] or "-", WARN),

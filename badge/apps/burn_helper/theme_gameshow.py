@@ -448,6 +448,9 @@ class Theme(S.Theme):
         return x
 
     def draw_caption(self, st, t):
+        if st.online and st.waiting:
+            S.draw_waiting_bar(st, t)     # who is waiting, one name at a time
+            return
         gfx.box(0, 108, 160, 12, YELLOW)
         gfx.box(0, 108, 4, 12, PINK)
         msg = self.caption(st, t)
@@ -460,8 +463,6 @@ class Theme(S.Theme):
         if p is not None:
             a, b = CAPTIONS[self.action]
             return a if p < 0.45 else b
-        if st.waiting and (t // 2500) % 2 == 0:
-            return "AUDIENCE VOTE: YOUR MOVE!"
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
             return "COLLAR LOW! RECHARGE " + gfx.countdown(st.left5)
         tc = S.tier_caption(st, t, "ULTRA RATINGS: HYPERSPACE!")
