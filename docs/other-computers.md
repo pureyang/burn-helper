@@ -54,6 +54,13 @@ can reach it (same network, or both on your tailnet) and, for a Windows bridge, 
 Firewall lets port 8787 in on that network. The installer's rule covers Private networks; if
 your tailnet shows up as Public on the bridge, allow it there too.
 
+Another VPN on the joining computer, such as a work or privacy VPN, can take over the `100.x`
+addresses Tailscale uses. Then `tailscale status` looks fine and `tailscale ping` gets an answer,
+but nothing reaches the bridge ("Unable to connect to the remote server"). Turn the other VPN
+off, or set it to leave Tailscale's traffic alone (often called split tunnelling), and try again.
+`Test-NetConnection <bridge> -Port 8787` on Windows, or `nc -vz <bridge> 8787` on a Mac or
+Linux, shows when the connection gets through.
+
 ## What it changes
 
 - The joined computer's `~/.claude/settings.json` (backed up first) gets the same async hooks
