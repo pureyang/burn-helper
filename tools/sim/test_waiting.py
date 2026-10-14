@@ -29,16 +29,16 @@ assert w[1]["w"] == "YOUR REPLY" and w[1]["a"] == 0, w[1]
 assert w[0]["u"] == 0 and w[1]["u"] == 1 and w[1]["i"] == "sid-2a", "unnamed: the badge shows folder and id"
 
 # a session waiting on another computer: its own name from that computer's hook, else the computer's
-b.on_hook({"session_id": "pc-session-9", "event": "Notification", "why": "input", "host": "YANG-HP.local",
+b.on_hook({"session_id": "pc-session-9", "event": "Notification", "why": "input", "host": "MY-LAPTOP.local",
            "name": "math homework helper", "folder": "math"})
-b.on_hook({"session_id": "pc-session-8", "event": "Notification", "why": "input", "host": "YANG-HP.local"})
+b.on_hook({"session_id": "pc-session-8", "event": "Notification", "why": "input", "host": "MY-LAPTOP.local"})
 w = b.status()["waiting_list"]
 pc = [x for x in w if x["i"] == "pc-ses"]
 named = [x for x in pc if x["n"] == "math homework helper"]
 assert named and named[0]["u"] == 0 and named[0]["d"] == "math" and named[0]["w"] == "YOUR REPLY", w
-assert [x for x in pc if x["n"] == "YANG-HP" and x["u"] == 1], "no name sent: the computer's name"
-b.on_hook({"session_id": "pc-session-9", "event": "PostToolUse", "tool": "Read", "host": "YANG-HP.local"})
-b.on_hook({"session_id": "pc-session-9", "event": "Notification", "why": "input", "host": "YANG-HP.local"})
+assert [x for x in pc if x["n"] == "MY-LAPTOP" and x["u"] == 1], "no name sent: the computer's name"
+b.on_hook({"session_id": "pc-session-9", "event": "PostToolUse", "tool": "Read", "host": "MY-LAPTOP.local"})
+b.on_hook({"session_id": "pc-session-9", "event": "Notification", "why": "input", "host": "MY-LAPTOP.local"})
 assert [x for x in b.status()["waiting_list"] if x["n"] == "math homework helper"], "the name is kept"
 assert B._badge_name({"name": "a session renamed with a long name"}) == "a session renamed with a long name"
 assert [x["s"] for x in w] == sorted((x["s"] for x in w), reverse=True), "longest wait first"
