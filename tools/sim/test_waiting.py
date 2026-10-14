@@ -28,11 +28,19 @@ assert w[0]["d"] == "api-server" and w[0]["w"] == "PERMISSION: BASH" and 7799 <=
 assert w[1]["w"] == "YOUR REPLY" and w[1]["a"] == 0, w[1]
 assert w[0]["u"] == 0 and w[1]["u"] == 1 and w[1]["i"] == "sid-2a", "unnamed: the badge shows folder and id"
 
-# a session on another computer that is waiting shows under that computer's name
-b.on_hook({"session_id": "pc-session-9", "event": "Notification", "why": "input", "host": "YANG-HP.local"})
+# a session waiting on another computer: its own name from that computer's hook, else the computer's
+b.on_hook({"session_id": "pc-session-9", "event": "Notification", "why": "input", "host": "YANG-HP.local",
+           "name": "math homework helper", "folder": "math"})
+b.on_hook({"session_id": "pc-session-8", "event": "Notification", "why": "input", "host": "YANG-HP.local"})
 w = b.status()["waiting_list"]
 pc = [x for x in w if x["i"] == "pc-ses"]
-assert pc and pc[0]["n"] == "YANG-HP" and pc[0]["u"] == 1 and pc[0]["w"] == "YOUR REPLY", w
+named = [x for x in pc if x["n"] == "math homework helper"]
+assert named and named[0]["u"] == 0 and named[0]["d"] == "math" and named[0]["w"] == "YOUR REPLY", w
+assert [x for x in pc if x["n"] == "YANG-HP" and x["u"] == 1], "no name sent: the computer's name"
+b.on_hook({"session_id": "pc-session-9", "event": "PostToolUse", "tool": "Read", "host": "YANG-HP.local"})
+b.on_hook({"session_id": "pc-session-9", "event": "Notification", "why": "input", "host": "YANG-HP.local"})
+assert [x for x in b.status()["waiting_list"] if x["n"] == "math homework helper"], "the name is kept"
+assert B._badge_name({"name": "a session renamed with a long name"}) == "a session renamed with a long name"
 assert [x["s"] for x in w] == sorted((x["s"] for x in w), reverse=True), "longest wait first"
 
 # once the session moves on, its reason is forgotten
@@ -40,3 +48,14 @@ b.on_hook({"session_id": "sid-1abcdef", "event": "PostToolUse", "tool": "Bash"})
 assert [x for x in b.status()["waiting_list"] if x["i"] == "sid-1a"][0]["w"] == "", "a stale reason must not linger"
 assert B._plain("café  bar\tbaz") == "caf  bar baz".replace("  ", " "), B._plain("café  bar\tbaz")
 print("PASS waiting details: reason from the hook (no message text), folder, wait and session age")
+
+# the hook on another computer looks its session's name up in its own session files
+import json as _json  # noqa: E402
+import tempfile  # noqa: E402
+_tmp = tempfile.mkdtemp()
+with open(os.path.join(_tmp, "1.json"), "w") as _f:
+    _json.dump({"sessionId": "abc", "name": "math homework helper"}, _f)
+with open(os.path.join(_tmp, "1.key"), "w") as _f:
+    _f.write("never read")
+assert cc_hook.session_name("abc", _tmp) == "math homework helper" and cc_hook.session_name("zzz", _tmp) is None
+print("PASS names: Claude Code's session names, whole; other computers send theirs with the waiting event")

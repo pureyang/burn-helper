@@ -117,8 +117,9 @@ def waiting_entries(loc, remote, why, now):
            for n, since, folder, sid, started, named in loc.get("waiting_list", [])]
     for sid, r in remote:
         computer = _plain(str(r.get("host") or "").split(".")[0]) or "other computer"
-        out.append({"n": computer, "s": max(0, int(now - r["ts"])), "d": computer, "w": why.get(sid, ""),
-                    "a": 0, "i": sid[:6], "u": 1})
+        name = r.get("name")        # its Claude Code name, from that computer's hook
+        out.append({"n": name or computer, "s": max(0, int(now - r["ts"])), "d": r.get("folder") or computer,
+                    "w": why.get(sid, ""), "a": 0, "i": sid[:6], "u": 0 if name else 1})
     return sorted(out, key=lambda w: -w["s"])[:4]
 
 
@@ -129,10 +130,12 @@ def _plain(text, n=20):
 
 
 def _badge_name(d):
-    """A short, plain-ASCII name for a session: its title, else its folder name."""
+    """The session's name as Claude Code shows it (set with /rename, or the one Claude Code made
+    up), in plain ASCII and whole up to 40 characters; the badge fits it to its screen. Its
+    folder name when it has none."""
     raw = d.get("name") or os.path.basename(str(d.get("cwd") or "").rstrip("/")) or "session"
     clean = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in str(raw))
-    return " ".join(clean.split())[:20] or "session"
+    return " ".join(clean.split())[:40] or "session"
 
 class Bridge:
     def __init__(self):
@@ -338,7 +341,13 @@ class Bridge:
                     if event == "SessionEnd":
                         self.remote.pop(sid, None)
                     else:
-                        self.remote[sid] = {"state": state, "ts": now, "host": host or HOSTNAME}
+                        entry = {"state": state, "ts": now, "host": host or HOSTNAME}
+                        old = self.remote.get(sid) or {}
+                        for k in ("name", "folder"):   # sent with its "waiting" event; kept after
+                            v = (d.get(k) if event == "Notification" else None) or old.get(k)
+                            if v:
+                                entry[k] = _plain(v, 40)
+                        self.remote[sid] = entry
             if event not in ("Stop", "SessionEnd", "Notification"):
                 self.last_active = now
             self._dirty = True

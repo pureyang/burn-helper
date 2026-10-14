@@ -3,8 +3,9 @@
 
 Only session_id, event name, tool name, agent id and hostname leave this
 machine, plus, for a notification, why Claude is waiting: "permission" (and for
-which tool) or "input". The notification's text, tool inputs and outputs are
-never sent. Always exits 0.
+which tool) or "input", and the session's name and folder name, so the badge can
+say which session it is when this computer isn't the bridge. The notification's
+text, tool inputs and outputs are never sent. Always exits 0.
 """
 import json
 import os
@@ -38,6 +39,27 @@ def why_waiting(d):
     return "other", None
 
 
+def session_name(sid, sessions_dir=None):
+    """The session's name as Claude Code shows it (set with /rename, or one it made up), from
+    its session file on this computer, or None."""
+    sessions_dir = sessions_dir or os.path.join(os.path.expanduser("~"), ".claude", "sessions")
+    try:
+        names = os.listdir(sessions_dir)
+    except OSError:
+        return None
+    for name in names:
+        if not name.endswith(".json"):
+            continue                       # never touch the .key files
+        try:
+            with open(os.path.join(sessions_dir, name), encoding="utf-8") as f:
+                d = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if isinstance(d, dict) and d.get("sessionId") == sid and d.get("name"):
+            return str(d["name"])[:60]
+    return None
+
+
 def main():
     try:
         raw = read_input(1024 * 1024)
@@ -55,6 +77,8 @@ def main():
         if event["event"] == "Notification":
             event["why"], tool = why_waiting(d)
             event["tool"] = event["tool"] or tool
+            event["name"] = session_name(d.get("session_id"))
+            event["folder"] = os.path.basename(str(d.get("cwd") or "").rstrip("/\\"))[:60] or None
         url = (env("BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/hook"
         headers = {"Content-Type": "application/json"}
         token = env("TOKEN")
