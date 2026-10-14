@@ -67,7 +67,7 @@ change without reconfiguring anything.
   session's name as Claude Code shows it (set with /rename, or the one Claude Code made up), in
   plain characters, whole up to 40, `s` how many seconds it has
   waited, `d` its folder's name (not the path), `w` what it needs (`PERMISSION: <TOOL>`,
-  `YOUR REPLY`, or empty when unknown), `a` how many seconds the session has been running
+  `A QUESTION`, `YOUR REPLY`, or empty when unknown), `a` how many seconds the session has been running
   (0 when unknown), `i` the first 6 characters of its id and `u` 1 when it has no name of its own:
   then `n` is its folder or its computer's name, numbered when two would look the same. Sessions
   waiting on joined computers are listed by the name their computer's hook sends.

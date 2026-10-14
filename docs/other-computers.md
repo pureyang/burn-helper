@@ -84,6 +84,10 @@ To leave the bridge, run the same line with `--uninstall` instead of `--join ...
 
 ## Limits
 
+- A session on a joined computer counts as waiting while it asks for permission or asks you a
+  question. Once its turn is done it doesn't, even though Claude Code reminds you a minute later
+  that it is waiting for your input. It clears as soon as that session does something: you reply,
+  approve or deny, or end it. Switching to its window isn't enough: Claude Code doesn't report that.
 - Sessions on joined computers count as working for 90 seconds after their last event, since the
   bridge can't see their session files. They're counted in the waiting number but not listed by
   name.
