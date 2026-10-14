@@ -318,9 +318,8 @@ _turn = {"key": None, "i": 0, "t0": 0}      # whose turn it is on the bar, and s
 
 
 def session_label(w):
-    """A waiting session's name, or "folder · id" when it has none of its own."""
-    if w.get("u") and w.get("i"):
-        return "%s \xb7 %s" % (w.get("d") or w.get("n") or "session", w["i"])
+    """A waiting session's name. The bridge sends a readable one even for a session without a
+    name (its folder or computer, numbered when two look alike, with `u` set: shown in grey)."""
     return w.get("n") or "session"
 
 
@@ -345,8 +344,7 @@ def wait_turn(wl, t, overflow):
 
 def draw_waiting_bar(st, t, y=108):
     """The caption line while sessions wait for you, by their Claude Code names, longest wait
-    first, with a counter when there are several. One with no name at all shows "folder · id"
-    in grey."""
+    first, with a counter when there are several. One without a name is shown in grey."""
     wl = st.waiting_list
     gfx.box(0, y, 160, 12, WAIT_BG)
     x = 6 + gfx.width("WAITING", font.sins) + 5           # where names start
