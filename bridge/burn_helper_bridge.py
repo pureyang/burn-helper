@@ -109,6 +109,19 @@ def _num(v, default=None):
         return default
 
 
+def waiting_entries(loc, remote, why, now):
+    """The badge's list of sessions waiting for you, longest wait first, at most 4. Sessions on
+    other computers have no name or folder here, so they show as their computer's name."""
+    out = [{"n": n, "s": max(0, int(now - since)), "d": folder, "w": why.get(sid, ""),
+            "a": max(0, int(now - started)) if started else 0, "i": sid[:6], "u": 0 if named else 1}
+           for n, since, folder, sid, started, named in loc.get("waiting_list", [])]
+    for sid, r in remote:
+        computer = _plain(str(r.get("host") or "").split(".")[0]) or "other computer"
+        out.append({"n": computer, "s": max(0, int(now - r["ts"])), "d": computer, "w": why.get(sid, ""),
+                    "a": 0, "i": sid[:6], "u": 1})
+    return sorted(out, key=lambda w: -w["s"])[:4]
+
+
 def _plain(text, n=20):
     """Plain ASCII, spaces collapsed, at most n characters: safe for the badge's pixel fonts."""
     clean = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in str(text))
@@ -255,7 +268,8 @@ class Bridge:
                     folder = os.path.basename(str(d.get("cwd") or "").rstrip("/"))
                     waiting_list.append((_badge_name(d), since / 1000.0 if isinstance(since, (int, float)) else time.time(),
                                          _plain(folder), str(d.get("sessionId") or ""),
-                                         started / 1000.0 if isinstance(started, (int, float)) else None))
+                                         started / 1000.0 if isinstance(started, (int, float)) else None,
+                                         bool(d.get("name"))))
             else:
                 counts["idle"] += 1
         # drop cache entries for processes that went away
@@ -324,7 +338,7 @@ class Bridge:
                     if event == "SessionEnd":
                         self.remote.pop(sid, None)
                     else:
-                        self.remote[sid] = {"state": state, "ts": now}
+                        self.remote[sid] = {"state": state, "ts": now, "host": host or HOSTNAME}
             if event not in ("Stop", "SessionEnd", "Notification"):
                 self.last_active = now
             self._dirty = True
@@ -395,6 +409,8 @@ class Bridge:
             remote_waiting = sum(1 for r in self.remote.values()
                                  if r["state"] == "waiting" and now - r["ts"] <= REMOTE_EXPIRE_S)
             remote_live = sum(1 for r in self.remote.values() if r["state"] != "idle" or now - r["ts"] <= REMOTE_BUSY_S)
+            remote_waiting_list = [(sid, dict(r)) for sid, r in self.remote.items()
+                                   if r["state"] == "waiting" and now - r["ts"] <= REMOTE_EXPIRE_S]
             loc = dict(self.local)
             if self._today() != self.tools_date:
                 self.tools_date, self.tools_today = self._today(), 0
@@ -436,10 +452,10 @@ class Bridge:
             "level": level,
             "busy": busy,
             "waiting": waiting,
-            # which local sessions are waiting, longest first (shown in the badge's Desktop mode)
-            "waiting_list": [{"n": n, "s": max(0, int(now - since)), "d": folder, "w": why.get(sid, ""),
-                              "a": max(0, int(now - started)) if started else 0}
-                             for n, since, folder, sid, started in loc.get("waiting_list", [])],
+            # which sessions are waiting, longest first (the badge's waiting bar and Desktop mode):
+            # n name, s seconds waiting, d folder, w what it needs, a session age, i the start of its
+            # id and u 1 when it has no name of its own (the badge then shows "folder · id")
+            "waiting_list": waiting_entries(loc, remote_waiting_list, why, now),
             "idle": loc["idle"],
             # what the agents just did: [number, category, ms ago], oldest first (badge animations)
             "ev": activity,
