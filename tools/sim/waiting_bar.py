@@ -90,11 +90,28 @@ def render_all():
     return lists, frames
 
 
+# screenshots from the badge itself, if they were taken (tools/deploy.py --shot-only), and what they show
+DEVICE = (("device_dev_wait1.png", "One waiting: its name stays"),
+          ("device_dev_wait2a.png", "Two waiting: an unnamed one, in grey, 2/2"),
+          ("device_dev_detail_unnamed.png", "Desktop mode, the same session in detail"))
+
+
+def device_strip():
+    have = [(f, c) for f, c in DEVICE if os.path.exists(os.path.join(OUT, f))]
+    if not have:
+        return ""
+    figs = "".join('<figure><img src="%s" alt="%s" width="160" height="120"><figcaption>%s</figcaption></figure>'
+                   % (uri(os.path.join(OUT, f)), c, c) for f, c in have)
+    return ('<section class="view" aria-labelledby="dev-h"><h2 id="dev-h">On the badge itself</h2>'
+            '<div class="pair three">%s</div><p class="small muted">Screenshots taken from the badge running its '
+            'demo, which has two sessions waiting, one of them unnamed.</p></section>' % figs)
+
+
 def build():
     lists, frames = render_all()
     data = {"frames": frames, "lists": {k: [w["i"] for w in v] for k, v in lists.items()},
             "all": ALL, "themes": [[n, label] for n, label, _ in THEMES], "cycle": S.WAIT_CYCLE_MS}
-    page = PAGE.replace("@@DATA@@", json.dumps(data, separators=(",", ":")))
+    page = PAGE.replace("@@DATA@@", json.dumps(data, separators=(",", ":"))).replace("@@DEVICE@@", device_strip())
     out = os.path.join(HERE, "out", "waiting_bar.html")
     with open(out, "w") as f:
         f.write(page)
@@ -153,6 +170,8 @@ p{margin:0;max-width:72ch}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .pair figure{margin:0;display:grid;gap:6px}
 .pair figcaption{font-size:13px;color:var(--muted)}
+.pair.three{grid-template-columns:repeat(3,1fr)}
+@media (max-width:560px){.pair.three{grid-template-columns:1fr 1fr}}
 .pair img{width:100%;height:auto;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:6px;border:8px solid var(--bezel);background:var(--screen)}
 .step{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
 .step b{font-weight:600;color:var(--ink);font-family:var(--mono)}
@@ -200,6 +219,8 @@ p{margin:0;max-width:72ch}
       <p class="small muted">Desktop mode uses the same names, so an unnamed session reads the same in both places.</p>
     </section>
   </div>
+
+  @@DEVICE@@
 
   <section class="rules" aria-label="Behaviour">
     <div class="rule"><h3>One session waiting</h3><ul>
