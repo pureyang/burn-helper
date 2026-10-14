@@ -327,7 +327,7 @@ class Bridge:
                     why, tool = str(d.get("why") or ""), str(d.get("tool") or "")
                     tool = "".join(ch for ch in tool if ch.isalnum() or ch == "_")[:20].upper()
                     self.why[sid] = ("PERMISSION: " + tool if tool else "PERMISSION") if why == "permission" \
-                        else ("YOUR REPLY" if why == "input" else "")
+                        else ("A QUESTION" if why == "question" else ("YOUR REPLY" if why == "input" else ""))
                 elif event in BUSY_EVENTS or event in ("Stop", "SessionEnd"):
                     self.why.pop(sid, None)            # it moved on: the old reason no longer applies
                 if event == "SubagentStart":
@@ -343,14 +343,20 @@ class Bridge:
                 if (host and host != HOSTNAME) or not os.path.isdir(SESSIONS_DIR):
                     # another computer, or a Claude Code without session files here: count the
                     # session from its hook events instead
+                    old_state = self.remote.get(sid, {}).get("state", "idle")
                     if event in ("Stop", "SessionEnd"):
                         state = "idle"
                     elif event == "Notification":
-                        state = "waiting"
+                        # blocked on you: a permission prompt or a question. Claude Code's idle
+                        # reminder ("waiting for your input", a minute after a turn ends) means the
+                        # turn is done, as this computer's own session files would say.
+                        why = str(d.get("why") or "")
+                        state = "waiting" if why in ("permission", "question") else \
+                            ("idle" if why == "input" else old_state)
                     elif event in BUSY_EVENTS or event == "SubagentStop":
                         state = "busy"
                     else:
-                        state = self.remote.get(sid, {}).get("state", "idle")
+                        state = old_state
                     if event == "SessionEnd":
                         self.remote.pop(sid, None)
                     else:

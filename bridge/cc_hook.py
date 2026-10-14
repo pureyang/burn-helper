@@ -30,12 +30,16 @@ def env(name, default=None):
 
 
 def why_waiting(d):
-    """(why, tool) for a Notification: ("permission", "Bash"), ("input", None) or ("other", None)."""
+    """(why, tool) for a Notification: ("permission", "Bash") or ("question", None) when the session
+    is blocked on you, ("input", None) for Claude Code's idle reminder a minute after a turn
+    ends, or ("other", None)."""
     kind = str(d.get("notification_type") or "")
     msg = str(d.get("message") or "")
     if kind == "permission_prompt" or "permission" in msg.lower():
         m = re.search(r"permission to use ([A-Za-z0-9_]{1,32})", msg)
         return "permission", (m.group(1) if m else None)
+    if kind == "elicitation_dialog":
+        return "question", None
     if kind == "idle_prompt" or "waiting for your input" in msg.lower():
         return "input", None
     return "other", None
