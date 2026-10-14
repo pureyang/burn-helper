@@ -48,7 +48,10 @@ The tool-call rate still adds speed. Each theme has its own scenes for the gaits
 ![All 15 levels in the Zelda theme](img/tiers_hero.png)
 
 When any session is waiting for your input, Navi shouts "HEY! LISTEN!", the Running Man
-audience votes "YOUR MOVE!", or Forrest yells "JENNY!". Desktop mode (press **B** once)
+audience votes "YOUR MOVE!", or Forrest yells "JENNY!", and the caption line turns into a
+waiting bar that names the session: one stays put, several take turns every 4 seconds (longest
+wait first, with a counter), and one you never named shows as its folder plus the start of its
+id, in grey (`web-app · 7f3a2c`). Desktop mode (press **B** once)
 lists the waiting sessions by name, and **A**/**C** show each one in detail: whether it needs
 permission for a tool (and which) or your reply, its folder, and how long it has waited and
 run. The bridge sends each one's title or folder name, cut to 20 plain characters, and the

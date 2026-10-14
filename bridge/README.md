@@ -43,7 +43,7 @@ change without reconfiguring anything.
 
 ```json
 {"v":1,"ts":1791575121,"level":4,"busy":6,"waiting":1,"idle":3,"sessions":9,
- "waiting_list":[{"n":"api-server refactor","s":95,"d":"api-server","w":"PERMISSION: BASH","a":7800}],
+ "waiting_list":[{"n":"api-server refactor","s":95,"d":"api-server","w":"PERMISSION: BASH","a":7800,"i":"22441a","u":0}],
  "ev":[[41,"edit",1800],[42,"shell",300]],
  "subagents":1,"tpm":2,"tools_today":2,
  "five_hour":{"used":38.0,"resets_at":1791578721},
@@ -66,8 +66,10 @@ change without reconfiguring anything.
 - `waiting_list`: the local sessions waiting for you, longest first, at most 4: `n` is the
   session's title (or its folder name) cut to 20 plain characters, `s` how many seconds it has
   waited, `d` its folder's name (not the path), `w` what it needs (`PERMISSION: <TOOL>`,
-  `YOUR REPLY`, or empty when unknown) and `a` how many seconds the session has been running
-  (0 when unknown). Remote sessions are counted in `waiting` but not named.
+  `YOUR REPLY`, or empty when unknown), `a` how many seconds the session has been running
+  (0 when unknown), `i` the first 6 characters of its id and `u` 1 when it has no name of its own
+  (the badge then shows "folder · id"). Sessions waiting on joined computers are listed under
+  their computer's name.
 - `ev`: what the agents just did, for the badge's one-shot animations, oldest first: the latest
   6 from the last 10 seconds, each `[number, category, ms ago]`. Categories: `edit`, `read`,
   `shell`, `web` (from the tool of a PostToolUse), `fail` (PostToolUseFailure), `spawn` and
