@@ -119,7 +119,7 @@ class Status:
         wl = []
         for w in d.get("waiting_list") or []:
             try:
-                wl.append({"n": str(w.get("n") or "session")[:24], "s": int(w.get("s") or 0),
+                wl.append({"n": str(w.get("n") or "session")[:40], "s": int(w.get("s") or 0),
                            "d": str(w.get("d") or "")[:24], "w": str(w.get("w") or "")[:24],
                            "a": int(w.get("a") or 0), "i": str(w.get("i") or "")[:6], "u": 1 if w.get("u") else 0})
             except (AttributeError, TypeError, ValueError):
@@ -304,7 +304,7 @@ class Theme:
 
 
 # The waiting bar: while sessions wait for you, the caption line names them, one at a time.
-WAIT_CYCLE_MS = 4000
+WAIT_CYCLE_MS = 2000
 WAIT_AMBER = (251, 191, 36)
 WAIT_BG = (20, 18, 14)
 WAIT_DIM = (150, 156, 168)
@@ -318,9 +318,9 @@ def session_label(w):
 
 
 def draw_waiting_bar(st, t, y=108):
-    """The caption line while sessions wait for you. One waiting: its name stays. Several: they
-    take turns every 4 s, longest wait first, with a counter. Unnamed ones show "folder · id"
-    in grey."""
+    """The caption line while sessions wait for you, by their Claude Code names. One waiting: its
+    name stays. Several: they take turns every 2 s, longest wait first, with a counter. One with
+    no name at all shows "folder · id" in grey."""
     wl = st.waiting_list
     gfx.box(0, y, 160, 12, WAIT_BG)
     gfx.box(0, y, 3, 12, WAIT_AMBER)
