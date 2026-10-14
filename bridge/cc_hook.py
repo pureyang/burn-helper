@@ -3,9 +3,11 @@
 
 Only session_id, event name, tool name, agent id and hostname leave this
 machine, plus, for a notification, why Claude is waiting: "permission" (and for
-which tool) or "input", and the session's name and folder name, so the badge can
-say which session it is when this computer isn't the bridge. The notification's
-text, tool inputs and outputs are never sent. Always exits 0.
+which tool) or "input". When a session starts, gets a prompt, finishes a turn or
+starts waiting, also its name (as Claude Code shows it) and folder name, so the
+badge can say which session it is when this computer isn't the bridge. The
+notification's text, prompts, tool inputs and outputs are never sent. Always
+exits 0.
 """
 import json
 import os
@@ -37,6 +39,9 @@ def why_waiting(d):
     if kind == "idle_prompt" or "waiting for your input" in msg.lower():
         return "input", None
     return "other", None
+
+
+NAMED_EVENTS = ("SessionStart", "UserPromptSubmit", "Stop", "Notification")
 
 
 def session_name(sid, sessions_dir=None):
@@ -77,6 +82,8 @@ def main():
         if event["event"] == "Notification":
             event["why"], tool = why_waiting(d)
             event["tool"] = event["tool"] or tool
+        if event["event"] in NAMED_EVENTS:
+            # not on every tool call: these few are enough for the bridge to know the name early
             event["name"] = session_name(d.get("session_id"))
             event["folder"] = os.path.basename(str(d.get("cwd") or "").rstrip("/\\"))[:60] or None
         url = (env("BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/hook"

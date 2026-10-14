@@ -110,17 +110,30 @@ def _num(v, default=None):
 
 
 def waiting_entries(loc, remote, why, now):
-    """The badge's list of sessions waiting for you, longest wait first, at most 4. Sessions on
-    other computers have no name or folder here, so they show as their computer's name."""
+    """The badge's list of sessions waiting for you, longest wait first, at most 4, each by its
+    Claude Code name. Without one (an older Claude Code, or a computer whose hook doesn't send
+    names yet) a session goes by its folder, or by its computer's name, numbered only when two
+    would look the same; `u` = 1 marks those, and the badge shows them in grey."""
     out = [{"n": n, "s": max(0, int(now - since)), "d": folder, "w": why.get(sid, ""),
             "a": max(0, int(now - started)) if started else 0, "i": sid[:6], "u": 0 if named else 1}
            for n, since, folder, sid, started, named in loc.get("waiting_list", [])]
     for sid, r in remote:
         computer = _plain(str(r.get("host") or "").split(".")[0]) or "other computer"
         name = r.get("name")        # its Claude Code name, from that computer's hook
-        out.append({"n": name or computer, "s": max(0, int(now - r["ts"])), "d": r.get("folder") or computer,
-                    "w": why.get(sid, ""), "a": 0, "i": sid[:6], "u": 0 if name else 1})
-    return sorted(out, key=lambda w: -w["s"])[:4]
+        out.append({"n": name or r.get("folder") or computer, "s": max(0, int(now - r["ts"])),
+                    "d": r.get("folder") or computer, "w": why.get(sid, ""), "a": 0, "i": sid[:6],
+                    "u": 0 if name else 1})
+    out = sorted(out, key=lambda w: -w["s"])[:4]
+    seen = {}
+    for w in out:
+        if w["u"]:
+            seen[w["n"]] = seen.get(w["n"], 0) + 1
+    count = {}
+    for w in out:
+        if w["u"] and seen[w["n"]] > 1:
+            count[w["n"]] = count.get(w["n"], 0) + 1
+            w["n"] = "%s %d" % (w["n"], count[w["n"]])
+    return out
 
 
 def _plain(text, n=20):
@@ -343,8 +356,8 @@ class Bridge:
                     else:
                         entry = {"state": state, "ts": now, "host": host or HOSTNAME}
                         old = self.remote.get(sid) or {}
-                        for k in ("name", "folder"):   # sent with its "waiting" event; kept after
-                            v = (d.get(k) if event == "Notification" else None) or old.get(k)
+                        for k in ("name", "folder"):   # sent with a few events (cc_hook.NAMED_EVENTS); kept
+                            v = d.get(k) or old.get(k)
                             if v:
                                 entry[k] = _plain(v, 40)
                         self.remote[sid] = entry

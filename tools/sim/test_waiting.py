@@ -40,6 +40,22 @@ assert [x for x in pc if x["n"] == "MY-LAPTOP" and x["u"] == 1], "no name sent: 
 b.on_hook({"session_id": "pc-session-9", "event": "PostToolUse", "tool": "Read", "host": "MY-LAPTOP.local"})
 b.on_hook({"session_id": "pc-session-9", "event": "Notification", "why": "input", "host": "MY-LAPTOP.local"})
 assert [x for x in b.status()["waiting_list"] if x["n"] == "math homework helper"], "the name is kept"
+
+# a name learnt from an earlier event (a prompt) is used when that session starts waiting
+b3 = B.Bridge()
+b3.local = {"busy": 0, "shell": 0, "waiting": 0, "idle": 0, "sessions": 0, "waiting_list": []}
+b3.on_hook({"session_id": "pc-session-7", "event": "UserPromptSubmit", "host": "MY-LAPTOP.local",
+            "name": "laptop chores", "folder": "chores"})
+b3.on_hook({"session_id": "pc-session-7", "event": "Notification", "why": "input", "host": "MY-LAPTOP.local"})
+assert [x for x in b3.status()["waiting_list"] if x["n"] == "laptop chores" and x["u"] == 0], b3.status()["waiting_list"]
+
+# no names at all: readable labels, numbered when two look alike, never a hex id
+b2 = B.Bridge()
+b2.local = {"busy": 0, "shell": 0, "waiting": 0, "idle": 0, "sessions": 0, "waiting_list": []}
+for sid in ("old-hook-1", "old-hook-2"):
+    b2.on_hook({"session_id": sid, "event": "Notification", "why": "input", "host": "OTHER-PC"})
+names = sorted(x["n"] for x in b2.status()["waiting_list"])
+assert names == ["OTHER-PC 1", "OTHER-PC 2"], names
 assert B._badge_name({"name": "a session renamed with a long name"}) == "a session renamed with a long name"
 assert [x["s"] for x in w] == sorted((x["s"] for x in w), reverse=True), "longest wait first"
 
