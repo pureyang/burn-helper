@@ -304,10 +304,17 @@ class Theme:
 
 
 # The waiting bar: while sessions wait for you, the caption line names them, one at a time.
-WAIT_CYCLE_MS = 2000
+# Tuned to be read at a glance without pulling the eye: a name that fits never moves; a long one
+# shows its start first (that usually says which session it is), glides left once, one pixel a
+# frame, rests at its end, and then the next session takes over.
+WAIT_CYCLE_MS = 2000          # each name that fits shows this long when several are waiting
+WAIT_HOLD_MS = 1000           # a long name stays at its start this long,
+WAIT_SCROLL_PX_S = 24         # then scrolls left at this speed (one pixel a frame at 25 fps),
+WAIT_END_MS = 800             # and rests at its end this long
 WAIT_AMBER = (251, 191, 36)
 WAIT_BG = (20, 18, 14)
 WAIT_DIM = (150, 156, 168)
+_turn = {"key": None, "i": 0, "t0": 0}      # whose turn it is on the bar, and since when
 
 
 def session_label(w):
@@ -317,35 +324,52 @@ def session_label(w):
     return w.get("n") or "session"
 
 
+def wait_turn(wl, t, overflow):
+    """(which session, how far its name has scrolled in pixels) at time t. overflow(w) is how
+    many pixels a name is wider than its room. A turn lasts WAIT_CYCLE_MS for a name that fits,
+    or as long as one pass of the scroll takes."""
+    key = tuple(w.get("i") or w.get("n") for w in wl)
+    if key != _turn["key"]:
+        _turn["key"], _turn["i"], _turn["t0"] = key, 0, t
+    i = _turn["i"] % len(wl)
+    over = overflow(wl[i])
+    dwell = WAIT_CYCLE_MS if over <= 0 else WAIT_HOLD_MS + over * 1000 // WAIT_SCROLL_PX_S + WAIT_END_MS
+    if t - _turn["t0"] >= dwell:
+        i = (i + 1) % len(wl)
+        _turn["i"], _turn["t0"] = i, t
+        over = overflow(wl[i])
+    if over <= 0:
+        return i, 0
+    return i, max(0, min(over, (t - _turn["t0"] - WAIT_HOLD_MS) * WAIT_SCROLL_PX_S // 1000))
+
+
 def draw_waiting_bar(st, t, y=108):
-    """The caption line while sessions wait for you, by their Claude Code names. One waiting: its
-    name stays. Several: they take turns every 2 s, longest wait first, with a counter. One with
-    no name at all shows "folder · id" in grey."""
+    """The caption line while sessions wait for you, by their Claude Code names, longest wait
+    first, with a counter when there are several. One with no name at all shows "folder · id"
+    in grey."""
     wl = st.waiting_list
     gfx.box(0, y, 160, 12, WAIT_BG)
-    gfx.box(0, y, 3, 12, WAIT_AMBER)
-    x = 6
-    gfx.text("WAITING", x, y - 1, WAIT_AMBER, font.sins)
-    x += gfx.width("WAITING", font.sins) + 5
+    x = 6 + gfx.width("WAITING", font.sins) + 5           # where names start
     if not wl:              # an older bridge sends only the count
         gfx.text("%d SESSION%s" % (st.waiting, "" if st.waiting == 1 else "S"), x, y - 1, (255, 255, 255), font.sins)
-        return
-    n = len(wl)
-    k = (t // WAIT_CYCLE_MS) % n
-    w = wl[k]
-    count = "%d/%d" % (k + 1, n) if n > 1 else ""
-    right = 157 - gfx.width(count, font.sins) if count else 157
-    room = right - x - 4
-    if w.get("u") and w.get("i"):
-        # unnamed: shorten the folder, never the id (it tells two sessions in one folder apart)
-        tail = " \xb7 " + w["i"]
-        folder = w.get("d") or w.get("n") or "session"
-        name = gfx.fit(folder, room - gfx.width(tail, font.sins), font.sins) + tail
     else:
-        name = gfx.fit(session_label(w), room, font.sins)
-    gfx.text(name, x, y - 1, WAIT_DIM if w.get("u") else (255, 255, 255), font.sins)
-    if count:
-        gfx.text(count, right, y - 1, WAIT_DIM, font.sins)
+        n = len(wl)
+        right = 157 - gfx.width("%d/%d" % (n, n), font.sins) if n > 1 else 157
+        room = right - x - 4
+
+        def overflow(w):
+            return gfx.width(session_label(w), font.sins) - room
+
+        k, off = wait_turn(wl, t, overflow)
+        w = wl[k]
+        gfx.text(session_label(w), x - off, y - 1, WAIT_DIM if w.get("u") else (255, 255, 255), font.sins)
+        # the name scrolls under the label and the counter: cover what spills either side
+        gfx.box(0, y, x - 1, 12, WAIT_BG)
+        gfx.box(x + room + 1, y, 160 - x - room - 1, 12, WAIT_BG)
+        if n > 1:
+            gfx.text("%d/%d" % (k + 1, n), right, y - 1, WAIT_DIM, font.sins)
+    gfx.box(0, y, 3, 12, WAIT_AMBER)
+    gfx.text("WAITING", 6, y - 1, WAIT_AMBER, font.sins)
 
 
 def blink(t, period=500):
