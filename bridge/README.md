@@ -68,9 +68,9 @@ change without reconfiguring anything.
   plain characters, whole up to 40, `s` how many seconds it has
   waited, `d` its folder's name (not the path), `w` what it needs (`PERMISSION: <TOOL>`,
   `YOUR REPLY`, or empty when unknown), `a` how many seconds the session has been running
-  (0 when unknown), `i` the first 6 characters of its id and `u` 1 when it has no name of its own
-  (the badge then shows "folder · id"). Sessions waiting on joined computers are listed by the
-  name their computer's hook sends with the waiting event, or the computer's name.
+  (0 when unknown), `i` the first 6 characters of its id and `u` 1 when it has no name of its own:
+  then `n` is its folder or its computer's name, numbered when two would look the same. Sessions
+  waiting on joined computers are listed by the name their computer's hook sends.
 - `ev`: what the agents just did, for the badge's one-shot animations, oldest first: the latest
   6 from the last 10 seconds, each `[number, category, ms ago]`. Categories: `edit`, `read`,
   `shell`, `web` (from the tool of a PostToolUse), `fail` (PostToolUseFailure), `spawn` and

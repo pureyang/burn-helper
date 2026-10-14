@@ -51,8 +51,9 @@ When any session is waiting for your input, Navi shouts "HEY! LISTEN!", the Runn
 audience votes "YOUR MOVE!", or Forrest yells "JENNY!", and the caption line turns into a
 waiting bar that names the session, by the name Claude Code shows for it (the one you set with
 `/rename`, or the one Claude Code gave it): one stays put, several take turns every 2 seconds
-(longest wait first, with a counter). A session with no name at all, which only an older Claude
-Code leaves, shows as its folder plus the start of its id, in grey (`web-app · 7f3a2c`). Desktop mode (press **B** once)
+(longest wait first, with a counter), and a name too long for the bar scrolls through once. A
+session without a name (an older Claude Code, or a joined computer that doesn't send names yet)
+goes by its folder or its computer's name, in grey, numbered only when two look alike. Desktop mode (press **B** once)
 lists the waiting sessions by name, and **A**/**C** show each one in detail: whether it needs
 permission for a tool (and which) or your reply, its folder, and how long it has waited and
 run. The bridge sends each one's title or folder name, cut to 20 plain characters, and the

@@ -312,7 +312,9 @@ p{margin:0;max-width:72ch}
     <div class="rule"><h3>Which name</h3><ul>
       <li>The session's Claude Code name: the one you set with <span class="mono">/rename</span>, or the one Claude Code gave it (<span class="mono">docs-site-amber-42</span>).</li>
       <li>Sent whole, up to 40 characters; the bar scrolls whatever doesn't fit.</li>
-      <li>Only a session with no name at all (an older Claude Code) shows its folder and id in grey: <span class="mono">web-app · 7f3a2c</span>.</li></ul></div>
+      <li>Without a name (an older Claude Code, or a computer not yet sending names) it goes by its folder or its
+      computer's name, in grey, numbered only when two look alike: <span class="mono">web-app</span>,
+      <span class="mono">OTHER-PC 2</span>. Never a hex id.</li></ul></div>
   </section>
 
   <section class="how" aria-labelledby="how-h">
@@ -342,7 +344,7 @@ p{margin:0;max-width:72ch}
     return pool.slice(0, state.n);
   }
   function key(list) { return list.map(function (w) { return w.i; }).join("-") || "none"; }
-  function label(w) { return w.u ? w.d + " · " + w.i : w.n; }
+  function label(w) { return w.n; }
   function render() {
     var list = pick(), k = key(list), n = Math.max(1, list.length);
     if (state.i >= n) state.i = 0;
