@@ -135,7 +135,7 @@ def duration(s):
 
 
 # ------------------------------------------------------------ Desktop mode
-def desktop(c, t):
+def desktop(c, t):  # noqa: ARG001
     st = c.st
     wl = st.waiting_list
     if c.wait_sel is not None and 0 <= c.wait_sel < len(wl):

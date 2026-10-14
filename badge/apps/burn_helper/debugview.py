@@ -22,7 +22,7 @@ def _fnt():
     return font.desert
 
 
-def draw(link, tether, source, t, page=None):
+def draw(link, tether, source, t, page=None):  # noqa: ARG001
     """page: "3/3" when shown as a page of Debug mode (changes the title and footer)."""
     f = _fnt()
     gfx.box(0, 0, 160, 120, BG)

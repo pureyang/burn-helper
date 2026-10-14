@@ -41,7 +41,7 @@ STALKER = {
 }
 
 
-def _stick(g, j, pose):
+def _stick(g, j, pose):  # noqa: ARG001
     hx, hy = j["hand_f"]
     fx, fy = j["fwd"]
     ux, uy = j["up"]
@@ -370,7 +370,7 @@ class Theme(S.Theme):
                 screen.pen = color.rgb(255, 220, 120, int(255 * (1 - q)))
                 screen.rectangle(int(ex + math.cos(a) * r * 1.3), int(ey + math.sin(a) * r * 0.9), 1, 1)
 
-    def vote(self, st, t):
+    def vote(self, st, t):  # noqa: ARG002
         if (t // 400) % 2 == 0:
             screen.pen = color.rgb(255, 40, 140, 170)
             screen.rectangle(0, 22, 160, 2)
@@ -379,7 +379,7 @@ class Theme(S.Theme):
             screen.rectangle(158, 22, 2, 86)
         gfx.bubble(98, 46, "YOUR MOVE!", BLACK, YELLOW, font.sins)
 
-    def viewfinder(self, lv, t):
+    def viewfinder(self, lv, t):  # noqa: ARG002
         c = color.rgb(255, 255, 255, 150)
         screen.pen = c
         for (x, y, dx, dy) in ((4, 26, 1, 1), (155, 26, -1, 1), (4, 103, 1, -1), (155, 103, -1, -1)):
@@ -513,7 +513,7 @@ class Theme(S.Theme):
                 a = t / 160.0 + i * 2.1
                 gfx.box(18 + math.cos(a) * 7 - (p - 0.75) * 60, 80 + math.sin(a) * 2, 1, 1, GOLD)
 
-    def whoosh(self, x, y, t):
+    def whoosh(self, x, y, t):  # noqa: ARG002
         # the stick's swing, an arc passing just over his head
         screen.pen = color.rgb(255, 255, 255, 190)
         for i in range(9):
@@ -716,7 +716,7 @@ class Theme(S.Theme):
             k = seg(p, 0.2, 0.9)
             gfx.text("+1", 100, 44 - int(k * 14), GOLD, font.sins, shadow=BLACK)
 
-    def over_done(self, st, t, p):
+    def over_done(self, st, t, p):  # noqa: ARG002
         on = (t // 200) % 2 == 0
         w = int(gfx.width("APPLAUSE", font.sins)) + 10
         x = 80 - w // 2
@@ -729,10 +729,10 @@ class Theme(S.Theme):
                 gfx.box(x + i, 36, 1, 1, GOLD)
 
     # ------------------------------------------------------------ prompt: the host
-    def act_prompt(self, st, t, p):
+    def act_prompt(self, st, t, p):  # noqa: ARG002
         self.put(self.gait_img(st, t), 50)
 
-    def over_prompt(self, st, t, p):
+    def over_prompt(self, st, t, p):  # noqa: ARG002
         # the host slides into a picture-in-picture box, says his line, slides out
         q = ease(seg(p, 0.0, 0.2)) * (1 - ease(seg(p, 0.85, 1.0)))
         bx = int(160 - q * 52)
@@ -762,7 +762,7 @@ class Theme(S.Theme):
         else:
             self.put(self.gait_img(st, t), x)
 
-    def over_arrive(self, st, t, p):
+    def over_arrive(self, st, t, p):  # noqa: ARG002
         # a lower-third card slides in from the left
         q = ease(seg(p, 0.2, 0.4)) * (1 - ease(seg(p, 0.8, 0.95)))
         x = int(-90 + q * 92)
@@ -772,10 +772,10 @@ class Theme(S.Theme):
         gfx.text("SESSION #4", x + 3, 92, WHITE, font.sins)
 
     # ------------------------------------------------------------ refill: commercial break
-    def act_refill(self, st, t, p):
+    def act_refill(self, st, t, p):  # noqa: ARG002
         self.put(self.gait_img(st, t), 66)
 
-    def over_refill(self, st, t, p):
+    def over_refill(self, st, t, p):  # noqa: ARG002
         q = ease(seg(p, 0.0, 0.12)) * (1 - ease(seg(p, 0.85, 1.0)))
         if q <= 0:
             return

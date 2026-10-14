@@ -14,7 +14,7 @@ SLEEP, IDLE, WALK, RUN, SPRINT = 0, 1, 2, 3, 4
 # What an agent just did (the bridge's "ev" feed), most telling first: when several arrive
 # together, the badge plays the first of them.
 ACT_ORDER = ("fail", "done", "spawn", "back", "prompt", "arrive", "refill", "shell", "web", "edit", "read")
-ACT_RANK = dict((k, i) for i, k in enumerate(ACT_ORDER))
+ACT_RANK = {k: i for i, k in enumerate(ACT_ORDER)}
 ACT_FRESH_MS = 6000     # older than this when it arrives (or while it waits its turn): skip it
 
 # hero gait per level and frames-per-second of its cycle
@@ -254,7 +254,7 @@ class Theme:
         self.action_t0 = 0
         self.act_seen = 0
 
-    def start_action(self, key, t0, st):
+    def start_action(self, key, t0, st):  # noqa: ARG002
         self.action = key
         self.action_t0 = t0
 

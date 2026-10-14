@@ -5,9 +5,7 @@
 # hotspot) and optionally a fixed bridge address. Saved to
 # /state/burn_helper_net.json, then the badge restarts and uses it.
 
-import json
 import socket
-import select
 import time
 import machine
 import network
@@ -309,7 +307,8 @@ class Portal:
 
     def draw(self, t):
         if self.phase != "serve":
-            return self.draw_status(t)
+            self.draw_status(t)
+            return
         gfx.box(0, 0, 160, 120, (20, 18, 24))
         gfx.box(0, 0, 160, 13, (217, 119, 87))
         gfx.text("PHONE SETUP", 4, -1, (20, 18, 24), font.sins)

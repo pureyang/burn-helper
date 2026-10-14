@@ -340,7 +340,7 @@ class Theme(S.Theme):
         self.draw_hud(st, t)
         self.draw_caption(st, t)
 
-    def draw_park(self, st, t):
+    def draw_park(self, st, t):  # noqa: ARG002
         gfx.box(0, 22, 160, 70, (160, 208, 236))
         screen.blit(self.park_trees, vec2(0, 30))
         gfx.box(0, 88, 160, 4, (100, 150, 70))
@@ -701,6 +701,5 @@ class Theme(S.Theme):
             gfx.blit(self.big_box, 104, 22 + q * 40, 2)
         if p > 0.3:
             for i in range(6):                         # gold sparkle on the top bar as it fills
-                a = t / 150.0 + i
                 gfx.box(8 + (i * 11 + int(p * 60)) % 58, 3 + (i * 5) % 14, 1 + (i % 2), 1 + (i % 2), GOLD)
             self.word("NEW BOX!", 98, 40, GOLD)

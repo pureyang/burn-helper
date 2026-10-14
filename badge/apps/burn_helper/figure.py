@@ -178,7 +178,7 @@ def render(spec, pose, hip_xy=None):
 
     joints = {"hip": (hx, hy), "neck": (nx, ny), "up": up, "fwd": fwd}
 
-    def leg(angles, colour_thigh, colour_shin, shoe, far):
+    def leg(angles, colour_thigh, colour_shin, shoe, far):  # noqa: ARG001
         a, k = angles
         s1, c1 = _sc(a)
         kx = hx + s1 * spec.thigh

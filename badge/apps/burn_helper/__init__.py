@@ -501,7 +501,7 @@ def draw_off_note(left_ms):
     gfx.ctext("DOWN: SCREEN BACK ON", 80, 65, (150, 150, 160), font.sins)
 
 
-def pace(t):
+def pace(t):  # noqa: ARG001
     """Cap the frame rate: smooth when busy, frugal when asleep."""
     global frame_t
     target = 90 if (st.level == S.SLEEP and not st.waiting) else 40
@@ -563,9 +563,9 @@ def update():
         portal.tick()
         if portal.phase == "done":
             finish_portal()
-            return None
+            return
         portal.draw(t)
-        return None
+        return
     link.tick()
     tether.tick()
     apply_bridge()
@@ -623,7 +623,7 @@ def update():
         except Exception as e:  # noqa: BLE001
             print("@SHOTERR", e)
     pace(t)
-    return None
+    return
 
 
 def on_exit():

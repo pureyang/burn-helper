@@ -57,7 +57,7 @@ def _props(g, j, pose):
         g.seg(hx + fx * 2, hy + fy * 2, hx + fx * 8, hy + fy * 8, 1, F.ACC1)
 
 
-BODY = dict(head_r=4, torso=4, torso_w=6, thigh=3, shin=3, upper=3, fore=3, leg_w=2, arm_w=2,
+BODY = dict(head_r=4, torso=4, torso_w=6, thigh=3, shin=3, upper=3, fore=3, leg_w=2, arm_w=2,  # noqa: C408
             hair="short", hat="hood", skirt=True, belt=F.SHOE, thighs=F.BOT, shins=F.SHOE,
             uppers=F.TOP, forearms=F.SKIN, foot=2)
 SPEC = F.Spec(w=26, h=26, extra=_props, **BODY)
@@ -179,7 +179,7 @@ class Theme(S.Theme):
 
     def _build_actions(self, pal):
         """Poses and props for the activity animations, built once."""
-        flash = {k: VERMILLION for k in HERO}
+        flash = {k: VERMILLION for k in HERO}  # noqa: C420
         flash.update({F.OUT: (90, 30, 0), F.SKIN: ORANGE, F.SKIN_D: ORANGE, F.WHITE: (255, 230, 200),
                       F.ACC1: (255, 230, 200), F.EYE: (90, 30, 0)})
         fpal = gfx.palette(flash)
@@ -202,7 +202,7 @@ class Theme(S.Theme):
         self.p_stand = pose(pal, lf=(4, 2), lb=(-4, 2), af=(8, 12), ab=(-8, 12), prop="shield")
         self.p_read = pose(pal, lf=(4, 2), lb=(-4, 2), af=(75, 50), ab=(30, 50), prop="scroll", mouth=True)
         self.p_reach = pose(pal, lf=(4, 2), lb=(-4, 2), af=(150, 10), ab=(-8, 12))
-        hurt = dict(lean=-18, hip=(0, -1), lf=(30, 30), lb=(-10, 45), af=(130, 30), ab=(-140, -20), eye=False,
+        hurt = dict(lean=-18, hip=(0, -1), lf=(30, 30), lb=(-10, 45), af=(130, 30), ab=(-140, -20), eye=False,  # noqa: C408
                     mouth=True)
         self.p_hurt = pose(pal, **hurt)
         self.p_hurt_flash = pose(fpal, **hurt)
@@ -360,7 +360,7 @@ class Theme(S.Theme):
             screen.font = font.sins
             gfx.zzz(x + 10, y + 12, t, (255, 255, 255), font.sins)
 
-    def draw_navi(self, st, t):
+    def draw_navi(self, st, t):  # noqa: ARG002
         a = t / 380.0
         fx = 70 + math.cos(a) * 22
         fy = 50 + math.sin(a * 1.7) * 8
@@ -472,7 +472,7 @@ class Theme(S.Theme):
             screen.shape(shape.circle(cx + math.cos(a) * r, cy + math.sin(a) * r, 2.2))
 
     # ------------------------------------------------------------ the activities
-    def act_edit(self, st, t, p):
+    def act_edit(self, st, t, p):  # noqa: ARG002
         """Sword combo: thrust, low stab, rising slash, and the slime pops."""
         ex = 138 - min(1.0, p / 0.25) * 34          # slime slides in to x 104
         ey = 97
@@ -498,7 +498,7 @@ class Theme(S.Theme):
             gfx.blit(self.rupee, ex + 4, ey - 4 - 6 * math.sin(k * math.pi), 1)
             self.put(self.p_slash if k < 0.3 else self.p_stand)
 
-    def act_read(self, st, t, p):
+    def act_read(self, st, t, p):  # noqa: ARG002
         """Holds up a lens; its light finds a hidden rupee."""
         h = self.put(self.p_lens)
         lx, ly = h["hand_f"]
@@ -525,11 +525,11 @@ class Theme(S.Theme):
                     q = ((t / 260.0) + i / 3.0) % 1.0
                     self.sparkle(124 + i * 8, 84 + i * 5 - q * 4, 2, GOLD, int(255 * (1 - q)))
 
-    def act_shell(self, st, t, p):
+    def act_shell(self, st, t, p):  # noqa: ARG002
         """Drops a bomb, steps back behind the shield, boom."""
         bx, by = 104, 99
         if p < 0.22:
-            h = self.put(self.p_crouch)
+            self.put(self.p_crouch)
             return
         lit = p < 0.6
         if lit:
@@ -559,7 +559,7 @@ class Theme(S.Theme):
             d = 6 + k * 22
             gfx.box(bx + math.cos(a) * d, by - 4 + math.sin(a) * d * 0.6 - k * 6, 2, 2, (110, 80, 50))
 
-    def act_web(self, st, t, p):
+    def act_web(self, st, t, p):  # noqa: ARG002
         """Fires the hookshot to the edge of the screen and reels a page back in."""
         h = self.put(self.p_aim)
         hx, hy = h["hand_f"]
@@ -586,11 +586,11 @@ class Theme(S.Theme):
         if p >= 0.55:
             gfx.blit(self.page, tip - 2, hy + 3, 2)
 
-    def act_spawn(self, st, t, p):
+    def act_spawn(self, st, t, p):  # noqa: ARG002
         """Throws a boomerang that arcs away (SubagentStart); it comes back (SubagentStop)."""
         if p < 0.5:
             k = p / 0.5
-            h = self.put(self.p_throw if k < 0.4 else self.p_stand)
+            self.put(self.p_throw if k < 0.4 else self.p_stand)
             hx, hy = self.p_throw[1]["hand_f"]
             hx, hy = X0 + hx * SCALE, 90 - HIP_Y * SCALE + hy * SCALE
             bx = hx + k * 120
@@ -598,7 +598,7 @@ class Theme(S.Theme):
             size = 2 if k < 0.7 else 1
         else:
             k = (p - 0.5) / 0.5
-            h = self.put(self.p_catch if k > 0.55 else self.p_stand)
+            self.put(self.p_catch if k > 0.55 else self.p_stand)
             hx, hy = self.p_catch[1]["hand_f"]
             hx, hy = X0 + hx * SCALE, 90 - HIP_Y * SCALE + hy * SCALE
             bx = 160 - k * (160 - hx) * 1.0
@@ -613,7 +613,7 @@ class Theme(S.Theme):
             screen.shape(shape.circle(bx - j * 5 * (1 if p < 0.5 else -1) + 4, by + 3, 2))
         gfx.blit(spin, bx, by, size, (t // 160) % 2 == 0)
 
-    def act_fail(self, st, t, p):
+    def act_fail(self, st, t, p):  # noqa: ARG002
         """Knocked back with a flash; color is never the only signal: it says OUCH!"""
         hop = math.sin(min(1.0, p / 0.6) * math.pi) * 8
         back = -12 * min(1.0, p / 0.6)
@@ -634,7 +634,7 @@ class Theme(S.Theme):
         hx, hy = h["head"]
         gfx.bubble(int(hx) + 4, int(hy) - 8, "OUCH!", WHITE, VERMILLION, font.sins)
 
-    def act_done(self, st, t, p):
+    def act_done(self, st, t, p):  # noqa: ARG002
         """Item get: both hands up, the treasure overhead, sparkles."""
         rise = min(1.0, p / 0.2)
         h = self.put(self.p_itemget if p > 0.12 else self.p_stand)
@@ -660,7 +660,7 @@ class Theme(S.Theme):
                 self.sparkle(tx + 10 + math.cos(a) * (14 + q * 8), ty + 8 + math.sin(a) * (10 + q * 6), 2, c,
                              int(255 * (1 - q)))
 
-    def act_prompt(self, st, t, p):
+    def act_prompt(self, st, t, p):  # noqa: ARG002
         """A "!" over the hero, and a scroll drops in with the new quest."""
         if p < 0.6:
             h = self.put(self.p_reach if p > 0.3 else self.p_stand)
@@ -675,7 +675,7 @@ class Theme(S.Theme):
             sy = 24 + k * 30
             gfx.blit(self.scroll_img, sx, sy, 2)
 
-    def act_arrive(self, st, t, p):
+    def act_arrive(self, st, t, p):  # noqa: ARG002
         """Steps out of a cave door into the field."""
         cx, top, bottom = 34, 60, 104
         screen.pen = gfx.rgb((112, 96, 84))
@@ -700,9 +700,9 @@ class Theme(S.Theme):
                 q = ((t / 400.0) + i / 4.0) % 1.0
                 self.sparkle(cx + 14 + i * 6, top + 20 + i * 7 - q * 6, 2, SKYBLUE if i % 2 else GOLD, int(255 * (1 - q)))
 
-    def act_refill(self, st, t, p):
+    def act_refill(self, st, t, p):  # noqa: ARG002
         """A heart container floats down; the hearts fill back up."""
-        h = self.put(self.p_reach if 0.25 < p < 0.55 else self.p_stand)
+        self.put(self.p_reach if 0.25 < p < 0.55 else self.p_stand)
         if p < 0.45:
             k = p / 0.45
             hx = 70 + math.sin(k * 8) * 8 * (1 - k)
