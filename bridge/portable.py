@@ -67,6 +67,28 @@ def pid_command(pid):
         return ""
 
 
+def tailscale_ip():
+    """This computer's Tailscale address (100.x.y.z), or None when Tailscale isn't running here."""
+    import json
+    import shutil
+    import subprocess
+    pf = os.environ.get("ProgramFiles") or "C:\\Program Files"
+    for t in (shutil.which("tailscale"), "/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+              "/opt/homebrew/bin/tailscale", "/usr/local/bin/tailscale",
+              os.path.join(pf, "Tailscale", "tailscale.exe")):
+        if not t or not os.path.exists(t):
+            continue
+        try:
+            st = json.loads(subprocess.run([t, "status", "--json"], capture_output=True, text=True,
+                                           timeout=5).stdout)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return None
+        if st.get("BackendState") != "Running":
+            return None
+        return next((ip for ip in (st.get("Self") or {}).get("TailscaleIPs") or [] if "." in ip), None)
+    return None
+
+
 # ---------------------------------------------------------------- USB serial
 def serial_missing():
     """Why USB serial can't work here, or None when it can."""

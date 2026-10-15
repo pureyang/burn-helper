@@ -10,7 +10,7 @@ Outputs:
   * GET /status                 compact JSON for the badge (counts only, no names or paths)
   * GET /                       phone control panel
   * POST /theme                 pick the badge theme from a phone
-  * UDP beacon                  "TUFTYBRIDGE 1 <port>" broadcast to port 47800 every 2 s
+  * UDP beacon                  "TUFTYBRIDGE 1 <port> <bridge id>" broadcast to port 47800 every 2 s
                                 (the TUFTY wire markers predate the Burn Helper name; kept so
                                 badges and bridges of either age still talk)
   * USB tether                  "@TUFTY <status json>" lines written to the badge's USB serial
@@ -475,6 +475,8 @@ class Bridge:
 
         return {
             "v": 1,
+            "bridge": BRIDGE_ID or bridge_id(),      # which bridge this is (the badge pairs with it over USB)
+            "join": JOIN_URL,                        # where another computer joins it (the installer finds it)
             "ts": int(now),
             "now_ms": int(time.time() * 1000),
             "level": level,
@@ -600,6 +602,39 @@ class Handler(BaseHTTPRequestHandler):
             self._send(500, {"error": "internal"})
 
 
+def bridge_id():
+    """This bridge's id, made once and kept in the state folder. The badge learns it over the USB
+    cable and from then on listens only to this bridge's beacon, so a second bridge on the same
+    network can't pull it away."""
+    path = os.path.join(STATE_DIR, "bridge_id")
+    try:
+        with open(path) as f:
+            v = f.read().strip()
+        if v:
+            return v
+    except OSError:
+        pass
+    import secrets as _secrets
+    v = _secrets.token_hex(4)
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(path, "w") as f:
+            f.write(v)
+    except OSError:
+        pass
+    return v
+
+
+BRIDGE_ID = None
+JOIN_URL = None       # where other computers join this bridge (its Tailscale address when it has one)
+
+
+def find_join_url(port):
+    global JOIN_URL
+    ip = portable.tailscale_ip()
+    JOIN_URL = "http://%s:%d" % (ip or lan_ip(), port)
+
+
 def load_relay():
     try:
         with open(RELAY_FILE) as f:
@@ -711,7 +746,7 @@ def scan_loop():
 
 
 def beacon_loop(port):
-    msg = ("TUFTYBRIDGE 1 %d" % port).encode()
+    msg = ("TUFTYBRIDGE 1 %d %s" % (port, BRIDGE_ID or bridge_id())).encode()
     sock = None
     while True:
         try:
@@ -816,7 +851,7 @@ def lan_ip():
 
 
 def main():
-    global BRIDGE, VERBOSE, RELAY
+    global BRIDGE, VERBOSE, RELAY, BRIDGE_ID
     ap = argparse.ArgumentParser(description="Burn Helper: Claude Code activity bridge for the badge")
     ap.add_argument("--port", type=int, default=int(env("PORT") or DEFAULT_PORT))
     ap.add_argument("--bind", default=env("BIND") or "0.0.0.0")
@@ -844,6 +879,9 @@ def main():
             f.write(str(os.getpid()))      # so the installer can restart it where there is no launchd
     except OSError as e:
         log("could not write bridge.pid: %s" % e)
+    BRIDGE_ID = bridge_id()
+    log("bridge id %s" % BRIDGE_ID)
+    threading.Thread(target=find_join_url, args=(args.port,), daemon=True).start()
     BRIDGE = Bridge()
     BRIDGE.scan()
     threading.Thread(target=scan_loop, daemon=True).start()
