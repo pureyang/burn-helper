@@ -66,7 +66,16 @@ if prefs["bright"] >= OFF:
     prefs["bright"] = OFF - 1
 
 st = S.Status()
-link = net.Net(config.networks(), config.bridge(), relay=config.load_relay())
+
+
+def new_link():
+    """The Wi-Fi link, from the networks saved right now (the last one that worked tried first)."""
+    return net.Net(config.networks(), config.bridge(), relay=config.load_relay(),
+                   last=config.last_network(), on_join=config.save_last_network,
+                   paired=config.paired_bridge())
+
+
+link = new_link()
 tether = usb.UsbLink()
 themes = {}
 view = 0        # 0 animation, then views.DESKTOP, views.DEBUG
@@ -176,6 +185,12 @@ def apply_bridge():
             config.save_relay(r)
             link.set_relay(r)
             show_toast("INTERNET RELAY READY")
+    bid = d.get("bridge")
+    if source == "usb" and isinstance(bid, str) and bid and bid != link.paired:
+        # the bridge on the other end of the cable is this badge's bridge: from now on its beacon
+        # is the one to follow on Wi-Fi, whatever other bridges are on the network
+        config.save_paired_bridge(bid)
+        link.paired = bid
     st.update(d)
     tseq = d.get("theme_seq")
     if isinstance(tseq, int) and tseq != prefs.get("seq"):
@@ -382,7 +397,7 @@ def short_press(b):
 
 def handle_buttons(t):
     """Short presses act on release; holds act once while held."""
-    global view, demo, portal, portal_arm, last_input, dimmed, fired, wink_until
+    global view, demo, portal, portal_arm, last_input, dimmed, fired, wink_until, link
     if badge.pressed() or badge.held():
         last_input = t
         if dimmed:
@@ -401,7 +416,9 @@ def handle_buttons(t):
             down.clear()
             portal.close()
             portal = None
-            link.stop()
+            # setup saves a network as soon as you submit it, even when its test join fails,
+            # so start again from the saved list rather than the one the badge booted with
+            link = new_link()
         return
 
     def held(b):
@@ -463,7 +480,7 @@ def finish_portal():
     down.clear()
     if ok:
         portal = None
-        link = net.Net(config.networks(), config.bridge(), relay=config.load_relay())
+        link = new_link()
         show_toast("WI-FI " + ssid[:14].upper())
     else:
         link.stop()

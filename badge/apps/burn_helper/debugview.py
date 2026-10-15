@@ -54,7 +54,7 @@ def draw(link, tether, source, t, page=None):  # noqa: ARG001
         if c["variant"] and not c["tries"]:
             continue
         shown += 1
-        info = link.seen.get(c["ssid"])
+        info = link.seen.get(link.heard(c["ssid"]) or "")
         vis = "CH%d %d" % (info[1], info[0]) if info else ""
         trying = link.cur is not None and link.cands[link.cur] is c and link.state == "joining"
         res = "TRYING" if trying else SHORT.get(c["result"], c["result"] or "-")

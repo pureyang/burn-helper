@@ -118,6 +118,30 @@ def networks():
     return uniq
 
 
+def last_network():
+    """The saved network that connected last time (tried first), or None."""
+    return load_portal().get("last") or None
+
+
+def save_last_network(ssid):
+    d = load_portal()
+    if d.get("last") != ssid:
+        d["last"] = ssid
+        save_portal(d)
+
+
+def paired_bridge():
+    """The id of the bridge this badge belongs to (learnt over the USB cable), or None."""
+    return load_portal().get("paired") or None
+
+
+def save_paired_bridge(bid):
+    d = load_portal()
+    if d.get("paired") != bid:
+        d["paired"] = bid
+        save_portal(d)
+
+
 def _parse_bridge(v):
     v = (v or "").strip()
     if not v:
