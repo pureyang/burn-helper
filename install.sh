@@ -72,7 +72,6 @@ case "$(uname -s)" in
     xcode-select -p >/dev/null 2>&1 || die "Install Apple's command line tools first (they include git and python3): xcode-select --install"
     [ -x "$PY" ] || die "$PY is missing; run: xcode-select --install" ;;
   Linux)
-    [ -n "$JOIN" ] || [ "$UNINSTALL" = 1 ] || die "On Linux, join an existing bridge (a Mac or a Windows PC): add --join http://<bridge>:8787"
     PY="$(command -v python3 || true)"
     [ -n "$PY" ] || die "python3 is needed: install it with your package manager."
     command -v git >/dev/null 2>&1 || die "git is needed: install it with your package manager." ;;
@@ -114,6 +113,24 @@ if [ "$UNINSTALL" = 1 ]; then
 fi
 
 [ -d "$HOME/.claude" ] || say "Claude Code does not seem to be set up yet (no ~/.claude). Install it, run it once, then rerun this."
+
+# There is one bridge. If another computer on this network already is it, offer to join it
+# instead of making this computer a second one.
+if [ -z "$JOIN" ] && [ "$NO_BRIDGE" = 0 ]; then
+  say "Looking for a bridge already on this network ..."
+  found="$("$PY" "$ROOT/bridge/install.py" --find-bridge 2>/dev/null || true)"
+  if [ -n "$found" ]; then
+    say "There is already a bridge on this network: $found"
+    if ask "Add this computer to it as another computer (no second bridge, no badge setup)?"; then
+      JOIN="$found"
+    else
+      say "Carrying on: this computer becomes a bridge too. The badge follows only the one it was plugged into."
+    fi
+  fi
+fi
+if [ -z "$JOIN" ] && [ "$(uname -s)" = "Linux" ] && [ "$UNINSTALL" = 0 ]; then
+  die "On Linux, join an existing bridge (a Mac or a Windows PC): add --join http://<bridge>:8787"
+fi
 
 # joining a bridge on another computer: hooks and a status line only
 if [ -n "$JOIN" ]; then

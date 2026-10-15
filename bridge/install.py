@@ -291,6 +291,23 @@ def start_bridge():
     return False
 
 
+def remove_local_bridge(domain):
+    """Joining another bridge: stop and remove this computer's own bridge, if it has one. The badge
+    talks to one bridge; a second one on the network pulls it back and forth. True if there was one."""
+    if WINDOWS:
+        had = stop_bridge()
+        delete_run_value()
+        return had
+    if MAC:
+        had = False
+        for label in (LABEL,) + OLD_LABELS:
+            if os.path.exists(os.path.join(HOME, "Library", "LaunchAgents", label + ".plist")):
+                remove_agent(domain, label)
+                had = True
+        return had
+    return False
+
+
 def restart_bridge():
     """Restart the bridge so it reads its settings again (relay.py uses this). True if it did."""
     if MAC:
@@ -355,6 +372,51 @@ def join_lines(lan, name, port=8787, windows=WINDOWS):
     return lines
 
 
+def find_bridge(wait=4.0, port=47800):
+    """Another computer's bridge on this network, heard by its beacon (every 2 s): the address to
+    join it at, or None. This computer's own bridge (same id) doesn't count."""
+    import socket
+    import urllib.request
+    own = None
+    try:
+        with open(os.path.join(STATE_DIR, "bridge_id")) as f:
+            own = f.read().strip() or None
+    except OSError:
+        pass
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, "SO_REUSEPORT"):
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        s.bind(("", port))
+    except OSError:
+        s.close()
+        return None
+    end = time.time() + wait
+    try:
+        while time.time() < end:
+            s.settimeout(max(0.05, end - time.time()))
+            try:
+                data, addr = s.recvfrom(128)
+            except (socket.timeout, OSError):
+                break
+            parts = data.split()
+            if not data.startswith(b"TUFTYBRIDGE") or len(parts) < 3:
+                continue
+            bid = parts[3].decode(errors="replace") if len(parts) > 3 else ""
+            if own and bid == own:
+                continue
+            url = "http://%s:%s" % (addr[0], parts[2].decode(errors="replace"))
+            try:
+                with urllib.request.urlopen(url + "/status", timeout=3) as r:
+                    return json.load(r).get("join") or url
+            except Exception:  # noqa: BLE001
+                return url
+    finally:
+        s.close()
+    return None
+
+
 def check_bridge(url):
     """Ask the bridge at url whether it is there. Returns a line to print."""
     import urllib.request
@@ -386,10 +448,17 @@ def main():
     ap.add_argument("--token", help="the bridge's BURN_HELPER_TOKEN, if you set one")
     ap.add_argument("--join-help", action="store_true",
                     help="print what to run on another computer to add it to this bridge")
+    ap.add_argument("--find-bridge", action="store_true",
+                    help="print the join address of a bridge already on this network, if there is one")
     args = ap.parse_args()
     if args.join_help:
         print("\n".join(join_lines(*this_computer())))
         return 0
+    if args.find_bridge:
+        url = find_bridge()
+        if url:
+            print(url)
+        return 0 if url else 1
     if args.bridge:
         if not args.bridge.startswith(("http://", "https://")):
             args.bridge = "http://" + args.bridge
@@ -472,6 +541,9 @@ def main():
             print("launchctl bootstrap returned %s; check %s" % (rc, LOGFILE))
         else:
             print("Bridge started. Logs:", LOGFILE)
+    if args.bridge and remove_local_bridge(domain):
+        notes.append("This computer was running a bridge of its own. It is stopped and removed: the badge "
+                     "talks to one bridge, and two on one network pull it back and forth.")
     for n in notes:
         print("Note:", n)
     if args.bridge:

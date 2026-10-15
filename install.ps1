@@ -193,6 +193,21 @@ function Install-BurnHelper {
     Say "Claude Code does not seem to be set up yet (no ~\.claude). Install it, run it once, then rerun this."
   }
 
+  # There is one bridge. If another computer on this network already is it, offer to join it
+  # instead of making this PC a second one.
+  if (-not $joinUrl -and -not $noBridge) {
+    Say "Looking for a bridge already on this network ..."
+    $found = ("" + (Invoke-Py @($installPy, "--find-bridge") 2>$null)).Trim()
+    if ($found) {
+      Say "There is already a bridge on this network: $found"
+      if (Ask "Add this PC to it as another computer (no second bridge, no badge setup)?") {
+        $joinUrl = $found
+      } else {
+        Say "Carrying on: this PC becomes a bridge too. The badge follows only the one it was plugged into."
+      }
+    }
+  }
+
   # joining a bridge on another computer: hooks and a status line only
   if ($joinUrl) {
     if ($dry) {

@@ -128,3 +128,55 @@ assert "answers" in install.check_bridge(url), install.check_bridge(url)
 srv.shutdown()
 assert "Can't reach" in install.check_bridge("http://127.0.0.1:9"), "nothing listening"
 print("PASS join: the lines to run on other computers, Tailscale address first; the bridge check")
+
+# ---------------------------------------------------------------- finding a bridge already on the network
+import socket as _socket  # noqa: E402
+import time  # noqa: E402
+import tempfile as _tempfile  # noqa: E402
+
+
+class Status(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = b'{"join": "http://100.64.1.2:8787", "bridge": "their-id"}'
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+srv = http.server.HTTPServer(("127.0.0.1", 0), Status)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+TEST_PORT = 47899                              # not the real beacon port: real bridges stay out of it
+
+
+def beacon(bid):
+    s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    for _ in range(6):
+        s.sendto(("TUFTYBRIDGE 1 %d %s" % (srv.server_address[1], bid)).encode(), ("127.0.0.1", TEST_PORT))
+        time.sleep(0.25)
+    s.close()
+
+
+install.STATE_DIR = _tempfile.mkdtemp()
+threading.Thread(target=beacon, args=("their-id",), daemon=True).start()
+assert install.find_bridge(wait=2.0, port=TEST_PORT) == "http://100.64.1.2:8787", "joins at the address it advertises"
+with open(os.path.join(install.STATE_DIR, "bridge_id"), "w") as f:
+    f.write("their-id")
+threading.Thread(target=beacon, args=("their-id",), daemon=True).start()
+assert install.find_bridge(wait=1.5, port=TEST_PORT) is None, "this computer's own bridge doesn't count"
+srv.shutdown()
+print("PASS find bridge: another computer's bridge is found by its beacon and joined at its advertised "
+      "address; this computer's own bridge is not")
+
+# joining removes this computer's own bridge, if it had one (on a Mac: its login item)
+agents = os.path.join(home, "Library", "LaunchAgents")
+os.makedirs(agents, exist_ok=True)
+plist = os.path.join(agents, "com.burnhelper.bridge.plist")
+with open(plist, "w") as f:
+    f.write("<plist/>")
+_, out = run("--bridge", "http://my-mac:8787")
+assert not os.path.exists(plist) and "running a bridge of its own" in out, out
+print("PASS join removes a bridge this computer was running, so there is only one")
