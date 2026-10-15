@@ -339,7 +339,8 @@ def this_computer():
         import relay
         t = relay.find_tailscale()
         if t:
-            out = subprocess.run([t, "status", "--json"], capture_output=True, text=True, timeout=5).stdout
+            out = subprocess.run([t, "status", "--json"], capture_output=True, text=True, timeout=5,
+                                 env=dict(os.environ, TAILSCALE_BE_CLI="1")).stdout
             st = json.loads(out)
             if st.get("BackendState") == "Running":
                 ips = (st.get("Self") or {}).get("TailscaleIPs") or []

@@ -76,7 +76,8 @@ def public_ip(host):
 
 
 def ts(*args, check=True):
-    r = subprocess.run([tailscale()] + list(args), capture_output=True, text=True, timeout=60)
+    env = dict(os.environ, TAILSCALE_BE_CLI="1")     # the Mac app's binary as a command, not its window
+    r = subprocess.run([tailscale()] + list(args), capture_output=True, text=True, timeout=60, env=env)
     if check and r.returncode != 0:
         sys.exit("tailscale %s failed:\n%s" % (" ".join(args), (r.stdout + r.stderr).strip()))
     return r

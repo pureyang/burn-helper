@@ -78,9 +78,12 @@ def tailscale_ip():
               os.path.join(pf, "Tailscale", "tailscale.exe")):
         if not t or not os.path.exists(t):
             continue
+        # the Mac app's binary starts its window unless told it is the command line (a login
+        # item like the bridge has no terminal for it to notice)
+        env = dict(os.environ, TAILSCALE_BE_CLI="1")
         try:
             st = json.loads(subprocess.run([t, "status", "--json"], capture_output=True, text=True,
-                                           timeout=5).stdout)
+                                           timeout=5, env=env).stdout)
         except (OSError, ValueError, subprocess.SubprocessError):
             return None
         if st.get("BackendState") != "Running":

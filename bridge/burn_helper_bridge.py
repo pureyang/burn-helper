@@ -630,9 +630,18 @@ JOIN_URL = None       # where other computers join this bridge (its Tailscale ad
 
 
 def find_join_url(port):
+    """Where other computers join this bridge: its Tailscale address, else its local one. Tailscale
+    can start after the bridge at sign-in, so keep asking for a few minutes."""
     global JOIN_URL
-    ip = portable.tailscale_ip()
-    JOIN_URL = "http://%s:%d" % (ip or lan_ip(), port)
+    for _ in range(10):
+        ip = portable.tailscale_ip()
+        if ip:
+            JOIN_URL = "http://%s:%d" % (ip, port)
+            log("join address %s" % JOIN_URL)
+            return
+        JOIN_URL = "http://%s:%d" % (lan_ip(), port)
+        time.sleep(30)
+    log("join address %s (Tailscale isn't running here)" % JOIN_URL)
 
 
 def load_relay():
