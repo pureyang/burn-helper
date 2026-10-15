@@ -18,6 +18,11 @@ so it can hear the bridge's beacon.
   (`BRIDGE = "192.168.x.y:8787"` in `secrets.py`, or the portal's bridge field).
 - **Combined 2.4/5 GHz networks work.** Use the shared name (SSID) as is. The badge only hears
   the 2.4 GHz side and joins that.
+- **Several saved networks.** The badge tries the one that worked last, then the others in the
+  order they were added, and moves on by itself when one goes out of range (it rescans every
+  15 s). A network added in phone setup is used straight away, even if setup's test join failed.
+  A phone hotspot named with a curly apostrophe (`Sam’s iPhone`) matches a saved name typed with
+  a straight one.
 
 ## Shipping badges with a conference Wi-Fi pre-stored
 

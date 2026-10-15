@@ -63,7 +63,9 @@ curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.s
 irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
 ```
 
-The installer asks before each change. It:
+The installer asks before each change. It first listens for a bridge already on your network; if
+it hears one, it offers to add this computer to it instead ([setup 3](#3-more-computers)), so you
+only ever set up one bridge. Otherwise it:
 
 1. Makes this computer the bridge: async Claude Code hooks, a hearts status line and a login
    item (`~/.claude/settings.json` is backed up first). On Windows it also asks to let the badge
@@ -76,8 +78,8 @@ The installer asks before each change. It:
 5. Shows the **join line** for your other computers ([setup 3](#3-more-computers)), with this
    computer's address filled in.
 
-On the cable the badge needs no Wi-Fi at all; unplugged, it finds the bridge on your network by
-itself. If the badge stops answering during the install, the installer asks you to press its
+On the cable the badge needs no Wi-Fi at all, and it pairs with this bridge: unplugged, it finds
+it on your network by itself and ignores any other bridge there. If the badge stops answering during the install, the installer asks you to press its
 **RESET** button and carries on once it responds. Windows support is newer and less tested than
 the Mac.
 
