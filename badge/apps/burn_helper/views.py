@@ -141,7 +141,9 @@ def desktop(c, t):  # noqa: ARG001
     if c.wait_sel is not None and 0 <= c.wait_sel < len(wl):
         _session(c, c.wait_sel)
         return
-    header("DESKTOP", "%d WORKING" % st.agents if st.online else "OFFLINE")
+    # the battery on the right: its charge, and the time left once learnt from a real run unplugged
+    header("DESKTOP MODE", power.text(short=True))
+    working = "%d WORKING" % st.agents
     # usage left
     for label, p, left, y in (("5 HOURS", left5(st), st.left5, 10), ("WEEK", left7(st), st.left7, 34)):
         colour = pct_colour(p)
@@ -158,6 +160,7 @@ def desktop(c, t):  # noqa: ARG001
         footer("B: DEBUG   HOLD B: SETUP")
     elif st.waiting > 0:
         gfx.text("%d WAITING FOR YOU" % st.waiting, 4, 59, WARN, font.sins)
+        gfx.text(working, 156 - gfx.width(working, font.sins), 59, DIM, font.sins)
         y = 70
         shown = wl[:2] if len(wl) > 3 else wl
         for w in shown:
@@ -172,7 +175,8 @@ def desktop(c, t):  # noqa: ARG001
             gfx.text("ANSWER IN CLAUDE CODE", 4, y, DIM, font.sins)
         footer("A/C: SESSION DETAILS" if wl else "B: DEBUG")
     else:
-        gfx.text("NOTHING WAITING FOR YOU", 4, 59, GOOD, font.sins)
+        gfx.text("NOTHING WAITING", 4, 59, GOOD, font.sins)
+        gfx.text(working, 156 - gfx.width(working, font.sins), 59, DIM, font.sins)
         footer("B: DEBUG   HOLD B: SETUP")
 
 
@@ -237,6 +241,14 @@ def _overview(c):
         y += 10
 
 
+def battery_left():
+    """The Connection page's estimate of time left unplugged, and how sure it is."""
+    left = power.time_left()
+    if left is None:
+        return "ON USB" if power.read() and power.read()[0] else "-"
+    return "%s (%s)" % (power.left_text(left[0]), "LEARNT" if left[1] else "LEARNING")
+
+
 def _connection(c):
     name, ip = wifi_name_ip(c)
     brg, age = bridge_text(c)
@@ -252,7 +264,8 @@ def _connection(c):
             ("SIGNAL", signal or "-"),
             ("BRIDGE", brg),
             ("UPDATED", age or "NEVER"),
-            ("BATTERY", power.text())]
+            ("BATTERY", power.text()),
+            ("TIME LEFT", battery_left())]
     y = 13
     for k, v in rows:
         gfx.text(k, 4, y, DIM, font.sins)
