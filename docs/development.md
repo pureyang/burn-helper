@@ -9,6 +9,7 @@ python3 tools/sim/preview_debug.py              # render the Wi-Fi debug screen 
 python3 tools/deploy.py                         # copy changed files to the badge and restart
 python3 tools/deploy.py --shot-only x.png [--view 1-2] [--page 0-2] [--demo 1]   # screenshot the badge
 python3 tools/netdebug.py                       # badge Wi-Fi diagnosis over USB
+python3 tools/batterylog.py                     # copy the badge's battery log and sum up each run on battery
 python3 tools/sim/test_net.py                   # badge networking code against a live local bridge
 python3 tools/sim/test_portal.py                # phone setup portal form handling
 python3 tools/sim/test_tiers.py                 # the 15 activity levels and the waiting list

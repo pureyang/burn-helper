@@ -157,11 +157,12 @@ every theme and level, and [all 15 levels](docs/img/tiers_hero.png) side by side
 modes pause the animation to save battery. Usage is always shown as what is **left**.
 
 - **Animation**: the theme. A/C switch themes here, and only here.
-- **Desktop mode**: usage left on the 5-hour and weekly limits, and the sessions waiting for
-  you, longest wait first. A/C step through those sessions one at a time: what each needs
+- **Desktop mode**: usage left on the 5-hour and weekly limits, the sessions waiting for you,
+  longest wait first, and the badge's battery (with the time left unplugged, once the badge has
+  learnt its drain from a run on battery). A/C step through those sessions one at a time: what each needs
   (permission for a tool, or your reply), its folder, and how long it has waited and run.
 - **Debug mode**: everything on one page, then the connection and Wi-Fi debug pages (A/C turn
-  pages). When Wi-Fi is not working it opens on the Wi-Fi page.
+  pages), including the battery's estimated time left unplugged. When Wi-Fi is not working it opens on the Wi-Fi page.
 
 ## Buttons
 
