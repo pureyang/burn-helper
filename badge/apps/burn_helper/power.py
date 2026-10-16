@@ -13,12 +13,15 @@
 #   * on battery it only goes down (up only slowly, to correct itself after charging),
 #   * charging, it rises no faster than the battery can take charge, 100% when the charger stops,
 #   * and it is kept across app restarts.
+# From how fast the estimate falls on battery it also works out the time left unplugged, and it
+# learns the badge's usual drain from every long enough run on battery (kept with the estimate),
+# so the time left is sound from the first minutes of the next run.
 
 import time
 
 LOG_FILE = "/state/burn_helper_power.log"
 SOC_FILE = "/state/burn_helper_soc.json"
-LOG_MAX = 8192
+LOG_MAX = 48 * 1024         # about 13 hours of one line a minute: a whole run on battery
 CACHE_MS = 2000
 LOG_ON_BATTERY_MS = 60 * 1000
 LOG_ON_USB_MS = 5 * 60 * 1000
@@ -34,10 +37,16 @@ CHARGE_PCT_PER_MIN = 1.0     # at most this fast while charging (about 100 minut
 RISE_PCT_PER_MIN = 0.5       # on battery the estimate only creeps up, to correct itself after charging
 SMOOTH = 0.08                # how much each 2-second reading moves the smoothed voltage
 KEEP_SOC_MS = 10 * 60 * 1000 # a saved estimate older than this is not trusted after a restart
+DEFAULT_RATE = 11.0          # %/hour until it has learnt its own (one full run took about 9 hours)
+LEARN_MIN_MINUTES = 30       # a run on battery teaches the drain only if it lasted this long
+LEARN_MIN_DROP = 5.0         # and used this much
 
 _cache = [None, None]        # reading, ticks_ms it was taken
 _log = [None, None]          # ticks_ms of the last log line, usb state at that line
-_est = {"v": None, "soc": None, "t": None, "saved": None}
+_est = {"v": None, "soc": None, "t": None, "saved": None,
+        "rate": None, "runs": 0,           # learnt drain in %/hour, and from how many runs
+        "run": None,                       # this run on battery: (time.time() it began, estimate then)
+        "run_t": None}                     # ticks_ms it began, when it began since the app started
 
 
 def soc_from_volts(v):
@@ -78,19 +87,41 @@ def _load():
     try:
         import json
         with open(SOC_FILE) as f:
-            d = json.loads(f.read())
-        return d.get("soc"), d.get("at")
+            return json.loads(f.read())
     except Exception:  # noqa: BLE001
-        return None, None
+        return {}
 
 
-def _save(soc):
+def _save():
+    e = _est
     try:
         import json
         with open(SOC_FILE, "w") as f:
-            f.write(json.dumps({"soc": round(soc, 1), "at": time.time()}))
+            f.write(json.dumps({"soc": round(e["soc"], 1), "at": time.time(), "rate": e["rate"],
+                                "runs": e["runs"], "run": e["run"]}))
     except Exception:  # noqa: BLE001
         pass
+
+
+def learn(rate, runs, minutes, drop):
+    """The drain to remember after a run on battery of `minutes` that used `drop` percent:
+    (rate, runs). Short or tiny runs teach nothing; each new run counts for 30%."""
+    if minutes < LEARN_MIN_MINUTES or minutes > 24 * 60 or drop < LEARN_MIN_DROP:
+        return rate, runs
+    seen = drop / (minutes / 60.0)
+    if not 1.0 <= seen <= 100.0:
+        return rate, runs                  # not a believable drain: a clock jump or a bad reading
+    return (seen if rate is None else 0.7 * rate + 0.3 * seen), runs + 1
+
+
+def minutes_left(soc, rate, runs, run_minutes, run_drop):
+    """Minutes until empty at the drain seen in this run, leaning on the learnt (or default) drain
+    while the run is still short."""
+    base = rate if rate else DEFAULT_RATE
+    if run_minutes >= 20 and run_drop >= 3:
+        w = min(1.0, run_minutes / 120.0)
+        base = w * (run_drop / (run_minutes / 60.0)) + (1 - w) * base
+    return max(0, int(soc / max(base, 1.0) * 60))
 
 
 def read():
@@ -108,19 +139,57 @@ def read():
         return None
     e = _est
     e["v"] = v if e["v"] is None else e["v"] + SMOOTH * (v - e["v"])
-    if e["soc"] is None:
-        saved, at = _load()
-        if saved is not None and at is not None and 0 <= time.time() - at < KEEP_SOC_MS / 1000:
-            e["soc"] = float(saved)          # carry on from before the restart
+    if e["t"] is None:
+        d = _load()
+        e["rate"], e["runs"] = d.get("rate"), int(d.get("runs") or 0)
+        at = d.get("at")
+        if d.get("soc") is not None and at is not None and 0 <= time.time() - at < KEEP_SOC_MS / 1000:
+            e["soc"] = float(d["soc"])       # carry on from before the restart
+            e["run"] = d.get("run")
     minutes = 0.0 if e["t"] is None else time.ticks_diff(now, e["t"]) / 60000.0
     e["soc"] = estimate(e["soc"], e["v"], usb, charging, minutes)
     e["t"] = now
+    if usb and e["run"]:
+        # plugged in after a run on battery: learn the drain from it
+        e["rate"], e["runs"] = learn(e["rate"], e["runs"], run_minutes(now), e["run"][1] - e["soc"])
+        e["run"] = e["run_t"] = None
+        _save()
+    elif not usb and not e["run"]:
+        e["run"], e["run_t"] = (time.time(), e["soc"]), now
     if e["saved"] is None or time.ticks_diff(now, e["saved"]) > 60000:
-        _save(e["soc"])
+        _save()
         e["saved"] = now
     r = (usb, charging, e["v"], int(e["soc"] + 0.5))
     _cache[0], _cache[1] = r, now
     return r
+
+
+def run_minutes(now=None):
+    """Minutes of this run on battery: by the badge's own timer, or by the clock across a restart
+    (not trusted if the clock jumped)."""
+    e = _est
+    if not e["run"]:
+        return 0.0
+    if e["run_t"] is not None:
+        return time.ticks_diff(now if now is not None else time.ticks_ms(), e["run_t"]) / 60000.0
+    m = (time.time() - e["run"][0]) / 60.0
+    return m if 0 <= m <= 24 * 60 else 0.0
+
+
+def time_left():
+    """(minutes left on battery, learnt from at least one run?) or None on USB or when unknown."""
+    r = read()
+    e = _est
+    if r is None or r[0] or not e["run"]:
+        return None
+    return minutes_left(e["soc"], e["rate"], e["runs"], run_minutes(), e["run"][1] - e["soc"]), e["runs"] > 0
+
+
+def left_text(minutes):
+    """"7H20M", "45M"."""
+    if minutes >= 60:
+        return "%dH%02dM" % (minutes // 60, minutes % 60)
+    return "%dM" % minutes
 
 
 def text(short=False):
@@ -133,8 +202,14 @@ def text(short=False):
         return "%d%% CHG" % pct if short else "%d%% CHARGING" % pct
     if usb:
         # not charging on USB: the battery is full, or there is none
-        return "USB" if short else ("USB, FULL" if volts >= 3.9 else "USB POWER")
-    return "%d%% %.2fV" % (pct, volts)
+        if short:
+            return "USB %d%%" % pct if volts >= 3.9 else "USB"
+        return "USB, FULL" if volts >= 3.9 else "USB POWER"
+    left = time_left()
+    if short:
+        # Desktop mode shows the time left only once it is learnt from a real run on battery
+        return "%d%% %s" % (pct, left_text(left[0])) if left and left[1] else "%d%%" % pct
+    return "%d%% %.2fV%s" % (pct, volts, (" ~" + left_text(left[0])) if left else "")
 
 
 def _raw():
@@ -169,9 +244,11 @@ def tick(boot_ms):
         fw = "%.3f %d%%" % (badge.battery_voltage(), int(badge.battery_level()))
     except Exception:  # noqa: BLE001
         fw = "?"
-    line = "%6ds %s%s v=%.3f soc=%d%% (raw %.3f, 1.1V rail reads %.3f, firmware says %s)" % (
-        time.ticks_diff(now, boot_ms) // 1000, "USB" if usb else "BATTERY",
-        " charging" if r[1] else "", r[2], r[3], naive, vref, fw)
+    # compact, so a whole run on battery fits: seconds since start, BAT / USB / CHG (charging),
+    # true volts, our estimate, then the raw readings and the firmware's own figures
+    line = "%ds %s v=%.3f soc=%d raw=%.3f rail=%.3f fw=%s" % (
+        time.ticks_diff(now, boot_ms) // 1000, "CHG" if r[1] else ("USB" if usb else "BAT"),
+        r[2], r[3], naive, vref, fw.replace(" ", "/"))
     try:
         with open(LOG_FILE, "a") as f:
             f.write(line + "\n")
@@ -185,7 +262,7 @@ def trim():
         import os
         if os.stat(LOG_FILE)[6] > LOG_MAX:
             with open(LOG_FILE) as f:
-                keep = f.read()[-LOG_MAX // 2:]
+                keep = f.read()[-LOG_MAX * 3 // 4:]
             with open(LOG_FILE, "w") as f:
                 f.write(keep)
         with open(LOG_FILE, "a") as f:

@@ -37,6 +37,9 @@ class FakeBadge:
     def battery_level(self):
         return 82
 
+    def battery_voltage(self):
+        return 3.95
+
     def usb_connected(self):
         return True
 

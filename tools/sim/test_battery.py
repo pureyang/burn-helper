@@ -53,6 +53,20 @@ assert power.estimate(soc, 4.18, True, False, 1.0) == 100.0, "the charger stoppe
 soc = 100.0
 soc = power.estimate(soc, 4.08, False, False, 1.0)
 assert 90 <= soc <= 100, soc
+# the drain, learnt from runs on battery
+rate, runs = power.learn(None, 0, 10, 2)
+assert (rate, runs) == (None, 0), "a short run teaches nothing"
+rate, runs = power.learn(None, 0, 9 * 60, 99)            # a full run: 9 hours, 99%
+assert runs == 1 and 10.5 < rate < 11.5, rate
+rate2, runs = power.learn(rate, runs, 60, 20)             # a busier hour: 20%/h counts for 30%
+assert runs == 2 and abs(rate2 - (0.7 * rate + 0.3 * 20)) < 0.01, rate2
+assert power.learn(rate, 1, 5 * 24 * 60, 50) == (rate, 1), "a clock jump teaches nothing"
+# time left: the learnt drain at first, then more and more this run's own
+assert power.minutes_left(55, 11.0, 1, 5, 0) == 300, power.minutes_left(55, 11.0, 1, 5, 0)
+assert power.minutes_left(50, None, 0, 5, 0) == int(50 / power.DEFAULT_RATE * 60)
+fast = power.minutes_left(50, 11.0, 1, 120, 40)          # this run drains 20%/h
+assert fast == 150, fast
+assert power.left_text(452) == "7H32M" and power.left_text(45) == "45M"
 print("PASS battery: about 15%% with 77 minutes left, never up on battery, %.1f min at 0%%, no leap "
       "when plugged in (+%.0f%%/min at most), 100%% when the charger stops"
       % (mins_at_zero, power.CHARGE_PCT_PER_MIN))
