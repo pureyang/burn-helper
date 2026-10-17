@@ -309,13 +309,44 @@ def demo_status(t):
         st.act, st.act_t, st.act_seq = act, at, at      # its start time doubles as its number
 
 
+WAIT_FLASH_MS = 1500     # a session needs you: all four LEDs flash for this long,
+WAIT_FLASH_PERIOD = 250  # (on/off every this many ms),
+WAIT_LED_STEP_MS = 180   # then one light runs round the four until you answer
+wait_led_t0 = None       # ticks_ms when the waiting alert began
+
+
+def waiting_lights(t):
+    """The LED alert for a session waiting for you: a flash, then a light running round. It works
+    even with the other case lights switched off (they are only for activity)."""
+    global wait_led_t0
+    if wait_led_t0 is None:
+        wait_led_t0 = t
+    k = time.ticks_diff(t, wait_led_t0)
+    if k < WAIT_FLASH_MS:
+        badge.caselights(0.8 if (k // WAIT_FLASH_PERIOD) % 2 == 0 else 0.0)
+    else:
+        i = (k // WAIT_LED_STEP_MS) % 4
+        badge.caselights(*[0.6 if j == i else 0.0 for j in range(4)])
+
+
+def demo_quiet():
+    """The video take keeps the LEDs dark unless the case lights are on (they would light the shot)."""
+    return demo == 2 and not prefs.get("case_leds", False)
+
+
 def lights(t):
-    """The four case LEDs. Off unless switched on (hold DOWN 2 s): the flashing is distracting."""
-    global leds_lit
+    """The four case LEDs. A waiting session always shows (flash, then a running light). The rest,
+    pulsing with activity, is off unless switched on (hold DOWN 2 s): it is distracting."""
+    global leds_lit, wait_led_t0
     if time.ticks_diff(wink_until, t) > 0:
         badge.caselights(0.8)
         leds_lit = True
         return
+    if st.waiting and st.online and not demo_quiet():
+        leds_lit = True
+        waiting_lights(t)
+        return
+    wait_led_t0 = None                   # the next waiting session starts with the flash again
     if not prefs.get("case_leds", False):
         if leds_lit:                     # just switched off: do not leave them glowing
             badge.caselights(0)
@@ -323,10 +354,6 @@ def lights(t):
         return
     leds_lit = True
     lv = st.level if st.online else S.SLEEP
-    if st.waiting and st.online:
-        v = 0.6 if (t // 300) % 2 == 0 else 0.0
-        badge.caselights(v)
-        return
     if lv == S.SLEEP:
         badge.caselights(0)
     elif lv == S.IDLE:
