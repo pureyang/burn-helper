@@ -177,7 +177,7 @@ Short presses act when you let go, so holding a button never also triggers its p
 | Hold UP 2 s | demo, hero theme only: a 30-second ramp from asleep through all 15 levels to hyperspace, with sessions waiting now and then, and a DEMO tag. Hold again to stop |
 | UP | on the Wi-Fi page of Debug mode: rescan |
 | DOWN | brightness: 10 levels, then 0% (screen off, the badge keeps running; a note shows for 3 s first), then full again |
-| Hold DOWN 2 s | case LEDs on or off (off by default). When on, they pulse with activity. A session waiting for you always lights them, even when off: a 1.5 s flash, then a light running round until you answer |
+| Hold DOWN 2 s | case LEDs on or off (off by default). When on, they pulse with activity; both demos always have them on. A session waiting for you always lights them, even when off: a 1.5 s flash, then a light running round until you answer |
 | HOME | stock app menu; HOME again comes back |
 
 ## Wi-Fi in short

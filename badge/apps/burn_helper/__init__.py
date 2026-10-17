@@ -329,25 +329,21 @@ def waiting_lights(t):
         badge.caselights(*[0.6 if j == i else 0.0 for j in range(4)])
 
 
-def demo_quiet():
-    """The video take keeps the LEDs dark unless the case lights are on (they would light the shot)."""
-    return demo == 2 and not prefs.get("case_leds", False)
-
-
 def lights(t):
-    """The four case LEDs. A waiting session always shows (flash, then a running light). The rest,
-    pulsing with activity, is off unless switched on (hold DOWN 2 s): it is distracting."""
+    """The four case LEDs. In both demos they are always on (pulsing with activity, and the waiting
+    alert). Otherwise the activity pulsing is off unless switched on (hold DOWN 2 s), and only a
+    waiting session lights them (a flash, then a running light)."""
     global leds_lit, wait_led_t0
     if time.ticks_diff(wink_until, t) > 0:
         badge.caselights(0.8)
         leds_lit = True
         return
-    if st.waiting and st.online and not demo_quiet():
+    if st.waiting and st.online:
         leds_lit = True
         waiting_lights(t)
         return
     wait_led_t0 = None                   # the next waiting session starts with the flash again
-    if not prefs.get("case_leds", False):
+    if not (prefs.get("case_leds", False) or demo):
         if leds_lit:                     # just switched off: do not leave them glowing
             badge.caselights(0)
             leds_lit = False
