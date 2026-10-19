@@ -83,7 +83,12 @@ it on your network by itself and ignores any other bridge there. If the badge st
 **RESET** button and carries on once it responds. Windows support is newer and less tested than
 the Mac.
 
-Options on a Mac go after `| bash -s --`: `--yes` (no questions), `--no-flash`, `--dry-run`,
+The installer also asks whether to keep a **history** of how long sessions wait for you and of
+each day's usage, in a SQLite file on the bridge computer only (never sent anywhere; see
+[the bridge](bridge/README.md#history-optional)). Say no and nothing is recorded; add `--tracking`
+to turn it on without being asked, or run the installer again later to change it.
+
+Options on a Mac go after `| bash -s --`: `--yes` (no questions), `--tracking`, `--no-flash`, `--dry-run`,
 `--uninstall`. On Windows, set them first, for example `$env:BURN_HELPER_YES=1` (the rest are in
 [install.ps1](install.ps1)). Wi-Fi not connecting? See
 [Wi-Fi troubleshooting](docs/wifi.md#wi-fi-troubleshooting).

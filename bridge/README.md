@@ -96,6 +96,31 @@ Events from another host count as remote sessions: busy for 90 seconds after
 their last event. Cloud sessions on claude.ai/code cannot reach a home LAN, so
 they only show up through the account-wide usage hearts.
 
+## History (optional)
+
+Off by default. When on, the bridge keeps a SQLite file, `tracking.db` in its state folder
+(`~/.claude/burn-helper`, or `%USERPROFILE%\.claude\burn-helper` on Windows), with:
+
+- **`waits`**: one row each time a session waited for you: when it began and ended, how long,
+  the session's Claude Code name, which computer, and what it needed (permission for a tool, a
+  question, or your reply).
+- **`daily`**: one row a day: tool calls, prompts you sent, turns finished, how many waits and
+  for how long in all and at most, the 5-hour usage peak, and the week's usage at the last report.
+
+It lives on the bridge computer only. The badge, `/status` and the relay never see it, and it
+holds session names, so treat the file as private. The installer asks about it; to change it
+later run the bridge install again with `--tracking on` or `--tracking off` (what was recorded
+stays in the file). Read it with:
+
+```sh
+python3 bridge/stats.py                 # the last 14 days, and the longest waits
+python3 bridge/stats.py --days 30 --sessions
+python3 bridge/stats.py --csv waits     # or daily: a whole table as CSV
+```
+
+Only the four longest-waiting sessions are tracked at any moment, and a wait is measured as the
+bridge sees it (a scan every couple of seconds), not to the second.
+
 ## Privacy
 
 - The hook sends only the session id, event name, tool name, agent id and
