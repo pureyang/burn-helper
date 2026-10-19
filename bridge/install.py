@@ -449,6 +449,10 @@ def main():
     ap.add_argument("--token", help="the bridge's BURN_HELPER_TOKEN, if you set one")
     ap.add_argument("--join-help", action="store_true",
                     help="print what to run on another computer to add it to this bridge")
+    ap.add_argument("--tracking", choices=("on", "off"),
+                    help="keep a local history of session wait times and daily usage (SQLite, on the "
+                         "bridge computer only). Part of the bridge install, which is safe to run again to "
+                         "change it")
     ap.add_argument("--find-bridge", action="store_true",
                     help="print the join address of a bridge already on this network, if there is one")
     args = ap.parse_args()
@@ -500,6 +504,22 @@ def main():
         return 0
 
     new, notes = add_ours(settings, args.bridge, args.token)
+    if args.tracking and not args.uninstall:
+        if args.bridge:
+            notes.append("The history is kept by the bridge, not by a computer that joins it: "
+                         "run --tracking on the bridge computer.")
+        elif args.dry_run:
+            print("Would turn the history %s (%s)." % (args.tracking, os.path.join(STATE_DIR, "tracking.db")))
+        else:
+            import tracking
+            tracking.set_enabled(STATE_DIR, args.tracking == "on")
+            if args.tracking == "on":
+                notes.append("History on: how long sessions wait for you and each day's usage are kept in %s, "
+                             "on this computer only. Read it with: %s %s" % (
+                                 os.path.join(STATE_DIR, "tracking.db"), "py" if WINDOWS else "python3",
+                                 os.path.join(HERE, "stats.py")))
+            else:
+                notes.append("History off (what was recorded stays in %s)." % os.path.join(STATE_DIR, "tracking.db"))
     if args.dry_run:
         print(diff(old_text, new) or "settings.json: already up to date")
         if not args.no_launchd:

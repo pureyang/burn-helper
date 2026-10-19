@@ -180,3 +180,21 @@ with open(plist, "w") as f:
 _, out = run("--bridge", "http://my-mac:8787")
 assert not os.path.exists(plist) and "running a bridge of its own" in out, out
 print("PASS join removes a bridge this computer was running, so there is only one")
+
+# the optional history: --tracking on / off writes the switch the bridge reads, a join doesn't
+import tracking as _tracking  # noqa: E402
+_tr_state = _tempfile.mkdtemp()
+install.STATE_DIR = _tr_state
+_, out = run("--tracking", "on", "--dry-run")
+assert not _tracking.is_enabled(_tr_state) and "Would turn the history on" in out, out
+for flag, want in (("on", True), ("off", False)):
+    env = dict(os.environ, BURN_HELPER_HOME=home, BURN_HELPER_STATE_DIR=_tr_state)
+    r = subprocess.run([sys.executable, os.path.join(BRIDGE, "install.py"), "--tracking", flag],
+                       env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and _tracking.is_enabled(_tr_state) == want, (flag, r.stdout, r.stderr)
+    assert ("History on" in r.stdout) == want, r.stdout
+env = dict(os.environ, BURN_HELPER_HOME=home, BURN_HELPER_STATE_DIR=_tr_state)
+r = subprocess.run([sys.executable, os.path.join(BRIDGE, "install.py"), "--bridge", "my-mac", "--tracking", "on"],
+                   env=env, capture_output=True, text=True)
+assert not _tracking.is_enabled(_tr_state) and "kept by the bridge" in r.stdout, r.stdout
+print("PASS install --tracking: on and off write the switch, a dry run changes nothing, joining leaves it alone")

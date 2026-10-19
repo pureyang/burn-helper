@@ -12,6 +12,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join http://<bridge>:8787
 #
 # Options (after `| bash -s --` when piping):
+#   --tracking   keep a local SQLite history of session wait times and daily usage (asked about
+#                otherwise; --no-tracking turns it off). Kept on the bridge computer only.
 #   --join URL   join the bridge at URL: only hooks and a status line, no badge, no login item
 #   --yes        accept every step without asking (Wi-Fi is then set up from your phone)
 #   --no-flash   never replace the badge's firmware
@@ -33,19 +35,22 @@ PY=/usr/bin/python3
 
 YES=0 NO_BADGE=0 NO_BRIDGE=0 DRY=0 UNINSTALL=0
 JOIN="${BURN_HELPER_JOIN:-}"
+TRACK=""                     # on, off, or empty (ask)
 BADGE_ARGS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --join) [ -n "${2:-}" ] || { echo "--join needs the bridge's address, e.g. --join http://my-mac:8787" >&2; exit 2; }
             JOIN="$2"; shift ;;
     --join=*) JOIN="${1#--join=}" ;;
+    --tracking) TRACK=on ;;
+    --no-tracking) TRACK=off ;;
     --yes|-y) YES=1; BADGE_ARGS="$BADGE_ARGS --yes" ;;
     --no-flash) BADGE_ARGS="$BADGE_ARGS --no-flash" ;;
     --no-badge) NO_BADGE=1 ;;
     --no-bridge) NO_BRIDGE=1 ;;
     --dry-run) DRY=1; BADGE_ARGS="$BADGE_ARGS --dry-run" ;;
     --uninstall) UNINSTALL=1 ;;
-    -h|--help) sed -n '2,31p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,33p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
   shift
@@ -159,7 +164,13 @@ if [ "$NO_BRIDGE" = 0 ]; then
     say "The bridge adds async hooks and a hearts status line to ~/.claude/settings.json"
     say "(backed up first; undo with --uninstall) and starts at login."
     if ask "Install the bridge on this Mac?"; then
-      "$PY" "$ROOT/bridge/install.py"
+      # optional: a local history of how long sessions waited for you and each day's usage
+      if [ -z "$TRACK" ] && [ "$YES" = 0 ]; then
+        say "Optional: keep a history of how long sessions wait for you and of each day's usage, in a"
+        say "SQLite file on this computer only (read it with bridge/stats.py; turn it off any time)."
+        ask "Keep that history?" && TRACK=on
+      fi
+      "$PY" "$ROOT/bridge/install.py" ${TRACK:+--tracking "$TRACK"}
     else
       say "Skipped the bridge."
     fi

@@ -16,6 +16,8 @@
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1 -Yes
 #
 # Options (environment variable in brackets):
+#   -Tracking   keep a local SQLite history of session wait times and daily usage (asked about
+#               otherwise; -NoTracking turns it off) [BURN_HELPER_TRACKING=1]
 #   -Join URL   join the bridge at URL: only hooks and a status line, no badge, no login item [BURN_HELPER_JOIN]
 #   -Yes        accept every step without asking (Wi-Fi is then set up from your phone) [BURN_HELPER_YES]
 #   -NoFlash    never replace the badge's firmware                                       [BURN_HELPER_NO_FLASH]
@@ -31,6 +33,8 @@
 # it shows the line to run on other computers.
 param(
   [string]$Join,
+  [switch]$Tracking,
+  [switch]$NoTracking,
   [switch]$Yes,
   [switch]$NoFlash,
   [switch]$NoBadge,
@@ -119,6 +123,9 @@ function Install-BurnHelper {
   $dry = Flag $DryRun.IsPresent "BURN_HELPER_DRY_RUN"
   $remove = Flag $Uninstall.IsPresent "BURN_HELPER_UNINSTALL"
   $joinUrl = First @($Join, $env:BURN_HELPER_JOIN)
+  $track = ""                                 # on, off, or empty (ask)
+  if ($NoTracking.IsPresent) { $track = "off" }
+  elseif (Flag $Tracking.IsPresent "BURN_HELPER_TRACKING") { $track = "on" }
 
   $repoUrl = First @($env:BURN_HELPER_REPO, $env:HEARTS_LEFT_REPO, "https://github.com/pureyang/burn-helper.git")
   $ref = First @($env:BURN_HELPER_REF, $env:HEARTS_LEFT_REF, "main")
@@ -254,7 +261,13 @@ function Install-BurnHelper {
       Say "The bridge adds async hooks and a hearts status line to ~\.claude\settings.json"
       Say "(backed up first; undo with -Uninstall) and starts when you sign in."
       if (Ask "Install the bridge on this PC?") {
-        Invoke-Py @($installPy)
+        # optional: a local history of how long sessions waited for you and each day's usage
+        if (-not $track -and -not $State.YesAll) {
+          Say "Optional: keep a history of how long sessions wait for you and of each day's usage, in a"
+          Say "SQLite file on this PC only (read it with bridge\stats.py; turn it off any time)."
+          if (Ask "Keep that history?") { $track = "on" }
+        }
+        if ($track) { Invoke-Py @($installPy, "--tracking", $track) } else { Invoke-Py @($installPy) }
         if ($LASTEXITCODE -ne 0) { Fail "The bridge install did not finish; see the messages above." }
       } else {
         Say "Skipped the bridge."
