@@ -33,6 +33,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import portable  # noqa: E402
+import tracking  # noqa: E402
 
 
 def env(name, default=None):
@@ -163,6 +164,7 @@ class Bridge:
         self.subagents = {}            # session_id -> [count, last_event_ts]
         self.remote = {}               # session_id -> {"state": busy|idle|waiting, "ts": float}
         self.why = {}                  # session_id -> "PERMISSION: BASH" / "YOUR REPLY", from its last notification
+        self.tracker = None            # tracking.Tracker when the history is switched on
         self.activity = []             # [(number, "edit" | "read" | ..., ts)], the latest ACTIVITY_KEPT
         self.last_hook = {}            # session_id -> ts of its last hook event (to spot stuck statuses)
         self.activity_seq = 0
@@ -314,6 +316,13 @@ class Bridge:
             today = self._today()
             if today != self.tools_date:
                 self.tools_date, self.tools_today = today, 0
+            if self.tracker is not None:
+                if event in TOOL_EVENTS:
+                    self.tracker.event("tool")
+                elif event == "UserPromptSubmit":
+                    self.tracker.event("prompt")
+                elif event == "Stop":
+                    self.tracker.event("turn")
             if event in TOOL_EVENTS:
                 self.tool_times.append(now)
                 self.tools_today += 1
@@ -370,6 +379,24 @@ class Bridge:
             if event not in ("Stop", "SessionEnd", "Notification"):
                 self.last_active = now
             self._dirty = True
+
+    def track(self):
+        """Feed the history (when it is on): who is waiting right now, and the usage so far."""
+        if self.tracker is None:
+            return
+        now = time.time()
+        with self.lock:
+            local = list(self.local.get("waiting_list", []))
+            why = dict(self.why)
+            remote = [(sid, dict(r)) for sid, r in self.remote.items()
+                      if r["state"] == "waiting" and now - r["ts"] <= REMOTE_EXPIRE_S]
+            five, seven = self.five_hour, self.seven_day
+        waiting = [(sid, name, HOSTNAME.split(".")[0], why.get(sid, "")) for name, _, _, sid, _, _ in local]
+        waiting += [(sid, r.get("name") or r.get("folder"), str(r.get("host") or "").split(".")[0], why.get(sid, ""))
+                    for sid, r in remote]
+        self.tracker.observe(now, waiting)
+        w5, w7 = self._window(five, now), self._window(seven, now)
+        self.tracker.usage(w5["used"] if w5 else None, w7["used"] if w7 else None)
 
     def on_usage(self, d):
         rl = d.get("rate_limits")
@@ -742,6 +769,7 @@ def scan_loop():
         try:
             BRIDGE.scan()
             BRIDGE.persist()
+            BRIDGE.track()
             now = time.time()
             if now - last_summary >= 60:
                 last_summary = now
@@ -890,8 +918,16 @@ def main():
         log("could not write bridge.pid: %s" % e)
     BRIDGE_ID = bridge_id()
     log("bridge id %s" % BRIDGE_ID)
+    tracker = None
+    if tracking.is_enabled(STATE_DIR):
+        try:
+            tracker = tracking.Tracker(os.path.join(STATE_DIR, "tracking.db"))
+            log("history on: session waits and daily usage go to %s" % os.path.join(STATE_DIR, "tracking.db"))
+        except Exception as e:  # noqa: BLE001
+            log("history could not start (%r); carrying on without it" % (e,))
     threading.Thread(target=find_join_url, args=(args.port,), daemon=True).start()
     BRIDGE = Bridge()
+    BRIDGE.tracker = tracker
     BRIDGE.scan()
     threading.Thread(target=scan_loop, daemon=True).start()
     if not args.no_beacon:
@@ -904,6 +940,13 @@ def main():
         threading.Thread(target=relay.serve_forever, daemon=True).start()
         log("relay: %s -> 127.0.0.1:%d (Tailscale Funnel)" % (RELAY["url"], RELAY_PORT))
     httpd = Server((args.bind, args.port), Handler)
+    try:
+        import signal
+        # launchd and `kill` end the bridge with SIGTERM: leave through the same door as Ctrl-C, so the
+        # history (when on) writes out what it holds
+        signal.signal(signal.SIGTERM, lambda *a: (_ for _ in ()).throw(KeyboardInterrupt()))
+    except (ImportError, ValueError, OSError):
+        pass
     log("listening on http://%s:%d/ (phone panel), badge JSON at /status, beacon %s" % (
         lan_ip(), args.port, "off" if args.no_beacon else "udp/%d" % BEACON_PORT))
     try:
@@ -912,6 +955,8 @@ def main():
         pass
     finally:
         BRIDGE.persist(force=True)
+        if tracker is not None:
+            tracker.close()
 
 
 PAGE = r"""<!doctype html>
