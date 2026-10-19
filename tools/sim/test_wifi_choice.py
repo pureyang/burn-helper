@@ -83,3 +83,35 @@ run(link)
 assert radio.connected == HOME and remembered[-1] == HOME, (radio.joins, remembered)
 print("PASS Wi-Fi choice: the last network that worked first, curly-quote names matched and joined "
       "as they are on the air, and out of range it moves on to another saved network")
+
+# ---- picking a saved network on the Wi-Fi page: UP steps the cursor, it connects after a pause
+radio.in_range = {HOME: -56, HOTSPOT_ON_AIR: -40}
+radio.joins, radio.connected = [], None
+link = net.Net(saved, last=HOME)
+run(link)
+assert radio.connected == HOME
+link.pick_next()
+assert link.pick == 0, "starts on the first saved network"
+link.pick_next()
+assert link.pick == 1
+link.pick_next()
+assert link.pick == 0, "wraps round"
+link.tick()
+assert radio.connected == HOME and link.pick == 0, "waits for the pause before connecting"
+link.pick_t -= net.PICK_DELAY_MS + 1
+link.tick()
+run(link)
+assert radio.connected == HOTSPOT_ON_AIR and link.pick is None, (radio.joins, link.log[-5:])
+link.pick_next()
+link.pick_cancel()
+link.pick_t -= net.PICK_DELAY_MS + 1
+link.tick()
+assert radio.connected == HOTSPOT_ON_AIR, "a cancelled pick does nothing"
+# a pick that is out of range falls back to the others
+del radio.in_range[HOME]
+link.pick, link.pick_t = 1, net.ticks() - net.PICK_DELAY_MS - 1
+link.tick()
+run(link, 30)
+assert link.state == "up" and radio.connected == HOTSPOT_ON_AIR and not link.want, (link.state, link.log[-5:])
+print("PASS Wi-Fi pick: UP steps through the saved networks, connects after the pause, a cancelled "
+      "pick does nothing, and one out of range falls back to the others")

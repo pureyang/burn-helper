@@ -53,7 +53,9 @@ those carefully.
 **On the badge:** press **B** twice to open Debug mode. When Wi-Fi is not working it opens on its Wi-Fi debug
 page; otherwise press **C** until page 3/3. Each saved network gets a
 line with its channel, signal strength and a verdict, and a plain-language hint sits at the
-bottom. Press **UP** there to rescan and retry immediately.
+bottom. Press **UP** there to pick a saved network: each press moves a highlight to the next one, and
+1.5 seconds after the last press the badge connects to it (pick the one it is already on to reconnect).
+If the one you picked can't be joined, the badge goes back to trying the others.
 
 **On the Mac:** with the badge plugged in and the app running, this prints the full diagnosis
 and the recent network log. It shows password lengths but never the passwords themselves.

@@ -6,7 +6,7 @@
 # Buttons
 #   A / C      on the animation: previous / next theme. In Desktop mode: step through the
 #              sessions waiting for you. In Debug mode: turn pages (the last is Wi-Fi debug,
-#              where UP rescans and retries Wi-Fi right away)
+#              where UP picks a saved network to connect to)
 #   B          animation -> Desktop mode -> Debug mode -> animation; hold 2 s for phone setup
 #   hold UP    demo mode for 2 s (cycles every level, shows a DEMO tag)
 #   DOWN       brightness: 10 levels, then 0% (screen off, badge still running), then full again;
@@ -390,6 +390,8 @@ def step_waiting(d):
 
 def short_press(b):
     global view, page, wait_sel, screen_off_at
+    if not (b == BUTTON_UP and view == views.DEBUG and page == views.WIFI_PAGE):
+        link.pick_cancel()                  # any other press, or leaving the page, drops a pick
     if b in (BUTTON_A, BUTTON_C):
         d = 1 if b == BUTTON_C else -1
         if view == views.DEBUG:
@@ -404,8 +406,8 @@ def short_press(b):
         if view == views.DEBUG and wifi_trouble():
             page = views.WIFI_PAGE      # the badge's "PRESS B x2" hint leads straight here
     elif b == BUTTON_UP and view == views.DEBUG and page == views.WIFI_PAGE:
-        link.rescan()
-        show_toast("RESCANNING")
+        # step through the saved networks; the badge connects to the one picked a moment later
+        link.pick_next()
     elif b == BUTTON_DOWN:
         prefs["bright"] = (prefs["bright"] + 1) % len(BRIGHT)
         save_prefs()

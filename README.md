@@ -175,7 +175,7 @@ Short presses act when you let go, so holding a button never also triggers its p
 | A / C | on the animation: previous / next theme. In Desktop mode: previous / next waiting session. In Debug mode: previous / next page |
 | B | next mode: animation, Desktop mode, Debug mode, then the animation again. Hold 2 s for phone setup |
 | Hold UP 2 s | demo, hero theme only: a 30-second ramp from asleep through all 15 levels to hyperspace, with sessions waiting now and then, and a DEMO tag. Hold again to stop |
-| UP | on the Wi-Fi page of Debug mode: rescan |
+| UP | on the Wi-Fi page of Debug mode: pick a saved network (each press moves to the next; it connects a moment after the last press) |
 | DOWN | brightness: 10 levels, then 0% (screen off, the badge keeps running; a note shows for 3 s first), then full again |
 | Hold DOWN 2 s | case LEDs on or off (off by default). When on, they pulse with activity; both demos always have them on. A session waiting for you always lights them, even when off: a 1.5 s flash, then a light running round until you answer |
 | HOME | stock app menu; HOME again comes back |

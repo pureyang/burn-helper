@@ -38,6 +38,7 @@ JOIN_TIMEOUT_MS = 12000   # a right password joins in about 3 s; a wrong one han
 RETRY_ALL_MS = 15000
 FRESH_MS = 12000
 NO_BEACON_MS = 10000
+PICK_DELAY_MS = 1500      # after the last UP press on the Wi-Fi page, connect to the one picked
 PAIRED_GRACE_MS = 60000   # how long the paired bridge may be quiet before another one will do
 RELAY_POLL_MS = 5000      # the internet relay is polled less often than the bridge on the LAN
 LOG_FILE = "/state/burn_helper_net.log"
@@ -173,6 +174,9 @@ class Net:
         self.on_join = on_join                 # called with a network's name when it connects
         self.order = list(range(len(self.cands)))   # the order to try them in (see _scan)
         self.aired = {}                        # saved-style name -> the name as it is on the air
+        self.pick = None                       # the saved network the cursor is on (index into cands)
+        self.pick_t = 0
+        self.want = []                         # indices to try, only these, until one works or none can
         self.paired = paired                   # id of the bridge this badge belongs to (learnt over USB)
         self.paired_t = None                   # when its beacon was last heard
         self.others = {}                       # other bridges heard on this network: host -> id
@@ -244,6 +248,9 @@ class Net:
     # -------------------------------------------------- public
     def tick(self):
         try:
+            if self.pick is not None and since(self.pick_t) > PICK_DELAY_MS:
+                i, self.pick = self.pick, None
+                self.connect_to(i)
             self._wifi()
             if self.state == "up":
                 self._discover()
@@ -367,6 +374,41 @@ class Net:
         self.state = "init" if self.cands else "none"
         self.note("wifi stopped")
 
+    def networks_list(self):
+        """Indices of the saved networks to show and pick from (a password variant is not a network)."""
+        return [i for i, c in enumerate(self.cands) if not c["variant"]]
+
+    def pick_next(self):
+        """UP on the Wi-Fi page: move the cursor to the next saved network. It connects there after
+        PICK_DELAY_MS with no further press. Starts on the first one."""
+        shown = self.networks_list()
+        if not shown:
+            return
+        nxt = shown[0] if self.pick not in shown else shown[(shown.index(self.pick) + 1) % len(shown)]
+        self.pick, self.pick_t = nxt, ticks()
+
+    def pick_cancel(self):
+        self.pick = None
+
+    def connect_to(self, i):
+        """Connect to saved network i now (leaving the current one), whatever order they are normally
+        tried in. If it can't be joined, the others are tried as usual."""
+        ssid = self.cands[i]["ssid"]
+        self.want = [j for j, c in enumerate(self.cands) if c["ssid"] == ssid]
+        self.note("you picked %s" % ssid)
+        for j in self.want:
+            self.cands[j]["result"] = ""
+        self._close_udp()
+        self._close_relay()
+        self.up_t = None
+        self.beacon_t = None
+        if self.wlan is not None:
+            try:
+                self.wlan.disconnect()
+            except Exception:  # noqa: BLE001
+                pass
+        self.state = "scan" if self.wlan is not None else "init"
+
     def rescan(self):
         if self.state not in ("none", "up"):
             self.state = "scan"
@@ -423,7 +465,7 @@ class Net:
 
     def _next(self, after=None):
         """Index of the next visible candidate in try order after `after` (an index), or the first."""
-        order = self.order
+        order = self.want or self.order
         start = 0 if after is None or after not in order else order.index(after) + 1
         for i in order[start:]:
             if self.heard(self.cands[i]["ssid"]) is not None:
@@ -495,6 +537,10 @@ class Net:
         if self.state == "scan":
             self._scan()
             i = self._next()
+            if i is None and self.want:
+                self.note("%s is not in range: back to the others" % self.cands[self.want[0]]["ssid"])
+                self.want = []
+                i = self._next()
             if i is None:
                 self.state = "down"
                 self.down_t0 = ticks()
@@ -533,6 +579,11 @@ class Net:
             c["result"] = verdict
             self.note("%s: %s" % (c["ssid"], verdict))
             nxt = self._next(self.cur)
+            if nxt is None and self.want:
+                self.note("could not join the one you picked: back to the others")
+                self.want = []
+                self.state = "scan"
+                return
             if nxt is not None:
                 self._join(nxt)
             else:
@@ -546,6 +597,7 @@ class Net:
 
     def _up(self):
         self.state = "up"
+        self.want = []
         self.up_t = ticks()
         try:
             cfg = self.wlan.ifconfig()
