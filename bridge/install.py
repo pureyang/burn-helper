@@ -557,7 +557,12 @@ def main():
         for label in OLD_LABELS:
             remove_agent(domain, label)
         launchctl("bootout", domain + "/" + LABEL)
-        rc = launchctl("bootstrap", domain, PLIST)
+        rc = None
+        for _ in range(5):               # bootstrap straight after bootout can fail (error 5): give launchd a moment
+            time.sleep(1.0 if not TEST_HOME else 0)
+            rc = launchctl("bootstrap", domain, PLIST)
+            if rc in (0, None):
+                break
         if rc not in (0, None):
             print("launchctl bootstrap returned %s; check %s" % (rc, LOGFILE))
         else:
