@@ -205,7 +205,8 @@ def apply_bridge():
 # Two demos, both on the hero theme only, each starting from its first frame:
 #   demo 1 (hold UP 2 s, DEMO tag): a 30-second ramp from asleep through every activity level
 #     up to ULTRA, with sessions waiting for you now and then and every activity animation
-#     along the way, on a 90-second usage window (the hearts refill when it resets).
+#     along the way, on a 90-second usage window (the hearts refill when it resets), and the
+#     weekly reset's whole ladder sped up inside the same 90 seconds (DEMO_WEEK).
 #   demo 2 (hold UP + DOWN 3 s, no tag): a 20-second take for the launch video, timed to the
 #     shot list in docs/video.md.
 DEMO_THEME = "hero"
@@ -220,6 +221,16 @@ DEMO_ACTS = ((2000, "arrive"), (3900, "prompt"), (5600, "edit"), (7300, "read"),
              (19800, "shell"), (21700, "read"), (23400, "done"))
 DEMO_USAGE_MS = 90000
 DEMO_RESET_MS = 75000       # into the usage window: the 5-hour countdown runs out, hearts refill
+# the weekly reset in demo 1, sped up inside its 90-second window: (from s, to s, seconds left at
+# the start, at the end, how many times faster than real time it runs there)
+DEMO_WEEK = ((0, 12, 3 * 86400 + 4 * 3600, 3 * 86400 + 4 * 3600, 1),     # a quiet week
+             (12, 18, 5 * 3600 + 59 * 60, 5 * 3600 + 40 * 60, 190),      # under 6 hours
+             (18, 24, 59 * 60, 50 * 60, 90),                              # under an hour
+             (24, 44, 300, 62, 12),                                       # under 10 minutes
+             (44, 56, 59, 11, 4),                                         # under a minute
+             (56, 66, 10, 0, 1),                                          # under ten seconds
+             (66, 70, 0, -4, 1),                                          # the reset itself
+             (70, 90, 7 * 86400, 7 * 86400 - 20, 1))                      # a new week
 VIDEO_MS = 20000
 # (second it starts, level when no agents work, agents working, sessions waiting)
 VIDEO_STEPS = ((0.0, S.SLEEP, 0, 0),     # asleep
@@ -246,6 +257,15 @@ def set_demo(kind):
     demo_t0 = time.ticks_ms()
     if demo and prefs["theme"] != DEMO_THEME:
         switch(name=DEMO_THEME)
+
+
+def demo_week(ms):
+    """(microseconds to the weekly reset, speed-up) at ms into the demo's 90-second window."""
+    s = ms / 1000.0
+    for a, b, l0, l1, rate in DEMO_WEEK:
+        if s < b:
+            return int((l0 + (l1 - l0) * (s - a) / (b - a)) * 1000000), rate
+    return 7 * 86400 * 1000000, 1
 
 
 def demo_status(t):
@@ -291,7 +311,10 @@ def demo_status(t):
     st.net = ""
     st.week = 0.6
     st.used7 = 40
-    st.left7 = (3 * 86400 + 4 * 3600) * 1000000
+    if demo == 1:
+        st.left7, st.wk_rate = demo_week(time.ticks_diff(t, demo_t0) % DEMO_USAGE_MS)
+    else:
+        st.left7, st.wk_rate = (3 * 86400 + 4 * 3600) * 1000000, 1
     if demo == 2:
         # the take: hearts drain from full to low, and the 5-hour countdown runs out at 20 s
         st.tools = 200 + k // 40
@@ -313,6 +336,27 @@ WAIT_FLASH_MS = 1500     # a session needs you: all four LEDs flash for this lon
 WAIT_FLASH_PERIOD = 250  # (on/off every this many ms),
 WAIT_LED_STEP_MS = 180   # then one light runs round the four until you answer
 wait_led_t0 = None       # ticks_ms when the waiting alert began
+
+
+def week_lights(t):
+    """The case LEDs for the weekly reset's last ten minutes, in a rhythm of their own (a slow breathe,
+    faster each stage, a pulse on every second in the last ten, and all four flashing at the reset).
+    Returns False when it is not that time."""
+    stage = S.week_stage(st)
+    if stage in (None, "six", "hour"):
+        return False
+    if stage == "zero":
+        k = int((S.week_zero_progress(st) or 0) * S.WEEK_ZERO_MS)
+        badge.caselights(0.8 if (k // 200) % 2 == 0 else 0.1)
+        return True
+    if stage == "ten":
+        v = 0.06 + 0.1 * (1 + math.sin(t / 700.0))                  # a slow breathe
+    elif stage == "minute":
+        v = 0.1 + 0.2 * (1 + math.sin(t / 250.0))                   # quicker
+    else:
+        v = 0.7 if ((st.left7 // 1000) % 1000) > 850 else 0.08       # a flash as every second ticks over
+    badge.caselights(v)
+    return True
 
 
 def waiting_lights(t):
@@ -343,6 +387,9 @@ def lights(t):
         waiting_lights(t)
         return
     wait_led_t0 = None                   # the next waiting session starts with the flash again
+    if st.online and week_lights(t):
+        leds_lit = True
+        return
     if not (prefs.get("case_leds", False) or demo):
         if leds_lit:                     # just switched off: do not leave them glowing
             badge.caselights(0)
@@ -390,6 +437,13 @@ def step_waiting(d):
 
 def short_press(b):
     global view, page, wait_sel, screen_off_at
+    if screen_dark() and b != BUTTON_DOWN:
+        # the screen is off (0%): any button wakes it, at the dimmest lit level, and does nothing else
+        prefs["bright"] = OFF - 1
+        save_prefs()
+        set_brightness(prefs["bright"])
+        show_toast("SCREEN ON")
+        return
     if not (b == BUTTON_UP and view == views.DEBUG and page == views.WIFI_PAGE):
         link.pick_cancel()                  # any other press, or leaving the page, drops a pick
     if b in (BUTTON_A, BUTTON_C):
@@ -654,7 +708,13 @@ def update():
             gc.collect()
             mem = ["memory: heap used %d KB, free %d KB" % (gc.mem_alloc() // 1024, gc.mem_free() // 1024)]
             mem += ["  theme %s: %d KB of sprites, built in %d ms" % (n, c[0] // 1024, c[1]) for n, c in theme_cost.items()]
-            usb.send_lines("NETLOG", link.dump() + mem + ["-- power --"] + power.recent() + ["-- log --"] + link.log)
+            try:
+                with open(CRASH_LOG) as f:
+                    crash_tail = ["-- crashes --"] + f.read()[-1500:].split("\n")
+            except Exception:  # noqa: BLE001
+                crash_tail = []
+            usb.send_lines("NETLOG", link.dump() + mem + ["-- power --"] + power.recent() + crash_tail
+                           + ["-- log --"] + link.log)
         except Exception as e:  # noqa: BLE001
             print("@NETLOG-ERR", e)
     if tether.shot_req:
@@ -681,4 +741,56 @@ def on_exit():
         pass
 
 
-run(update)
+CRASH_LOG = "/state/burn_helper_crash.log"
+crashes = []             # ticks_ms of recent crashes in update()
+
+
+def crash(e):
+    """update() raised. Do not let the firmware's error screen take over (with the backlight off it
+    looks like a dead badge): write it down, make sure the screen is on, carry on, and restart the
+    badge if it keeps happening."""
+    now = time.ticks_ms()
+    crashes.append(now)
+    while crashes and time.ticks_diff(now, crashes[0]) > 60000:
+        crashes.pop(0)
+    try:
+        import io
+        import sys
+        buf = io.StringIO()
+        sys.print_exception(e, buf)
+        import os
+        try:
+            big = os.stat(CRASH_LOG)[6] > 8192
+        except OSError:
+            big = False
+        with open(CRASH_LOG, "w" if big else "a") as f:
+            f.write("---- %d s: %s\n%s" % (time.ticks_diff(now, boot_ms) // 1000, repr(e)[:120], buf.getvalue()[-900:]))
+    except Exception:  # noqa: BLE001
+        pass
+    global screen_off_at
+    if prefs["bright"] == OFF:
+        prefs["bright"] = OFF - 1
+        screen_off_at = None
+    set_brightness(prefs["bright"])
+    if len(crashes) >= 10:
+        try:
+            import machine
+            machine.reset()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def safe_update():
+    try:
+        return update()
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:  # noqa: BLE001
+        crash(e)
+        try:
+            time.sleep_ms(100)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+run(safe_update)
