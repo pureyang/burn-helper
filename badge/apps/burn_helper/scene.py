@@ -85,6 +85,7 @@ class Status:
         self.act = None         # "edit", "read", "shell", "web", "spawn", "back", "fail", "done", "prompt", "arrive", "refill"
         self.act_t = 0          # ticks_ms when it started
         self.act_seq = 0        # a new number for every new activity
+        self.wk_rate = 1        # how fast the weekly countdown runs: 1, or faster in the demos
         self.pending = None     # the most telling activity not played yet
         self.pending_t = 0
         self.ev_seen = None     # the bridge's number for the newest activity already handled
@@ -108,12 +109,14 @@ class Status:
             self.queue("refill")            # the 5-hour window reset: the hearts jumped back up
         self.take_events(d.get("ev"))
         wk = d.get("seven_day")
-        self.week = None if not wk else max(0.0, min(1.0, (100.0 - float(wk.get("used", 0))) / 100.0))
+        wk = wk or {}
+        self.week = None if wk.get("used") is None else max(0.0, min(1.0, (100.0 - float(wk["used"])) / 100.0))
         fh = d.get("five_hour") or {}
         self.used5 = fh.get("used")
-        self.reset5 = fh.get("resets_at")
-        self.used7 = (wk or {}).get("used")
-        self.reset7 = (wk or {}).get("resets_at")
+        # a window the bridge knows nothing new about (stale) is unknown: no countdown to "FULL"
+        self.reset5 = None if fh.get("stale") else fh.get("resets_at")
+        self.used7 = wk.get("used")
+        self.reset7 = None if wk.get("stale") else wk.get("resets_at")
         self.busy = int(d.get("busy") or 0)
         self.waiting = int(d.get("waiting") or 0)
         wl = []
@@ -301,6 +304,62 @@ class Theme:
 
     def render(self, st, t):
         pass
+
+
+# The weekly reset gets louder as it nears (the themes draw each stage their own way):
+#   six     under 6 hours: the top-right clock alternates between the 5-hour and the weekly one
+#   hour    under 1 hour: the caption carries the weekly countdown and the weekly meter pulses
+#   ten     under 10 minutes: an interstitial for 1.5 s at every whole minute
+#   minute  under 1 minute: a full-screen countdown with the milliseconds
+#   ten_s   under 10 seconds: flashing numbers
+#   zero    the reset itself: a 4-second celebration
+# A stage only exists while the weekly reset time is known (never from a stale window).
+WEEK_SIX_US = 6 * 3600 * 1000000
+WEEK_HOUR_US = 3600 * 1000000
+WEEK_TEN_US = 10 * 60 * 1000000
+WEEK_MINUTE_US = 60 * 1000000
+WEEK_TEN_S_US = 10 * 1000000
+WEEK_ZERO_MS = 4000
+WEEK_INTERSTITIAL_MS = 1500
+
+
+def week_stage(st):
+    """The weekly reset's stage now ("six", "hour", "ten", "minute", "ten_s", "zero") or None."""
+    us = st.left7
+    if us is None or not st.online:
+        return None
+    if us <= 0:
+        return "zero" if us > -WEEK_ZERO_MS * 1000 else None
+    if us > WEEK_SIX_US:
+        return None
+    if us > WEEK_HOUR_US:
+        return "six"
+    if us > WEEK_TEN_US:
+        return "hour"
+    if us > WEEK_MINUTE_US:
+        return "ten"
+    if us > WEEK_TEN_S_US:
+        return "minute"
+    return "ten_s"
+
+
+def week_interstitial(st):
+    """True during the 1.5 s at every whole minute of the last ten (the demos run time faster, st.wk_rate)."""
+    ms = (st.left7 or 0) // 1000
+    return ms % 60000 >= 60000 - int(WEEK_INTERSTITIAL_MS * st.wk_rate)
+
+
+def week_zero_progress(st):
+    """0..1 through the celebration at the reset, or None."""
+    us = st.left7
+    if us is None or us > 0 or us <= -WEEK_ZERO_MS * 1000:
+        return None
+    return (-us / 1000.0) / WEEK_ZERO_MS
+
+
+def week_takes_screen(st, acting):
+    """The two full-screen stages wait while a session is waiting for you or an activity plays."""
+    return not (st.waiting or acting)
 
 
 # The waiting bar: while sessions wait for you, the caption line names them, one at a time.
