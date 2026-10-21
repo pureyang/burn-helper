@@ -84,6 +84,24 @@ then tool calls. Anything older than 6 seconds is skipped, so a badge that was a
 replay a backlog. The bridge passes on only the category (`ev` in `/status`), never file names,
 commands, URLs or prompts. Both demo modes show them all.
 
+## The weekly reset
+
+The weekly quota's reset is a bigger event than the 5-hour one, and gets louder as it nears (the
+5-hour reset is unchanged). Each theme draws every stage its own way:
+
+| Time left | What the badge does |
+|---|---|
+| under 6 hours | the top-right clock alternates between the 5-hour and the weekly one |
+| under 1 hour | the caption carries the weekly countdown, and the weekly meter pulses |
+| under 10 minutes | an interstitial for 1.5 s at every whole minute (Navi, the game-show host, the bus at the bench); the case LEDs breathe |
+| under 1 minute | a full-screen countdown with the milliseconds (the Triforce builds, the studio "ON AIR" board, Jenny running); the LEDs breathe faster |
+| under 10 seconds | huge flashing digits, a flash and an LED pulse on every second |
+| the reset | a 4-second celebration (magic restored, a new season, a new box of chocolates) |
+
+A waiting session or an activity animation takes priority over the two full-screen stages, and
+the countdown is only shown while the badge knows when the week resets. Demo 1 plays the whole
+ladder sped up inside its 90-second window.
+
 ## Usage meters
 
 In the Zelda theme the three counters at the top left are: green gem = tool calls today,
