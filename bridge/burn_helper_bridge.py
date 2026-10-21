@@ -395,8 +395,8 @@ class Bridge:
         waiting += [(sid, r.get("name") or r.get("folder"), str(r.get("host") or "").split(".")[0], why.get(sid, ""))
                     for sid, r in remote]
         self.tracker.observe(now, waiting)
-        w5, w7 = self._window(five, now), self._window(seven, now)
-        self.tracker.usage(w5["used"] if w5 else None, w7["used"] if w7 else None)
+        w5, w7 = self._window(five, now, self.last_active), self._window(seven, now, self.last_active)
+        self.tracker.usage(w5["used"] if w5 else None, w7["used"] if w7 else None)    # None: unknown, skipped
 
     def on_usage(self, d):
         rl = d.get("rate_limits")
@@ -439,12 +439,18 @@ class Bridge:
 
     # ------------------------------------------------------------ output
     @staticmethod
-    def _window(w, now):
+    def _window(w, now, last_active=0.0):
+        """A usage window as the badge should show it. Once its reset time has passed, usage is truly
+        0 until your next message starts a new window; but if there has been work since and no
+        status line has reported the new window yet (a session without a terminal, like a
+        background one, never reports), the usage is unknown, not full: used is None."""
         if not w:
             return None
         resets = int(w.get("resets_at") or 0)
         used = float(w.get("used") or 0.0)
         if resets and now > resets:
+            if last_active > resets + 60 and (w.get("rx") or 0) < resets:
+                return {"used": None, "resets_at": resets, "stale": 1}
             used = 0.0
         return {"used": round(used, 1), "resets_at": resets}
 
@@ -470,8 +476,8 @@ class Bridge:
             if self._today() != self.tools_date:
                 self.tools_date, self.tools_today = self._today(), 0
             tools_today = self.tools_today
-            five = self._window(self.five_hour, now)
-            seven = self._window(self.seven_day, now)
+            five = self._window(self.five_hour, now, self.last_active)
+            seven = self._window(self.seven_day, now, self.last_active)
             theme, theme_seq, last_active = self.theme, self.theme_seq, self.last_active
             live = {w[3] for w in loc.get("waiting_list", [])}
             for sid in [s for s in self.why if s not in live and s not in self.remote]:
@@ -496,7 +502,7 @@ class Bridge:
 
         basis = five or seven
         hearts = None
-        if basis is not None:
+        if basis is not None and basis["used"] is not None:
             hearts = int(round((100.0 - basis["used"]) / 5.0))
             hearts = max(0, min(20, hearts))
 
