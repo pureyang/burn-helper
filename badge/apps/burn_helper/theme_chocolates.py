@@ -12,6 +12,11 @@
 # run alongside ("WHY ARE YOU RUNNING?"), spawn / back = a follower joins / peels off, fail =
 # shot in the buttocks ("OW!"), done = turns around at the ocean, prompt = a drill sergeant
 # barks and he salutes, arrive = a cut to the bus-stop bench, refill = a new box of chocolates.
+#
+# The weekly reset gets louder as it nears (S.week_stage): the top-bar clock shows the weekly
+# countdown now and then (six), the caption carries it and the weekly road throbs (hour), a bus
+# pulls up at the bench every minute (ten), Jenny runs across the field with the count over her
+# (minute), huge flashing digits (ten_s), and a new box with the chocolates refilled (zero).
 
 import math
 import figure as F
@@ -143,6 +148,37 @@ CHOC_KEYS = {"d": (52, 26, 12), "M": (124, 68, 34), "H": (214, 156, 104), "C": (
              "c": (110, 82, 38), "F": (246, 176, 188)}
 SHOE = ("...WW..", "..WWWW.", "WWRRWWW", "WWWWRRW", "KKKKKKK")
 
+# ---------------------------------------------------------------- the weekly reset
+ORANGE = (245, 140, 30)         # urgency: orange and white flashes, never red against green
+DARK = (30, 24, 20)
+JENNY = F.Spec(torso_w=4, hair="long", skirt=True, thighs=F.SKIN, shins=F.SKIN)
+OPEN_ARMS = dict(af=(140, 10), ab=(122, 5))      # Forrest with his arms open, facing right
+FIELD_FOOT = 104
+JENNY_STRIDES = 4               # her run cycle: 4 frames shown twice as long, like the activity cycles
+GIFT_BROWN = (190, 120, 20)
+
+
+def outlined(s, cx, y, c, fnt, edge=INK):
+    """Text centred on cx with a one-pixel outline (four offsets), so it reads on any background."""
+    x = int(cx - gfx.width(s, fnt) / 2)
+    for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        gfx.text(s, x + dx, y + dy, edge, fnt)
+    gfx.text(s, x, y, c, fnt)
+
+
+def veil(r, g, b, a, y0=22, y1=108):
+    screen.pen = color.rgb(r, g, b, a)
+    screen.rectangle(0, y0, 160, y1 - y0)
+
+
+def gift(x, y):
+    """A tiny wrapped box, 9x8."""
+    gfx.box(x, y + 3, 9, 5, GOLD)
+    gfx.box(x - 1, y + 1, 11, 3, (232, 190, 70))
+    gfx.box(x + 4, y + 1, 1, 7, BLUE)
+    gfx.box(x + 2, y, 2, 1, BLUE)
+    gfx.box(x + 5, y, 2, 1, BLUE)
+
 
 class Theme(S.Theme):
     name = "chocolates"
@@ -153,6 +189,8 @@ class Theme(S.Theme):
         S.Theme.__init__(self)
         self.refill_from = 0
         self.last_hearts = None
+        self.wk = None             # the weekly reset's stage this frame (S.week_stage), or None
+        self.digit_key = [None, None]    # what the two scratch images hold now: shadow, face
 
     def build(self):
         p_suit = pal()
@@ -200,6 +238,22 @@ class Theme(S.Theme):
         self.road = self._road((96, 92, 92), (255, 224, 90))
         self.desert_road = self._road((84, 76, 76), (255, 230, 120))
         self._build_actions(p_run)
+        self._build_week(p_run)
+
+    def _build_week(self, p_run):
+        """What the weekly reset needs, built once: Forrest with open arms, Jenny's run (4 strides,
+        about 13 KB), and two scratch images the huge digits are drawn into."""
+        self.forrest_open = gfx.to_image(F.render(JOGGER, F.stand(**OPEN_ARMS)), p_run)
+        pj = pal()
+        pj[F.TOP] = gfx.rgb((126, 170, 214))
+        pj[F.TOP_D] = gfx.rgb((92, 130, 176))
+        pj[F.BOT] = gfx.rgb((126, 170, 214))
+        pj[F.BOT_D] = gfx.rgb((92, 130, 176))
+        pj[F.HAIR] = gfx.rgb((228, 190, 104))
+        self.jenny = [gfx.to_image(g, pj) for g in F.cycle(JENNY, "run", JENNY_STRIDES)]
+        self.digit_shadow = image(24, 24)
+        self.digit_face = image(24, 24)
+        self.fade = hasattr(screen, "alpha")
 
     def _build_actions(self, p_run):
         """Poses and props for the activity animations, built once (so nothing hitches the
@@ -318,6 +372,29 @@ class Theme(S.Theme):
 
     # ------------------------------------------------------------ render
     def render(self, st, t):
+        self.wk = S.week_stage(st)
+        if self.wk is None:
+            self.render_road(st, t)
+            return
+        acting = self.playing(st, t) is not None
+        takes = S.week_takes_screen(st, acting)
+        if self.wk == "ten" and takes and S.week_interstitial(st):
+            self.scene_bus(st, t)
+            self.draw_hud(st, t)
+            self.draw_caption(st, t)
+            self.pulse_frame(t)
+        elif self.wk in ("minute", "ten_s") and takes:
+            self.scene_field(st, t)
+            self.draw_hud(st, t)
+            self.draw_caption(st, t)
+            if self.wk == "ten_s":
+                self.pulse_frame(t, 3)
+        else:
+            self.render_road(st, t)
+            if self.wk == "hour":
+                self.pulse_frame(t, 1, 70)
+
+    def render_road(self, st, t):
         lv = st.level
         if lv <= S.IDLE:
             self.draw_park(st, t)
@@ -371,6 +448,14 @@ class Theme(S.Theme):
         if p is not None:
             getattr(self, "act_" + self.action)(st, t, p)
             return
+        if self.wk == "zero":
+            z = S.week_zero_progress(st)
+            if z is not None:
+                if st.level > S.IDLE:
+                    self.act_refill(st, t, z)      # the new box drops in, as for a 5-hour reset
+                self.celebrate(st, t, z)
+                if st.level > S.IDLE:
+                    return
         lv = st.level
         foot = 104
         if lv == S.SLEEP:
@@ -424,6 +509,18 @@ class Theme(S.Theme):
             self.hud(st, t)
             st.hearts = keep
             return
+        z = S.week_zero_progress(st) if self.wk == "zero" else None
+        if z is not None:
+            # a new box: the chocolates and the weekly road fill up as it arrives
+            k = min(1.0, max(0.0, (z - 0.3) / 0.6))
+            keep_h, keep_w = st.hearts, st.week
+            base_h = keep_h if keep_h is not None else 0
+            base_w = keep_w if keep_w is not None else 0.0
+            st.hearts = int(base_h + (20 - base_h) * k)
+            st.week = base_w + (1.0 - base_w) * k
+            self.hud(st, t)
+            st.hearts, st.week = keep_h, keep_w
+            return
         self.hud(st, t)
         self.last_hearts = st.hearts
 
@@ -449,10 +546,20 @@ class Theme(S.Theme):
             gfx.box(69 + fw - 2, 12, 3, 8, RED)
         if not st.online and S.blink(t, 600):
             gfx.text("?", 62, -2, RED, font.sins)
+        if self.wk is not None:
+            self.week_hud(st, t)
 
     def draw_caption(self, st, t):
         if st.online and st.waiting:
             S.draw_waiting_bar(st, t)     # who is waiting, one name at a time
+            return
+        if self.wk in ("hour", "ten", "minute", "ten_s", "zero") and (
+                self.wk == "zero" or self.playing(st, t) is None):
+            msg, bar, ink = self.week_caption(st, t)
+            gfx.box(0, 108, 160, 12, bar)
+            gfx.ctext(gfx.fit(msg, 148, font.sins), 84, 107, ink, font.sins)
+            if bar != GOLD:                            # (a gold box on the gold bar would vanish)
+                gift(2, 109)
             return
         gfx.box(0, 108, 160, 12, (30, 24, 20))
         msg = self.caption(st, t)
@@ -704,3 +811,175 @@ class Theme(S.Theme):
             for i in range(6):                         # gold sparkle on the top bar as it fills
                 gfx.box(8 + (i * 11 + int(p * 60)) % 58, 3 + (i * 5) % 14, 1 + (i % 2), 1 + (i % 2), GOLD)
             self.word("NEW BOX!", 98, 40, GOLD)
+
+    # ------------------------------------------------------------ the weekly reset
+    def week_hud(self, st, t):
+        """On top of the HUD: the weekly clock in place of the 5-hour one every other 2 s, the gold
+        frame round the weekly road, a small box at the far end of the road, sparkles at the reset."""
+        wk = self.wk
+        weekly = wk in ("six", "hour", "ten") and (t // 2000) % 2 == 1
+        if weekly:
+            gfx.box(69, 0, 62, 12, CREAM)              # the clock slot becomes a gift, "WK" and the weekly count
+            gift(70, 2)
+            gfx.text("WK", 82, -2, GIFT_BROWN, font.sins)
+            gfx.text(gfx.countdown(st.left7), 98, -2, GIFT_BROWN, font.sins)
+        if wk in ("six", "hour", "ten"):
+            if wk == "hour":
+                k = 0.5 + 0.5 * math.sin(t / 160.0)
+                g = 1 + int(1.4 * k)
+                screen.pen = color.rgb(255, 200, 60, int(120 + 135 * k))
+                screen.rectangle(69 - g, 13 - g, 88 + 2 * g, g)
+                screen.rectangle(69 - g, 19, 88 + 2 * g, g)
+                screen.rectangle(69 - g, 13 - g, g, 6 + 2 * g)
+                screen.rectangle(157, 13 - g, g, 6 + 2 * g)
+            elif weekly:
+                screen.pen = color.rgb(255, 200, 60, 255)
+                screen.rectangle(68, 12, 90, 1)
+                screen.rectangle(68, 19, 90, 1)
+                screen.rectangle(68, 12, 1, 8)
+                screen.rectangle(157, 12, 1, 8)
+            gift(148, 11)                              # a small box at the far end of the weekly road
+        elif wk == "zero":
+            for i in range(6):                         # gold sparkle on the top bar as it fills
+                gfx.box(8 + (i * 11 + int(t / 25)) % 58, 3 + (i * 5) % 14, 1 + (i % 2), 1 + (i % 2),
+                        GOLD if math.sin(t / 150.0 + i) > -0.2 else WHITE)
+
+    def week_caption(self, st, t):
+        """(text, bar colour, ink) for the weekly reset's caption line."""
+        wk = self.wk
+        n = gfx.countdown(st.left7)
+        secs = int(st.left7 // 1000000) if st.left7 is not None else 0
+        if wk == "hour":
+            return "THE WEEKLY BOX IN " + n, DARK, GOLD
+        if wk == "ten":
+            return "THE BUS COMES IN " + n, ORANGE, INK
+        if wk == "minute":
+            return "NEW BOX IN %d SECONDS" % secs, ORANGE, WHITE
+        if wk == "ten_s":
+            on = (t // 125) % 2 == 0
+            return "NEW BOX IN %d..." % secs, (WHITE if on else ORANGE), INK
+        # zero: the line, in two halves, as he says it on the bench
+        gone = -st.left7 // 1000 if st.left7 is not None else 0
+        return ("LIFE IS LIKE A BOX OF" if (gone // 1500) % 2 == 0 else "CHOCOLATES..."), GOLD, INK
+
+    def pulse_frame(self, t, w=2, a=170):
+        """An orange frame round the scene that breathes."""
+        k = 0.5 + 0.5 * math.sin(t / 140.0)
+        screen.pen = color.rgb(255, 150, 40, int(a * (0.35 + 0.65 * k)))
+        screen.rectangle(0, 22, 160, w)
+        screen.rectangle(0, 108 - w, 160, w)
+        screen.rectangle(0, 22, w, 86)
+        screen.rectangle(160 - w, 22, w, 86)
+
+    def scene_bus(self, st, t):
+        """Every whole minute of the last ten: a cut to the bench, and a bus pulls up."""
+        self.draw_park(st, t)
+        foot = 104
+        gfx.blit(self.stand, 0, foot - 27 * 2 - 2, 2)
+        into = 60000 - (st.left7 // 1000) % 60000            # ms into this minute's interstitial
+        k = min(1.0, max(0.0, into / (1150.0 * st.wk_rate)))
+        k = 1 - (1 - k) * (1 - k)                      # eases to a stop
+        bx = int(172 - 86 * k)
+        top = 56 + (1 if 0.9 < k < 1.0 else 0)
+        gfx.box(bx, top, 82, 40, (238, 238, 240))      # body
+        gfx.box(bx, top + 28, 82, 7, BLUE)             # the stripe
+        gfx.box(bx, top, 82, 2, (200, 200, 206))
+        for i in range(6):                             # windows
+            gfx.box(bx + 6 + i * 11, top + 7, 9, 10, (60, 80, 120))
+        gfx.box(bx + 2, top + 5, 3, 22, (60, 80, 120))  # the windscreen
+        gfx.box(bx - 2, top + 30, 3, 5, (80, 80, 86))  # bumper
+        gfx.box(bx + 68, top + 3, 12, 4, ORANGE)       # destination board
+        for wx in (bx + 14, bx + 62):
+            screen.pen = gfx.rgb((30, 30, 34))
+            screen.shape(shape.circle(wx, top + 38, 7))
+            screen.pen = gfx.rgb((170, 170, 176))
+            screen.shape(shape.circle(wx, top + 38, 3))
+        if k > 0.55:
+            gfx.bubble(30, 46, "NEW BOX IN " + gfx.countdown(st.left7), INK, WHITE, font.sins)
+
+    def scene_field(self, st, t):
+        """The last minute: a warm field in slow motion, Forrest with open arms, Jenny running to him."""
+        near = self.wk == "ten_s"
+        progress = 1.0 - max(0.0, st.left7) / 60000000.0
+        gfx.box(0, 22, 160, 24, (255, 226, 176))       # a warm sky, brighter near the sun
+        gfx.box(0, 46, 160, 22, (252, 208, 150))
+        gfx.box(0, 68, 160, 20, (248, 190, 130))
+        screen.pen = color.rgb(255, 240, 190, 90)
+        screen.shape(shape.circle(118, 52, 18))
+        screen.pen = gfx.rgb((255, 244, 200))
+        screen.shape(shape.circle(118, 52, 11))
+        self.hills.draw(0)
+        gfx.box(0, 80, 160, 28, (126, 172, 88))        # the long field
+        gfx.box(0, 80, 160, 2, (150, 190, 104))
+        for i in range(34):                            # grass and flowers, still: it is slow motion
+            gx = (i * 47) % 160
+            gy = 84 + (i * 29) % 22
+            gfx.box(gx, gy, 1 + i % 2, 2, (96, 146, 70) if i % 3 else (156, 196, 108))
+            if i % 4 == 0:
+                gfx.box((gx + 20) % 160, gy + 3, 2, 2, (255, 246, 214))
+        bob = int(round(math.sin(t / 420.0)))          # rising and falling a little as he waits
+        gfx.blit(self.forrest_open, 14, FIELD_FOOT - 27 * 2 - 2 + bob, 2)
+        # Jenny: far and small at first, near by the end; a slow-motion run
+        jx = 150 - 74 * progress
+        fi = int(t * 5 * JENNY_STRIDES / 8.0 / 1000) % len(self.jenny)
+        if near:
+            scale, jfoot = 2, 106
+            jy = jfoot - 27 * 2
+        else:
+            scale, jfoot = 1, 92 + int(10 * progress)
+            jy = jfoot - 27
+        if self.fade:                                  # a ghost of the last step: slow-motion blur
+            screen.alpha = 70
+            gfx.blit(self.jenny[(fi - 1) % len(self.jenny)], jx + (6 if near else 3), jy, scale, True)
+            screen.alpha = 255
+        gfx.blit(self.jenny[fi], jx, jy, scale, True)
+        veil(255, 160, 70, 34)                         # the dreamy warm tint
+        if near:
+            veil(10, 8, 20, 60)                        # darker: the last moments
+            ph = 1.0 - (st.left7 % 1000000) / 1000000.0    # 0 right after a second ticks over
+            if ph < 0.22:                              # a white flash on every second, the digits still readable
+                veil(255, 255, 255, int(150 * (1 - ph / 0.22)))
+            self.big_digits(st, t)
+        else:
+            outlined("WEEKLY BOX IN", 80, 23, WHITE, font.sins)
+            outlined(gfx.countdown(st.left7), max(46, min(114, jx + 14)), 34, GOLD, font.futile)
+
+    def stamp(self, img, secs, col):
+        img.pen = color.rgb(0, 0, 0, 0)
+        img.clear()
+        img.font = font.futile
+        img.pen = color.rgb(col[0], col[1], col[2], 255)
+        img.text(str(secs), 2, 0)
+
+    def big_digits(self, st, t):
+        """The seconds as one huge flashing digit with a drop shadow, the hundredths small beside it.
+        The digit is drawn into a scratch image only when it changes (the shadow once a second, the
+        face twice), then scaled up: two blits a frame."""
+        secs = int(st.left7 // 1000000)
+        ms = int(st.left7 % 1000000) // 10000
+        on = (t // 125) % 2 == 0
+        c = WHITE if on else ORANGE
+        if self.digit_key[0] != secs:
+            self.stamp(self.digit_shadow, secs, INK)
+            self.digit_key[0] = secs
+        face_key = (secs, on)
+        if self.digit_key[1] != face_key:
+            self.stamp(self.digit_face, secs, c)
+            self.digit_key[1] = face_key
+        gfx.blit(self.digit_shadow, 61, 27, 2)
+        gfx.blit(self.digit_face, 58, 24, 2)
+        outlined(".%02d" % ms, 131, 26, c, font.futile)
+
+    def celebrate(self, st, t, z):  # noqa: ARG002
+        """The banner and a burst of sparkles round the new box."""
+        outlined("WEEKLY RESET!", 52, 24, GOLD, font.sins)
+        for i in range(14):
+            ang = i * 0.449 + t / 600.0
+            r = 8 + ((t // 40 + i * 7) % 26)
+            x = int(112 + math.cos(ang) * r * 1.4)
+            y = int(64 + math.sin(ang) * r * 0.8)
+            c = GOLD if i % 3 == 0 else (WHITE if i % 3 == 1 else (86, 180, 233))
+            screen.pen = color.rgb(c[0], c[1], c[2], 255)
+            screen.rectangle(x, y, 2, 2)
+            screen.rectangle(x - 1, y, 4, 1)
+            screen.rectangle(x, y - 1, 1, 4)
