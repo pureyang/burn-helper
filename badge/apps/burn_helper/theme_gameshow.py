@@ -11,6 +11,13 @@
 # shell = barrel blast, web = drone cam, spawn = a tag-team runner, fail = zapped ("ZAP!"),
 # done = applause, prompt = the host's next round, arrive = new contestant, refill =
 # commercial break while the collar recharges.
+#
+# The weekly reset is the SEASON finale, and gets louder as it nears (S.week_stage): a pink RESET
+# clock alternating with the game clock under 6 h; the caption, a pulsing strip and faster
+# searchlights under 1 h; the host cutting in at every whole minute of the last 10; a studio
+# "ON AIR IN" board for the last minute; flashing numbers for the last 10 s; and a NEW SEASON
+# title card with confetti when it arrives. The full-screen parts wait while a session is waiting
+# for you or an activity plays.
 
 import math
 import figure as F
@@ -123,6 +130,18 @@ CAPTIONS = {
 }
 
 
+def week_digits(us, places):
+    """The weekly countdown as big digits: "41.380" (places 3), "6.12" (places 2), "9:20" over a minute."""
+    s = us if us > 0 else 0
+    sec = s // 1000000
+    if sec >= 60:
+        return "%d:%02d" % (sec // 60, sec % 60)
+    if places <= 0:
+        return "%d" % sec
+    frac = (s % 1000000) * (10 ** places) // 1000000
+    return "%d.%s" % (sec, ("0" * places + str(frac))[-places:])
+
+
 def ease(p):
     p = max(0.0, min(1.0, p))
     return p * p * (3 - 2 * p)
@@ -142,6 +161,7 @@ class Theme(S.Theme):
         S.Theme.__init__(self)
         self.refill_from = 0
         self.last_hearts = None
+        self.ws = None          # the weekly reset's stage this frame (S.week_stage)
 
     def build(self):
         rp = gfx.palette(RUNNER)
@@ -258,12 +278,14 @@ class Theme(S.Theme):
     def render(self, st, t):
         lv = st.level
         p = self.acting(t)
+        ws = self.ws = S.week_stage(st)
+        fast = ws in ("hour", "ten", "minute", "ten_s")     # the searchlights sweep faster, at every level
         gfx.box(0, 22, 160, 30, (14, 2, 26))
         gfx.box(0, 52, 160, 38, NIGHT)
         if p is not None and self.action == "read":
             self.lock_on(t, p)
-        elif lv >= S.RUN:
-            self.searchlights(t)
+        elif lv >= S.RUN or fast:
+            self.searchlights(t * 2.2 if fast else t)
         self.far.draw(self.scroll)
         self.mid.draw(self.scroll)
         self.ground.draw(self.scroll)
@@ -285,14 +307,27 @@ class Theme(S.Theme):
             over = getattr(self, "over_" + self.action, None)
             if over:
                 over(st, t, p)
+        if ws is not None:
+            self.week_overlay(st, t, ws, p is not None)
         saved = st.hearts
+        saved_week = st.week
+        zp = S.week_zero_progress(st) if ws == "zero" else None
         if p is not None and self.action == "refill":
             # the collar lights fill back up from what was shown before
             st.hearts = min(20, self.refill_from + int(seg(p, 0.15, 0.8) * (21 - self.refill_from)))
+        elif zp is not None:
+            # the new season: the collar and the weekly strip fill back up
+            k = seg(zp, 0.2, 0.8)
+            base = self.last_hearts if self.last_hearts is not None else 0
+            if st.hearts is not None:
+                st.hearts = min(20, base + int(k * (21 - base)))
+            wk = st.week if st.week is not None else 0.0
+            st.week = wk + (1.0 - wk) * k
         else:
             self.last_hearts = st.hearts
         self.draw_hud(st, t)
         st.hearts = saved
+        st.week = saved_week
         self.draw_caption(st, t)
 
     def searchlights(self, t):
@@ -390,6 +425,7 @@ class Theme(S.Theme):
         gfx.box(0, 0, 160, 22, (10, 0, 18))
         gfx.box(0, 21, 160, 1, PINK)
         gfx.text("RUNNING MAN", 2, -2, YELLOW, font.sins, shadow=RED)
+        ws = self.ws
         lv = st.level
         if not st.online:
             self.rtext("NO SIGNAL", (150, 150, 160))
@@ -410,6 +446,28 @@ class Theme(S.Theme):
         w = gfx.width(cd, font.sins)
         gfx.text(cd, 156 - w, 7, gfx.countdown_color(st.left5, YELLOW, (255, 150, 40), RED), font.sins)
         screen.blit(self.clock, vec2(int(156 - w - 8), 12))
+        if ws == "six":
+            if (t // 2200) % 2 == 1:
+                self.season_clock(st)           # the weekly clock takes turns with the game clock
+        elif ws == "hour":
+            # the weekly strip pulses, and the logo gives way to SEASON FINALE every other turn
+            gfx.box(6, 19, 76, 3, PINK if (t // 220) % 2 == 0 else WHITE)
+            gfx.meter(6, 20, 76, 1, st.week, CYAN, (30, 30, 60))
+            if (t // 1200) % 2 == 1:
+                gfx.box(0, 0, 90, 10, (10, 0, 18))
+                gfx.text("SEASON FINALE", 2, -2, PINK, font.sins, shadow=YELLOW)
+        elif ws in ("ten", "minute", "ten_s"):
+            self.season_clock(st)
+            gfx.box(6, 19, 76, 3, PINK if (t // 160) % 2 == 0 else WHITE)
+            gfx.meter(6, 20, 76, 1, st.week, CYAN, (30, 30, 60))
+
+    def season_clock(self, st):
+        """The weekly countdown in the corner clock's place, in pink."""
+        gfx.box(88, 9, 70, 11, PINK)
+        gfx.box(88, 9, 70, 1, WHITE)
+        us = st.left7
+        cd = week_digits(us, 2) if us < 10000000 else gfx.countdown(us)     # hundredths in the last 10 s
+        gfx.text(gfx.fit("RESET " + cd, 68, font.sins), 90, 7, BLACK, font.sins)
 
     def draw_collar(self, st, t, x, y):
         """The runner's explosive collar: 10 lights = the 5-hour budget.
@@ -460,6 +518,16 @@ class Theme(S.Theme):
         if not st.online:
             return st.net or "PLEASE STAND BY..."
         p = self.acting(t)
+        ws = self.ws
+        if ws == "zero":
+            return "NEW SEASON! GAME RESET"
+        if ws in ("hour", "ten", "minute", "ten_s") and p is None:
+            us = st.left7
+            if ws == "ten_s":
+                return "RESETTING IN %s" % week_digits(us, 1)
+            if ws == "minute":
+                return "ON AIR IN %s" % week_digits(us, 0)
+            return "THE GAME RESETS IN " + gfx.countdown(us)
         if p is not None:
             a, b = CAPTIONS[self.action]
             return a if p < 0.45 else b
@@ -490,6 +558,85 @@ class Theme(S.Theme):
 
     def put(self, img, x, foot=104, flip=False, h=27, lift=0):
         gfx.blit(img, x, foot - h * 2 - lift, 2, flip)
+
+    # ------------------------------------------------------------ the weekly reset
+    def week_overlay(self, st, t, ws, acting):
+        """What the weekly reset puts on the screen. The full-screen parts wait while a session is
+        waiting for you or an activity plays; the HUD and caption parts (draw_hud, caption) do not."""
+        if ws == "zero":
+            self.new_season(st, t)
+        elif not S.week_takes_screen(st, acting):
+            return
+        elif ws == "ten":
+            if S.week_interstitial(st):
+                self.pulse_frame(t)
+                self.host_card(st.left7, t)
+        elif ws == "minute":
+            self.board(st.left7, t, False)
+        elif ws == "ten_s":
+            self.board(st.left7, t, True)
+
+    def pulse_frame(self, t):
+        if (t // 200) % 2 == 0:
+            screen.pen = color.rgb(255, 46, 140, 190)
+            screen.rectangle(0, 22, 160, 2)
+            screen.rectangle(0, 106, 160, 2)
+            screen.rectangle(0, 22, 2, 86)
+            screen.rectangle(158, 22, 2, 86)
+
+    def host_card(self, left, t):
+        bx, top = 108, 44
+        gfx.box(bx - 2, top - 2, 52, 62, PINK)
+        gfx.box(bx, top, 48, 58, (30, 10, 50))
+        for i in range(6):
+            gfx.box(bx + 3 + i * 8, top + 2, 3, 2, YELLOW if (i + t // 150) % 2 else (120, 90, 20))
+        gfx.blit(self.host[1 if (t // 140) % 2 == 0 else 0], bx - 4, top - 6, 2)
+        gfx.bubble(bx + 18, top - 1, "NEW SEASON IN %s!" % week_digits(left, 0), BLACK, WHITE, font.sins)
+
+    def board(self, left, t, flash):
+        """The studio countdown board: fills the scene area."""
+        top, bot = 22, 108
+        edge = PINK if (t // 160) % 2 == 0 else YELLOW
+        gfx.box(0, top, 160, bot - top, (14, 4, 28))
+        gfx.box(0, top, 160, 3, edge)
+        gfx.box(0, bot - 3, 160, 3, edge)
+        gfx.box(0, top, 3, bot - top, edge)
+        gfx.box(157, top, 3, bot - top, edge)
+        # the audience sign, flashing
+        w = int(gfx.width("APPLAUSE", font.sins)) + 10
+        sx = 80 - w // 2
+        gfx.box(sx - 1, top + 5, w + 2, 13, SKYBLUE)
+        gfx.box(sx, top + 6, w, 11, BLACK)
+        gfx.text("APPLAUSE", sx + 5, top + 4, GOLD if (t // 200) % 2 == 0 else (120, 96, 30), font.sins)
+        gfx.ctext("NEW SEASON IN" if flash else "ON AIR IN", 80, top + 23, YELLOW, font.sins)
+        if flash:
+            col = WHITE if (t // 125) % 2 == 0 else YELLOW
+        else:
+            col = YELLOW if (t // 400) % 2 == 0 else WHITE
+        gfx.ctext(week_digits(left, 2 if flash else 3), 80, top + 36, col, font.futile, shadow=PINK)
+        gfx.ctext("SECONDS", 80, top + 68, WHITE, font.sins)
+        if flash and left % 1000000 > 850000:         # a white flash as each second turns over
+            screen.pen = color.rgb(255, 255, 255, 215)
+            screen.rectangle(0, top, 160, bot - top)
+
+    def new_season(self, st, t):
+        """The reset itself: confetti and a NEW SEASON title card."""
+        p = S.week_zero_progress(st)
+        if p is None:
+            return
+        top, bot = 22, 108
+        cols = (YELLOW, PINK, CYAN, WHITE, GOLD)
+        for i in range(36):
+            x = (i * 7919) % 160 + math.sin(p * 14 + i) * 3
+            y = top + ((p * 1.6 + i / 36.0) % 1.0) * (bot - top)
+            gfx.box(x, y, 2, 2, cols[i % 5])
+        cx = int(-120 + ease(seg(p, 0.0, 0.2)) * 200)       # the title card slides in and settles
+        gfx.box(cx - 62, 44, 124, 30, PINK)
+        gfx.box(cx - 60, 46, 120, 26, BLACK)
+        gfx.ctext("NEW", cx, 47, YELLOW, font.sins)
+        gfx.ctext("SEASON", cx, 59, WHITE if (t // 180) % 2 == 0 else YELLOW, font.sins)
+        if p > 0.45:
+            gfx.bubble(80, 40, "WELCOME BACK, RUNNER!", BLACK, WHITE, font.sins)
 
     # ------------------------------------------------------------ edit: a fight
     def act_edit(self, st, t, p):
