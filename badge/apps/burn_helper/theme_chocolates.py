@@ -245,11 +245,11 @@ class Theme(S.Theme):
         about 13 KB), and two scratch images the huge digits are drawn into."""
         self.forrest_open = gfx.to_image(F.render(JOGGER, F.stand(**OPEN_ARMS)), p_run)
         pj = pal()
-        pj[F.TOP] = gfx.rgb((126, 170, 214))
-        pj[F.TOP_D] = gfx.rgb((92, 130, 176))
-        pj[F.BOT] = gfx.rgb((126, 170, 214))
-        pj[F.BOT_D] = gfx.rgb((92, 130, 176))
-        pj[F.HAIR] = gfx.rgb((228, 190, 104))
+        pj[F.TOP] = gfx.rgb((250, 250, 255))                 # a white dress and dark hair: she shows up
+        pj[F.TOP_D] = gfx.rgb((196, 200, 214))               # against the warm sky and the green field
+        pj[F.BOT] = gfx.rgb((250, 250, 255))
+        pj[F.BOT_D] = gfx.rgb((196, 200, 214))
+        pj[F.HAIR] = gfx.rgb((84, 52, 30))
         self.jenny = [gfx.to_image(g, pj) for g in F.cycle(JENNY, "run", JENNY_STRIDES)]
         self.digit_shadow = image(24, 24)
         self.digit_face = image(24, 24)
@@ -919,20 +919,12 @@ class Theme(S.Theme):
                 gfx.box((gx + 20) % 160, gy + 3, 2, 2, (255, 246, 214))
         bob = int(round(math.sin(t / 420.0)))          # rising and falling a little as he waits
         gfx.blit(self.forrest_open, 14, FIELD_FOOT - 27 * 2 - 2 + bob, 2)
-        # Jenny: far and small at first, near by the end; a slow-motion run
-        jx = 150 - 74 * progress
+        # Jenny runs in from the right, full size so she can be told from the field, a slow-motion run
+        jx = 160 - 100 * progress
         fi = int(t * 5 * JENNY_STRIDES / 8.0 / 1000) % len(self.jenny)
-        if near:
-            scale, jfoot = 2, 106
-            jy = jfoot - 27 * 2
-        else:
-            scale, jfoot = 1, 92 + int(10 * progress)
-            jy = jfoot - 27
-        if self.fade:                                  # a ghost of the last step: slow-motion blur
-            screen.alpha = 70
-            gfx.blit(self.jenny[(fi - 1) % len(self.jenny)], jx + (6 if near else 3), jy, scale, True)
-            screen.alpha = 255
-        gfx.blit(self.jenny[fi], jx, jy, scale, True)
+        jy = 106 - 27 * 2
+        gfx.blit(self.jenny[fi], jx, jy, 2, True)
+
         veil(255, 160, 70, 34)                         # the dreamy warm tint
         if near:
             veil(10, 8, 20, 60)                        # darker: the last moments
@@ -942,7 +934,13 @@ class Theme(S.Theme):
             self.big_digits(st, t)
         else:
             outlined("WEEKLY BOX IN", 80, 23, WHITE, font.sins)
-            outlined(gfx.countdown(st.left7), max(46, min(114, jx + 14)), 34, GOLD, font.futile)
+            outlined(gfx.countdown(st.left7), max(52, min(114, jx + 14)), 34, GOLD, font.futile)
+        # and he calls to her, above his head, crisp over the tint: JENNY! in a bubble that jumps,
+        # with shout lines from his mouth
+        loud = (t // 350) % 2 == 0
+        gfx.bubble(28, 52 - (2 if loud else 0), "JENNY!!" if loud else "JENNY!", INK, WHITE, font.sins)
+        for k in range(3):
+            gfx.box(46 + k * 2, 58 + k * 4 - (2 if loud else 0), 3 + (2 if loud else 0), 1, WHITE)
 
     def stamp(self, img, secs, col):
         img.pen = color.rgb(0, 0, 0, 0)
