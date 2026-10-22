@@ -256,6 +256,15 @@ def tick(boot_ms):
         pass
 
 
+def note(msg):
+    """A line in the power log that is not a reading (the screen going off or being woken)."""
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write("%d %s\n" % (time.ticks_ms() // 1000, msg))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def trim():
     """Keep the log small; call once at start."""
     try:

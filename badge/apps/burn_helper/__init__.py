@@ -435,14 +435,22 @@ def step_waiting(d):
     wait_sel = None if i < 0 else i
 
 
+def wake_screen(b):
+    """The screen is off (0%): any button wakes it. DOWN goes round to full brightness, as it always
+    did; the others come on at the dimmest lit level, which is gentle at night."""
+    global screen_off_at
+    prefs["bright"] = 0 if b == BUTTON_DOWN else OFF - 1
+    screen_off_at = None
+    save_prefs()
+    set_brightness(prefs["bright"])
+    show_toast("SCREEN ON")
+    power.note("screen woken by a button press")
+
+
 def short_press(b):
     global view, page, wait_sel, screen_off_at
-    if screen_dark() and b != BUTTON_DOWN:
-        # the screen is off (0%): any button wakes it, at the dimmest lit level, and does nothing else
-        prefs["bright"] = OFF - 1
-        save_prefs()
-        set_brightness(prefs["bright"])
-        show_toast("SCREEN ON")
+    if screen_dark():
+        wake_screen(b)
         return
     if not (b == BUTTON_UP and view == views.DEBUG and page == views.WIFI_PAGE):
         link.pick_cancel()                  # any other press, or leaving the page, drops a pick
@@ -468,6 +476,7 @@ def short_press(b):
         if prefs["bright"] == OFF:
             # keep the screen lit for a moment to say what is happening, then turn it off
             screen_off_at = time.ticks_add(time.ticks_ms(), SCREEN_OFF_NOTE_MS)
+            power.note("screen going off (0%)")
         else:
             screen_off_at = None
             set_brightness(prefs["bright"])
@@ -485,6 +494,12 @@ def handle_buttons(t):
     for b in (BUTTON_A, BUTTON_B, BUTTON_C, BUTTON_UP, BUTTON_DOWN):
         if badge.pressed(b) and b not in down:
             down[b] = t
+            if screen_dark():
+                # with nothing on screen a press is not a quick tap: wake on the press itself, not on its
+                # release (a press held for a moment used to count as a hold and did nothing)
+                down.clear()
+                wake_screen(b)
+                return
     if portal is not None:
         if portal_arm:
             # setup stays open after the hold: wait for that press to end, then a new B press cancels
