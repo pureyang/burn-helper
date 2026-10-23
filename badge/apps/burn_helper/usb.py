@@ -25,6 +25,7 @@ class UsbLink:
         self.relay_req = None    # 1 = use the internet relay even at home (testing), 0 = back to normal
         self.key_req = None      # "A", "B", "C", "UP" or "DOWN": act as a short press (testing)
         self.demo_req = None
+        self.test_req = None     # "@STATE <name>": show a state for testing (est, nobridge, off), "normal" ends it
         try:
             self.poller = select.poll()
             self.poller.register(sys.stdin, select.POLLIN)
@@ -67,6 +68,9 @@ class UsbLink:
                 self.demo_req = int(line[6:].strip())
             except ValueError:
                 pass
+            return
+        if line.startswith("@STATE "):
+            self.test_req = line[7:].strip().lower()
             return
         if line.startswith("@RELAY "):
             try:

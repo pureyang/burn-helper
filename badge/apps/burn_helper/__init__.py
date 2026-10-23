@@ -665,6 +665,21 @@ def draw_frame(t):
         draw_off_note(time.ticks_diff(screen_off_at, t))
 
 
+test_state = None        # a state shown for testing over USB ("@STATE est"), or None
+
+
+def apply_test_state():
+    """Show a state that is hard to catch for real, over what the bridge says (USB "@STATE name").
+    est: a new 5-hour window nobody has reported (full hearts, a ~ countdown); nobridge: no data."""
+    if test_state == "est":
+        st.used5, st.est5, st.hearts = None, True, 20
+        st.left5 = (4 * 3600 + 49 * 60) * 1000000 - (time.ticks_ms() % 1000) * 1000
+        st.usage_state = "est"
+    elif test_state == "nobridge":
+        st.online = False
+        st.net = "SEARCHING FOR BRIDGE..."
+
+
 def update():
     global wait_since, screen_off_at
     t = time.ticks_ms()
@@ -686,6 +701,8 @@ def update():
         demo_status(t)
     else:
         st.tick()
+        if test_state:
+            apply_test_state()
     if st.waiting > 0:
         if wait_since is None:
             wait_since = t
@@ -703,6 +720,9 @@ def update():
     if tether.demo_req is not None:
         set_demo(tether.demo_req % 3)
         tether.demo_req = None
+    if tether.test_req is not None:
+        globals()["test_state"] = None if tether.test_req in ("normal", "off", "") else tether.test_req
+        tether.test_req = None
     if tether.view_req is not None:
         globals()["view"] = tether.view_req % 3
         tether.view_req = None
