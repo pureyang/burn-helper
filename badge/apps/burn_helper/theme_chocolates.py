@@ -531,7 +531,7 @@ class Theme(S.Theme):
         self.draw_chocolates(st.hearts, 1, 1, low and S.blink(t, 300))
         # time until the box refills (the 5-hour window resets)
         screen.blit(self.clock, vec2(69, 2))
-        gfx.text(gfx.countdown(st.left5), 76, -2, gfx.countdown_color(st.left5, INK, (190, 120, 20), RED), font.sins)
+        gfx.text(S.cd5(st), 76, -2, gfx.countdown_color(st.left5, INK, (190, 120, 20), RED), font.sins)
         miles = str(min(st.tools, 99999))
         w = gfx.width(miles, font.sins)
         gfx.text(miles, 158 - w, -2, INK, font.sins)

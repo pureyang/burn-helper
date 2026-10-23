@@ -109,10 +109,15 @@ def bridge_text(c):
     return ("%s:%d" % b if b else "SEARCHING"), age
 
 
-def resets(left):
+def resets(left, est=False):
     if left is None:
         return ""
-    return ("RESETS IN " + gfx.countdown(left)) if left > 0 else gfx.countdown(left)
+    return (("RESETS IN ~" if est else "RESETS IN ") + gfx.countdown(left)) if left > 0 else gfx.countdown(left)
+
+
+def no_report(st):
+    """Why there is no usage to show, in a few words (the bridge's usage state)."""
+    return {"none": "NO USAGE REPORT YET", "stale": "WAITING FOR A REPORT"}.get(st.usage_state, "NO RESET TIME YET")
 
 
 def activity(st):
@@ -147,11 +152,12 @@ def desktop(c, t):  # noqa: ARG001
     # usage left
     for label, p, left, y in (("5 HOURS", left5(st), st.left5, 10), ("WEEK", left7(st), st.left7, 34)):
         colour = pct_colour(p)
-        big = "--" if p is None else "%d%% LEFT" % p
+        est = label == "5 HOURS" and st.est5
+        big = "--" if p is None else ("~%d%% LEFT" if est else "%d%% LEFT") % p
         gfx.text(label, 4, y, FG, font.sins)
         gfx.text(big, 156 - gfx.width(big, font.sins), y, colour, font.sins)
         gfx.meter(4, y + 12, 152, 3, None if p is None else p / 100.0, colour, MUTED)
-        gfx.text(resets(left) or "NO RESET TIME YET", 4, y + 13, gfx.countdown_color(left, DIM), font.sins)
+        gfx.text(resets(left, est) or no_report(st), 4, y + 13, gfx.countdown_color(left, DIM), font.sins)
     gfx.box(4, 59, 152, 1, MUTED)
     # waiting for you
     if not st.online and not c.demo:
@@ -230,8 +236,11 @@ def _overview(c):
     ]
     for label, p, left in (("5H", left5(st), st.left5), ("7D", left7(st), st.left7)):
         when = gfx.countdown(left)
-        rows.append("%s %s LEFT%s" % (label, "--" if p is None else "%d%%" % p,
-                                      "" if left is None else (", RESET IN " + when if left > 0 else ", " + when)))
+        est = label == "5H" and st.est5
+        rows.append("%s %s LEFT%s%s" % (
+            label, "--" if p is None else ("~%d%%" if est else "%d%%") % p,
+            "" if left is None else (", RESET IN " + ("~" if est else "") + when if left > 0 else ", " + when),
+            ", " + no_report(st)[:22] if left is None and label == "5H" else ""))
     rows.append("BATT " + power.text())
     if c.link.err and not c.demo:
         rows.append("ERR " + c.link.err[:22])

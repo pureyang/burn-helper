@@ -463,7 +463,7 @@ class Theme(S.Theme):
         gfx.text("x%d" % st.waiting, ox + 10, 9, WHITE, font.sins)
 
         # time until the hearts refill (the 5-hour window resets)
-        cd = gfx.countdown(st.left5)
+        cd = S.cd5(st)
         w = gfx.width(cd, font.sins)
         if 158 - w - 10 >= 76 + gfx.width("-LIFE-", font.sins):
             gfx.text("-LIFE-", 76, -2, RED, font.sins)     # dropped when the long final-seconds count needs the room

@@ -442,7 +442,7 @@ class Theme(S.Theme):
         # the show's game clock: time until the collar recharges (5-hour reset)
         gfx.box(94, 9, 64, 11, BLACK)
         gfx.box(94, 9, 64, 1, PINK)
-        cd = gfx.countdown(st.left5)
+        cd = S.cd5(st)
         w = gfx.width(cd, font.sins)
         gfx.text(cd, 156 - w, 7, gfx.countdown_color(st.left5, YELLOW, (255, 150, 40), RED), font.sins)
         screen.blit(self.clock, vec2(int(156 - w - 8), 12))

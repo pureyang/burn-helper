@@ -86,6 +86,9 @@ class Status:
         self.act_t = 0          # ticks_ms when it started
         self.act_seq = 0        # a new number for every new activity
         self.wk_rate = 1        # how fast the weekly countdown runs: 1, or faster in the demos
+        self.est5 = False       # the 5-hour countdown is an estimate (shown with a ~)
+        self.usage_state = ""
+        self.usage_age = None
         self.pending = None     # the most telling activity not played yet
         self.pending_t = 0
         self.ev_seen = None     # the bridge's number for the newest activity already handled
@@ -113,8 +116,13 @@ class Status:
         self.week = None if wk.get("used") is None else max(0.0, min(1.0, (100.0 - float(wk["used"])) / 100.0))
         fh = d.get("five_hour") or {}
         self.used5 = fh.get("used")
-        # a window the bridge knows nothing new about (stale) is unknown: no countdown to "FULL"
+        # a window the bridge knows nothing new about (stale) is unknown: no countdown to "FULL"; an
+        # estimated one (a new window nobody has reported yet) has an estimated end, shown with a ~
         self.reset5 = None if fh.get("stale") else fh.get("resets_at")
+        self.est5 = bool(fh.get("est"))
+        u = d.get("usage") or {}
+        self.usage_state = u.get("state") or ""      # ok, old, est, stale, none: why the hearts are what they are
+        self.usage_age = u.get("age")
         self.used7 = wk.get("used")
         self.reset7 = None if wk.get("stale") else wk.get("resets_at")
         self.busy = int(d.get("busy") or 0)
@@ -321,6 +329,11 @@ WEEK_MINUTE_US = 60 * 1000000
 WEEK_TEN_S_US = 10 * 1000000
 WEEK_ZERO_MS = 4000
 WEEK_INTERSTITIAL_MS = 1500
+
+
+def cd5(st):
+    """The 5-hour countdown as the HUD shows it: a ~ in front when it is an estimate."""
+    return ("~" if st.est5 and st.left5 is not None and st.left5 > 0 else "") + gfx.countdown(st.left5)
 
 
 def week_stage(st):
