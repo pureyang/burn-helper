@@ -47,3 +47,31 @@ st = _S.Status()
 st.update({"hearts": None, "five_hour": {"used": None, "resets_at": now - 3600, "stale": 1}, "seven_day": {"used": None, "resets_at": 1, "stale": 1}})
 assert st.hearts is None and st.reset5 is None and st.week is None
 print("PASS usage: an ended window nobody has reported on is unknown (grey hearts, no FULL), not 100%")
+
+# an ended window with work since: the bridge estimates the new window from the first work after the
+# reset, shows full hearts marked as an estimate, and says why
+b = B.Bridge()
+b.five_hour = {"used": 42.0, "resets_at": now - 1800, "rx": now - 1830}
+b.seven_day = {"used": 11.0, "resets_at": now + 86400, "rx": now - 60}
+b.on_hook({"session_id": "s1", "event": "UserPromptSubmit"})            # the first work after the reset
+assert b.est_start and abs(b.est_start - time.time()) < 2
+b.last_active = time.time()
+s = b.status()
+assert s["five_hour"]["est"] == 1 and s["five_hour"]["used"] is None, s["five_hour"]
+assert abs(s["five_hour"]["resets_at"] - (b.est_start + 5 * 3600)) < 2 and s["hearts"] == 20, s
+assert s["usage"]["state"] == "est", s["usage"]
+for _name, _fn in (("ticks_us", lambda: int(time.time() * 1e6)), ("ticks_ms", lambda: int(time.time() * 1000)),
+                   ("ticks_diff", lambda a, b: a - b), ("ticks_add", lambda a, b: a + b)):
+    if not hasattr(time, _name):
+        setattr(time, _name, _fn)
+st = _S.Status()
+st.update(s)
+st.tick()
+assert st.est5 and st.hearts == 20 and st.left5 is not None and st.left5 > 4 * 3600 * 1000000
+assert _S.cd5(st).startswith("~") and st.usage_state == "est"
+b.on_usage({"rate_limits": {"five_hour": {"used_percentage": 6, "resets_at": now + 17000}}})
+assert b.est_start is None and b.status()["usage"]["state"] == "ok" and b.status()["hearts"] == 19
+b2 = B.Bridge()
+b2.five_hour = b2.seven_day = b2.est_start = None          # (a fresh bridge loads the real saved state)
+assert b2.status()["usage"] == {"state": "none", "age": None} and b2.status()["hearts"] is None
+print("PASS usage: an estimated new window (full hearts, a ~ countdown) with the reason, replaced by the first real report")

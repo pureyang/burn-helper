@@ -110,6 +110,23 @@ def _num(v, default=None):
         return default
 
 
+def usage_state(raw5, raw7, five, now):
+    """{"state", "age"}: how sure the usage shown is. age = seconds since any status line reported."""
+    rx = max((w.get("rx") or 0) for w in (raw5, raw7) if w) if (raw5 or raw7) else 0
+    age = int(now - rx) if rx else None
+    if not (raw5 or raw7):
+        state = "none"
+    elif five and five.get("est"):
+        state = "est"
+    elif five and five.get("stale"):
+        state = "stale"
+    elif age is not None and age > 1800:
+        state = "old"
+    else:
+        state = "ok"
+    return {"state": state, "age": age}
+
+
 def waiting_entries(loc, remote, why, now):
     """The badge's list of sessions waiting for you, longest wait first, at most 4, each by its
     Claude Code name. Without one (an older Claude Code, or a computer whose hook doesn't send
@@ -170,6 +187,8 @@ class Bridge:
         self.activity_seq = 0
         # usage
         self.five_hour = None          # {"used": float, "resets_at": int, "rx": float}
+        self.est_start = None          # when work first began after the 5-hour window ended (a new window
+        #                                starts then, though no status line has reported it yet)
         self.seven_day = None
         # theme
         self.theme = None
@@ -203,6 +222,7 @@ class Bridge:
         self.theme = t if t in THEMES else None
         self.theme_seq = int(_num(d.get("theme_seq"), 0))
         self.last_active = _num(d.get("last_active"), 0.0)
+        self.est_start = _num(d.get("est_start"), None)
 
     def persist(self, force=False):
         now = time.time()
@@ -212,7 +232,7 @@ class Bridge:
             if not force and now - self._last_persist < PERSIST_INTERVAL:
                 return
             d = {"tools_today": self.tools_today, "tools_date": self.tools_date,
-                 "five_hour": self.five_hour, "seven_day": self.seven_day,
+                 "five_hour": self.five_hour, "seven_day": self.seven_day, "est_start": self.est_start,
                  "theme": self.theme, "theme_seq": self.theme_seq, "last_active": self.last_active}
             self._dirty = False
             self._last_persist = now
@@ -323,6 +343,11 @@ class Bridge:
                     self.tracker.event("prompt")
                 elif event == "Stop":
                     self.tracker.event("turn")
+            if (self.est_start is None and self.five_hour and event in BUSY_EVENTS
+                    and self.five_hour.get("resets_at") and now > self.five_hour["resets_at"]
+                    and (self.five_hour.get("rx") or 0) < self.five_hour["resets_at"] + 60):
+                self.est_start = now
+                self._dirty = True
             if event in TOOL_EVENTS:
                 self.tool_times.append(now)
                 self.tools_today += 1
@@ -395,7 +420,7 @@ class Bridge:
         waiting += [(sid, r.get("name") or r.get("folder"), str(r.get("host") or "").split(".")[0], why.get(sid, ""))
                     for sid, r in remote]
         self.tracker.observe(now, waiting)
-        w5, w7 = self._window(five, now, self.last_active), self._window(seven, now, self.last_active)
+        w5, w7 = self._window(five, now, self.last_active, self.est_start, 5 * 3600), self._window(seven, now, self.last_active)
         self.tracker.usage(w5["used"] if w5 else None, w7["used"] if w7 else None)    # None: unknown, skipped
 
     def on_usage(self, d):
@@ -420,6 +445,8 @@ class Bridge:
                     if resets == old["resets_at"]:
                         used = max(used, old["used"])   # same window: usage only goes up
                 setattr(self, key, {"used": round(used, 1), "resets_at": resets, "rx": now})
+                if key == "five_hour":
+                    self.est_start = None        # the new window is known now: no estimate needed
                 changed = True
             if changed:
                 self._dirty = True
@@ -439,17 +466,22 @@ class Bridge:
 
     # ------------------------------------------------------------ output
     @staticmethod
-    def _window(w, now, last_active=0.0):
+    def _window(w, now, last_active=0.0, est_start=None, length=0):
         """A usage window as the badge should show it. Once its reset time has passed, usage is truly
-        0 until your next message starts a new window; but if there has been work since and no
-        status line has reported the new window yet (a session without a terminal, like a
-        background one, never reports), the usage is unknown, not full: used is None."""
+        0 until your next message starts a new window. But if there has been work since and no status
+        line has reported the new window yet (a session without a terminal, like a background one,
+        never reports, and an interactive one reports a window only after its own first answer in
+        it), the window's usage is unknown. Its end can still be estimated: the window began with
+        the first work after the old one ended, so it ends `length` seconds after that. Those come
+        back as used None, est 1; with no estimate possible, stale 1."""
         if not w:
             return None
         resets = int(w.get("resets_at") or 0)
         used = float(w.get("used") or 0.0)
         if resets and now > resets:
             if last_active > resets + 60 and (w.get("rx") or 0) < resets:
+                if est_start and length and est_start > resets:
+                    return {"used": None, "resets_at": int(est_start + length), "est": 1}
                 return {"used": None, "resets_at": resets, "stale": 1}
             used = 0.0
         return {"used": round(used, 1), "resets_at": resets}
@@ -476,7 +508,7 @@ class Bridge:
             if self._today() != self.tools_date:
                 self.tools_date, self.tools_today = self._today(), 0
             tools_today = self.tools_today
-            five = self._window(self.five_hour, now, self.last_active)
+            five = self._window(self.five_hour, now, self.last_active, self.est_start, 5 * 3600)
             seven = self._window(self.seven_day, now, self.last_active)
             theme, theme_seq, last_active = self.theme, self.theme_seq, self.last_active
             live = {w[3] for w in loc.get("waiting_list", [])}
@@ -502,7 +534,9 @@ class Bridge:
 
         basis = five or seven
         hearts = None
-        if basis is not None and basis["used"] is not None:
+        if five is not None and five.get("est"):
+            hearts = 20                    # a window just begun: full, marked as an estimate
+        elif basis is not None and basis["used"] is not None:
             hearts = int(round((100.0 - basis["used"]) / 5.0))
             hearts = max(0, min(20, hearts))
 
@@ -528,6 +562,9 @@ class Bridge:
             "tools_today": tools_today,
             "five_hour": five,
             "seven_day": seven,
+            # why the hearts show what they show: ok (a recent report), old (no report for 30 minutes or
+            # more), est (a new window the bridge has not been told about), stale, or none (never)
+            "usage": usage_state(self.five_hour, self.seven_day, five, now),
             "hearts": hearts,
             "theme": theme,
             "theme_seq": theme_seq,
