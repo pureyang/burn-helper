@@ -24,6 +24,9 @@
 # meter go grey and the agent and waiting counts read x?; after a minute, the field goes dark and
 # a dialog box says LOST CONTACT, how long, why and what to try, with the usage as of the last data
 # below. When it comes back: THE BRIDGE ANSWERS!
+#
+# The weekly pace (scene.pace_*): a tick on the magic meter where an even pace would leave it, and
+# now and then, while agents work, the caption says the magic runs out early at this pace.
 
 import math
 import figure as F
@@ -80,6 +83,11 @@ STILL = ("read", "shell", "done", "prompt", "arrive", "refill")      # the hero 
 CAPTIONS = {"spawn": "BOOMERANG OUT: A SUBAGENT", "fail": "OUCH! A TOOL CALL FAILED",
             "done": "QUEST COMPLETE!", "prompt": "A NEW QUEST!", "arrive": "A NEW SESSION BEGINS",
             "refill": "HEARTS REFILLED!"}
+# the weekly pace's captions (scene.pace_caption), two lines in turn
+PACE = {"watch": ("AT THIS PACE, THE MAGIC", "RUNS OUT ~%(at)s"),
+        "warn": ("MAGIC RUNS OUT ~%(at)s", "%(early)s BEFORE THE WEEK RESETS"),
+        "eased": ("PACE EASED: MAGIC LASTS", "THE MAGIC LASTS THE WEEK"),
+        "room": ("%(left)d%% OF THE MAGIC LEFT", "THE WEEK RESETS IN %(cd)s")}
 JAR_BLUE = (110, 190, 255)        # the weekly clock and jar: blue, never green or red
 FLAME = (255, 150, 40)            # urgency: orange and gold, with words
 M = 1000000
@@ -167,6 +175,7 @@ class Theme(S.Theme):
         self.last_hearts = None
         self.wk = None            # the weekly reset's stage this frame (scene.week_stage)
         self.lost = None          # the connection-lost stage this frame (scene.lost_stage)
+        self.pace_kind = None     # the weekly pace's caption is showing: its kind (scene.pace_caption)
         self.week_from = 0.35     # the magic meter's level before the reset, to sweep it up from
 
     def build(self):
@@ -487,8 +496,9 @@ class Theme(S.Theme):
             gfx.meter(77, 19, 79, 2, st.week, (130, 130, 130), (44, 44, 44))
         else:
             gfx.draw_hearts(self.hearts, st.hearts, 76, 9, blink=low and S.blink(t, 300), unknown=self.hearts_grey)
-            # magic meter under the hearts = weekly budget
+            # magic meter under the hearts = weekly budget, with the pace tick
             gfx.meter(77, 19, 79, 2, st.week, (48, 200, 64), (36, 52, 36))
+            S.pace_tick(st, 77, 19, 79, 2)
         if not st.online and S.blink(t, 600):
             gfx.text("?", 62, 4, RED, font.sins)
 
@@ -515,6 +525,8 @@ class Theme(S.Theme):
             elif w == "zero":
                 msg, hot = "MAGIC RESTORED!", True
         ink = GOLD if hot else WHITE
+        if self.pace_kind and w in (None, "six"):
+            ink = S.pace_ink(self.pace_kind, ink)
         if self.lost is not None and msg.startswith("CONNECTION LOST"):
             ink = S.LOST
         elif S.back_online(st, t):
@@ -522,10 +534,15 @@ class Theme(S.Theme):
         gfx.ctext(gfx.fit(msg, 156, font.sins), 80, 107, ink, font.sins)
 
     def caption(self, st, t):
+        self.pace_kind = None
         if not st.online:
             return S.lost_caption(st, t) if self.lost else (st.net or "SEARCHING FOR BRIDGE...")
         if self.action in CAPTIONS and self.acting(t) is not None:
             return CAPTIONS[self.action]
+        pc = S.pace_caption(st, t, PACE)
+        if pc:
+            msg, self.pace_kind = pc
+            return msg
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
             return "LOW HEARTS! REFILL IN " + gfx.countdown(st.left5)
         tc = S.tier_caption(st, t, "HYPERSPACE JUMP!")

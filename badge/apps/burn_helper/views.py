@@ -24,6 +24,7 @@ DESKTOP, DEBUG = 1, 2
 PAGES = ("DEBUG", "CONNECTION", "WI-FI")      # Debug mode's pages
 WIFI_PAGE = 2
 LEVEL_NAMES = ("ASLEEP", "IDLE", "WALKING", "RUNNING", "SPRINTING")
+PACE_NAMES = ("CALM", "WATCH", "HEADS-UP", "OUT")
 
 
 class Ctx:
@@ -150,7 +151,15 @@ def desktop(c, t):
         gfx.text(label, 4, y, FG, font.sins)
         gfx.text(big, 156 - gfx.width(big, font.sins), y, colour, font.sins)
         gfx.meter(4, y + 12, 152, 3, None if p is None else p / 100.0, colour, MUTED)
-        gfx.text(resets(left, est) or no_report(st), 4, y + 13, gfx.countdown_color(left, DIM), font.sins)
+        line, ink = resets(left, est) or no_report(st), gfx.countdown_color(left, DIM)
+        if label == "WEEK" and lost is None:
+            # the weekly pace: its tick on the meter, and its lines in turn with the reset
+            S.pace_tick(st, 4, y + 12, 152, 3, FG)
+            turns = S.pace_lines(st) if left is not None else []
+            k = (t // S.PACE_LINE_MS) % (len(turns) + 1)
+            if k:
+                line, ink = turns[k - 1]
+        gfx.text(gfx.fit(line, 152, font.sins), 4, y + 13, ink, font.sins)
     gfx.box(4, 59, 152, 1, MUTED)
     # waiting for you
     if lost is not None:
@@ -240,13 +249,19 @@ def _overview(c, t):
             label, "--" if p is None else ("~%d%%" if est else "%d%%") % p,
             "" if left is None else (", RESET IN " + ("~" if est else "") + when if left > 0 else ", " + when),
             ", " + no_report(st)[:22] if left is None and label == "5H" else ""))
-    rows.append("BATT " + power.text())
+    pc = st.pace
+    if pc is not None:
+        # the step, the chance of running out, the likely use at the reset, the caption up now
+        rows.append("PACE %s %d%% ~%d%%%s%s" % (PACE_NAMES[pc["s"]] if 0 <= pc["s"] < 4 else "?", pc["p"], pc["f"],
+                                                {"": "", "eased": " EASED", "room": " ROOM"}.get(pc["cap"], " CAP"),
+                                                " LEARNING" if pc["learn"] else ""))
     if c.link.err and not c.demo:
         rows.append("ERR " + c.link.err[:22])
-    y = 13
-    for r in rows[:9]:
+    rows.append("BATT " + power.text())
+    y = 12
+    for r in rows[:10]:
         gfx.text(gfx.fit(r, 154, font.sins), 4, y, FG, font.sins)
-        y += 10
+        y += 9
 
 
 def battery_left():

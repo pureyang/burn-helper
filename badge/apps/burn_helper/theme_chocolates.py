@@ -22,6 +22,9 @@
 # grey and the caption says how long and why; after a minute he sits on the bench under the bus-stop
 # sign: THE BUS IS LATE, how long, why, and the caption taking turns between the usage as of the
 # last data and what to try. When it comes back: HERE COMES THE BUS!
+#
+# The weekly pace (S.pace_*): a post on the weekly road where an even pace would be, and now and
+# then, while agents work, the caption says the box is empty early at this pace.
 
 import math
 import figure as F
@@ -74,6 +77,11 @@ CAPTIONS = {"edit": "EDITING: PING! PONG! PING!", "read": "READING: WHAT'S IN TH
             "fail": "OW! A TOOL CALL FAILED", "done": "END OF THE ROAD: TURN DONE",
             "prompt": "NEW ORDERS FROM YOU", "arrive": "A NEW SESSION SITS DOWN",
             "refill": "A NEW BOX! USAGE RESET"}
+# the weekly pace's captions (S.pace_caption), two lines in turn: the week is the box
+PACE = {"watch": ("AT THIS PACE THE BOX", "IS EMPTY BY ~%(at)s"),
+        "warn": ("BOX EMPTY ~%(at)s", "%(early)s BEFORE A NEW BOX"),
+        "eased": ("PACE EASED: THE BOX LASTS", "THE BOX LASTS THE WEEK"),
+        "room": ("%(left)d%% OF THE BOX LEFT", "A NEW BOX IN %(cd)s")}
 STILL = ("done", "arrive", "prompt")       # he stops, and so does the road
 
 
@@ -199,6 +207,7 @@ class Theme(S.Theme):
         self.last_hearts = None
         self.wk = None             # the weekly reset's stage this frame (S.week_stage), or None
         self.lost = None           # the connection-lost stage this frame (S.lost_stage), or None
+        self.pace_kind = None      # the weekly pace's caption is showing: its kind (S.pace_caption)
         self.digit_key = [None, None]    # what the two scratch images hold now: shadow, face
 
     def build(self):
@@ -560,6 +569,7 @@ class Theme(S.Theme):
             for x in range(71, 69 + fw - 4, 10):
                 gfx.box(x, 15, 5, 2, (170, 170, 174) if stale else (255, 224, 90))
             gfx.box(69 + fw - 2, 12, 3, 8, (130, 130, 134) if stale else RED)
+            S.pace_tick(st, 69, 13, 88, 6, INK, edge=INK)      # where an even pace would be on the road
         if not st.online and S.blink(t, 600):
             gfx.text("?", 62, -2, RED, font.sins)
         if self.wk is not None:
@@ -579,6 +589,8 @@ class Theme(S.Theme):
             return
         msg = self.caption(st, t)
         bar, ink = (30, 24, 20), CREAM
+        if self.pace_kind:
+            ink = S.pace_ink(self.pace_kind, ink)
         if self.lost is not None and msg.startswith("CONNECTION LOST"):
             ink = S.LOST
         elif S.back_online(st, t):
@@ -587,10 +599,15 @@ class Theme(S.Theme):
         gfx.ctext(gfx.fit(msg, 156, font.sins), 80, 107, ink, font.sins)
 
     def caption(self, st, t):
+        self.pace_kind = None
         if not st.online:
             return S.lost_caption(st, t) if self.lost else (st.net or "WAITING AT THE BUS STOP...")
         if self.playing(st, t) is not None:
             return CAPTIONS[self.action]
+        pc = S.pace_caption(st, t, PACE)
+        if pc:
+            msg, self.pace_kind = pc
+            return msg
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
             return "I'M PRETTY TIRED... %d CHOCOLATE%s LEFT" % ((st.hearts + 1) // 2, "" if (st.hearts + 1) // 2 == 1 else "S")
         tc = S.tier_caption(st, t, "RUNNING INTO HYPERSPACE!")

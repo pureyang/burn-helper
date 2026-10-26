@@ -96,6 +96,7 @@ class Status:
         self.trouble = ""       # what is wrong while it is lost: wifi, relay or bridge (net.Net.trouble)
         self.was_lost = False   # the connection-lost page was up: say so when the data comes back
         self.back_ms = None     # ticks_ms when it came back
+        self.pace = None        # the weekly pace from the bridge (see pace_of), or None
         self.ev_seen = None     # the bridge's number for the newest activity already handled
         self.used5 = None       # percent used, as reported
         self.used7 = None
@@ -130,6 +131,7 @@ class Status:
         self.usage_age = u.get("age")
         self.used7 = wk.get("used")
         self.reset7 = None if wk.get("stale") else wk.get("resets_at")
+        self.pace = pace_of(d.get("pace"))
         self.busy = int(d.get("busy") or 0)
         self.waiting = int(d.get("waiting") or 0)
         wl = []
@@ -496,6 +498,105 @@ def last_usage(st):
     nums = "5H %s WK %s" % ("--" if p5 is None else ("~%d%%" if st.est5 else "%d%%") % p5,
                             "--" if p7 is None else "%d%%" % p7)
     return (as_of(st) + ": " + nums) if st.seen_clock else "LAST: " + nums
+
+
+# The weekly pace (the bridge's "pace", bridge/pace.py): is the week on course to reach its limit
+# before it resets? The bridge decides; the badge only draws:
+#   the tick   one pixel on every weekly meter where an even pace would leave it now: a bar longer
+#              than the tick is under pace. White when calm, yellow on watch, orange on heads-up.
+#   Desktop    the line under WEEK takes turns between the reset and what the pace says.
+#   caption    the theme's own words, two lines in turn, for the 30 s the bridge says one is up:
+#              watch and heads-up now and then while agents work, "pace eased" once when it
+#              drops back, and (opt-in) room left in the week's last 12 hours.
+# Forecasts always say AT THIS PACE and carry a ~; colour is never the only sign.
+PACE_CALM, PACE_WATCH, PACE_WARN, PACE_OUT = 0, 1, 2, 3
+PACE_INK = ((230, 230, 230), (239, 226, 122), (245, 160, 90), (245, 160, 90))  # Okabe-Ito, light for the dark screen
+PACE_LINE_MS = 3000           # two-line captions and the Desktop line take turns this often
+
+
+def pace_of(d):
+    """The bridge's pace object, checked, or None (an older bridge sends none)."""
+    if not isinstance(d, dict):
+        return None
+    try:
+        out = {"s": int(d.get("s") or 0), "p": int(d.get("p") or 0), "f": int(d.get("f") or 0),
+               "at": str(d.get("at") or "")[:10], "even": max(0, min(100, int(d.get("even") or 0))),
+               "left": int(d.get("left") or 0), "learn": 1 if d.get("learn") else 0,
+               "cap": str(d.get("cap") or "")[:8], "room": 1 if d.get("room") else 0,
+               "eased": 1 if d.get("eased") else 0}
+        out["early"] = None if d.get("early") is None else int(d["early"])
+        out["win"] = None if d.get("win") is None else float(d["win"])
+    except (TypeError, ValueError):
+        return None
+    return out
+
+
+def early_text(secs):
+    """How long before the reset a run-out would come: "19H", "40M", "3D"."""
+    if secs is None:
+        return ""
+    if secs >= 48 * 3600:
+        return "%dD" % (secs // 86400)
+    if secs >= 3600:
+        return "%dH" % (secs // 3600)
+    return "%dM" % max(1, secs // 60)
+
+
+def pace_tick(st, x, y, w, h, calm=(255, 255, 255), edge=None):
+    """The pace tick on a weekly meter at (x, y, w, h), with a 1-pixel edge either side on a light
+    background. Not drawn while the data is lost, or once the limit is reached."""
+    pc = st.pace
+    if pc is None or st.week is None or not st.online or pc["s"] == PACE_OUT:
+        return
+    tx = min(x + w - 1, x + (w * (100 - pc["even"]) + 50) // 100)
+    if edge is not None:
+        gfx.box(tx - 1, y - 2, 3, h + 4, edge)
+    gfx.box(tx, y - 2, 1, h + 4, calm if pc["s"] == PACE_CALM else PACE_INK[pc["s"]])
+
+
+def pace_caption(st, t, words):
+    """(caption, kind) while the bridge has a pace caption up, in the theme's words, else None.
+    words maps "watch", "warn", "eased" and "room" to one or two lines, each with any of %(at)s
+    (SUN 4PM), %(early)s (19H), %(left)d (percent left) and %(cd)s (the weekly countdown)."""
+    pc = st.pace
+    if pc is None or not pc["cap"] or not st.online:
+        return None
+    lines = words.get(pc["cap"])
+    if not lines:
+        return None
+    line = lines[(t // PACE_LINE_MS) % len(lines)]
+    return line % {"at": pc["at"] or "SOON", "early": early_text(pc["early"]), "left": pct7(st) or 0,
+                   "cd": gfx.countdown(st.left7)}, pc["cap"]
+
+
+def pace_ink(kind, normal):
+    """The caption's ink for a pace caption: yellow on watch, orange on heads-up, blue for good news."""
+    return {"watch": PACE_INK[1], "warn": PACE_INK[2], "eased": BACK, "room": BACK}.get(kind, normal)
+
+
+def pace_lines(st):
+    """Desktop mode's pace lines under WEEK, each (text, ink), shown in turn with the reset."""
+    pc = st.pace
+    if pc is None:
+        return []
+    s = pc["s"]
+    if s == PACE_OUT:
+        return [("WEEKLY LIMIT REACHED", PACE_INK[3])]
+    win = pc["win"] if pc["win"] is not None and pc["win"] < 10 else None
+    out = "AT THIS PACE OUT ~" + pc["at"] if pc["at"] else "AT THIS PACE IT RUNS OUT"
+    if s == PACE_WARN:
+        early = early_text(pc["early"])
+        return [(out, PACE_INK[2])] + ([(early + " BEFORE THE WEEK RESETS", PACE_INK[2])] if early else [])
+    if s == PACE_WATCH:
+        return [(out, PACE_INK[1])]
+    if pc["room"]:
+        return [("ROOM FOR ~%.1f 5H WINDOWS" % win if win is not None else "ROOM LEFT THIS WEEK: %d%%" % pc["left"], BACK)]
+    lines = [("PACE EASED", BACK)] if pc["eased"] else []
+    # calm; a run-out it names here is likely but too far off to say more
+    lines.append((out if pc["at"] else "PACE: ~%d%% LEFT AT RESET" % max(0, 100 - pc["f"]), PACE_INK[0]))
+    if win is not None:
+        lines.append(("~%.1f FULL 5H WINDOWS LEFT" % win, PACE_INK[0]))
+    return lines
 
 
 # The waiting bar: while sessions wait for you, the caption line names them, one at a time.

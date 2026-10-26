@@ -84,6 +84,7 @@ wait_sel = None # Desktop mode: which waiting session is shown in detail (None: 
 wait_since = None        # ticks_ms when a session started waiting
 screen_off_at = None     # ticks_ms when the backlight goes off after the 0% note
 lost_test = None         # the @LOST test over USB: ticks_ms the data is taken to have stopped at
+pace_test = None         # the @PACE test over USB: a weekly pace shown instead of the bridge's
 demo = 0            # 0 off, 1 demo with a DEMO tag, 2 the hidden 20-second video take
 demo_t0 = 0         # ticks_ms when the demo started
 DEMO_HOLD_MS = 2000      # hold UP alone
@@ -312,6 +313,7 @@ def demo_status(t):
     st.net = ""
     st.week = 0.6
     st.used7 = 40
+    st.pace = None                           # made-up usage: no real week's pace with it
     if demo == 1:
         st.left7, st.wk_rate = demo_week(time.ticks_diff(t, demo_t0) % DEMO_USAGE_MS)
     else:
@@ -704,6 +706,8 @@ def update():
     if lost_test is not None:
         st.online = False                     # the @LOST test: as if the data had stopped then
         st.seen_ms = lost_test
+    if pace_test is not None:
+        st.pace = pace_test                   # the @PACE test: this pace, whatever the bridge says
     if demo:
         demo_status(t)
     else:
@@ -739,6 +743,9 @@ def update():
         tether.key_req = None
         if key is not None:
             short_press(key)
+    if tether.pace_req is not None:
+        globals()["pace_test"] = None if tether.pace_req == "off" else S.pace_of(tether.pace_req)
+        tether.pace_req = None
     if tether.lost_req is not None:
         globals()["lost_test"] = None if tether.lost_req < 0 else time.ticks_add(t, -tether.lost_req * 1000)
         tether.lost_req = None

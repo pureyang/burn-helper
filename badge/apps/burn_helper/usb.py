@@ -25,6 +25,7 @@ class UsbLink:
         self.relay_req = None    # 1 = use the internet relay even at home (testing), 0 = back to normal
         self.key_req = None      # "A", "B", "C", "UP" or "DOWN": act as a short press (testing)
         self.lost_req = None     # seconds: act as if the data stopped that long ago; -1 back to normal (testing)
+        self.pace_req = None     # a weekly pace object to show instead of the bridge's, or "off" (testing)
         self.demo_req = None
         self.test_req = None     # "@STATE <name>": show a state for testing (est, nobridge, off), "normal" ends it
         try:
@@ -87,6 +88,18 @@ class UsbLink:
                 self.lost_req = int(line[6:].strip())
             except ValueError:
                 pass
+            return
+        if line.startswith("@PACE "):
+            arg = line[6:].strip()
+            if arg == "off":
+                self.pace_req = "off"
+            else:
+                try:
+                    d = json.loads(arg)
+                except ValueError:
+                    return
+                if isinstance(d, dict):
+                    self.pace_req = d
             return
         if line.startswith("@PAGE "):
             try:

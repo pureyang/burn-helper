@@ -46,6 +46,7 @@ class Theme(S.Theme):
 | `st.left5`, `st.left7` | microseconds until each limit resets (`gfx.countdown()` formats it) |
 | `st.online` | fresh data from the bridge. When false, show `st.net` and a "no signal" look |
 | `S.lost_stage(st, t)` | `None`, `"blip"` (data stopped under a minute ago: grey the meters, caption `S.lost_caption`) or `"lost"` (draw a connection-lost page with `S.lost_for`, `S.lost_reason`, `S.lost_advice`, `S.last_usage`); `S.back_online(st, t)` for the moment it returns. See [connection lost](how-it-works.md#when-the-connection-is-lost) |
+| `st.pace` | the weekly pace from the bridge, or `None`: call `S.pace_tick(st, x, y, w, h)` after drawing the weekly meter, and return `S.pace_caption(st, t, PACE)` from the caption (after activity captions) with the theme's own `PACE` words; `S.pace_ink(kind, ink)` colours it. See [weekly pace](how-it-works.md#the-weekly-pace) |
 | `st.demo` | demo mode is running |
 
 ### What a theme should show

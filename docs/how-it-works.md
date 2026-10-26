@@ -102,6 +102,51 @@ A waiting session or an activity animation takes priority over the two full-scre
 the countdown is only shown while the badge knows when the week resets. Demo 1 plays the whole
 ladder sped up inside its 90-second window.
 
+## The weekly pace
+
+The weekly meter says how much is left. The pace says whether that is enough for the rest of the
+week. The bridge works it out ([bridge/pace.py](../bridge/pace.py)); the badge and the status
+line only show it:
+
+| Step | When | What you see |
+|---|---|---|
+| ✓ calm | most of the time | A tick on every weekly meter where an even pace would leave it now: a bar longer than the tick is under pace. Desktop mode's WEEK line takes turns between the reset, what is likely left at the reset (`PACE: ~33% LEFT AT RESET`) and what that is in work (`~1.5 FULL 5H WINDOWS LEFT`). The status line shows `7d 60% ✓`. |
+| ≈ watch | a run-out is 60% likely and due within 3 days | The tick turns yellow, Desktop mode says `AT THIS PACE OUT ~SUN 4PM`, and the status line `7d 64% ≈ at this pace out ~Sun 4pm`. While agents work, the theme's caption says it in its own words for 30 seconds, at most every 4 hours. |
+| ! heads-up | a run-out is 85% likely and due within 36 hours, or 90% of the week is used | The same in orange, with how early: `19H BEFORE THE WEEK RESETS`. The caption comes at most every 2 hours. |
+| ✗ out | the weekly limit is reached | Desktop mode says `WEEKLY LIMIT REACHED`, and the status line `7d 100% ✗`. |
+
+Nothing is said in the week's first 24 hours. A louder step comes at once; a quieter one only
+after the forecast has stayed lower for 2 hours, and then one caption says the pace has eased
+(`PACE EASED: MAGIC LASTS`). There are no lights, sounds or full-screen pages for the pace, and a
+waiting session's bar always comes first. The captions, per theme:
+
+| | Zelda | Running Man | Forrest |
+|---|---|---|---|
+| watch | `AT THIS PACE, THE MAGIC` / `RUNS OUT ~SUN 4PM` | `AT THIS PACE THE SEASON` / `ENDS EARLY: ~SUN 4PM` | `AT THIS PACE THE BOX` / `IS EMPTY BY ~SUN 4PM` |
+| heads-up | `MAGIC RUNS OUT ~SUN 6PM` / `19H BEFORE THE WEEK RESETS` | `SEASON OVER ~SUN 6PM` / `19H BEFORE THE NEW SEASON` | `BOX EMPTY ~SUN 6PM` / `19H BEFORE A NEW BOX` |
+| eased | `PACE EASED: MAGIC LASTS` | `PACE EASED: FULL SEASON` | `PACE EASED: THE BOX LASTS` |
+| room left | `35% OF THE MAGIC LEFT` | `35% OF THE SEASON LEFT` | `35% OF THE BOX LEFT` |
+
+**Room left (opt-in).** In the last 12 hours of a week with 20% or more left, one caption says how
+much is left and when the week resets, and Desktop mode (`ROOM FOR ~1.3 5H WINDOWS`) and the status
+line (`7d 65% ✓ ~1.3 full 5h windows left`) show it for those hours. It reports what is left and
+never urges you to use it. Off unless you turn it on, on the bridge computer:
+`python3 bridge/install.py --room-left on` (or `off`).
+
+**How it forecasts.** The bridge keeps the weekly percent from each status line report, which hours
+of the week agents usually work, and how much of the week one full 5-hour window costs (both
+meters' rises between the same reports; about 27% on the bridge where this was built). It reads
+this week's use so far against the usual shape of a week, and puts odds on it from how wrong that
+reading was on past weeks. With under two weeks recorded it is still learning: the shape comes
+from the hours agents work, and the odds are wider. Forecasts always say "at this pace" and carry
+a `~`. The thresholds come from a study of thousands of simulated weeks of different kinds of
+users; `python3 tools/sim/test_pace.py` replays it against the bridge's code (about 80% of
+run-outs flagged 12 hours or more ahead, under 3% missed, under 2% false alarms).
+
+To see every screen, run `python3 tools/sim/preview_pace.py`, or send a pace over USB, for
+example `@PACE {"s":1,"cap":"watch","at":"SUN 4PM","even":71}` (`@PACE off` goes back to the
+bridge's).
+
 ## When the connection is lost
 
 Until the first data arrives after the badge starts, the caption shows what the network is doing

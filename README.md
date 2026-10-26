@@ -153,7 +153,9 @@ Every level adds speed and speed lines, so all 15 look different. The character 
 what the agents do: a sword combo when one edits a file, a bomb when it runs a command, item get
 when it finishes its turn ([all of them](docs/how-it-works.md#what-the-agents-are-doing)). When a
 session is waiting for your input the character calls for you, and the optional case LEDs flash. Ten icons show the 5-hour usage limit left, a bar shows the weekly limit, and a
-countdown runs to the next reset. If the bridge stops answering, the character stands by with the meters
+countdown runs to the next reset. A tick on the weekly bar marks where an even pace would be, and if
+the week is on course to run out before it resets, the badge and the status line say when, quietly
+([weekly pace](docs/how-it-works.md#the-weekly-pace)). If the bridge stops answering, the character stands by with the meters
 greyed, and after a minute a themed page says how long it has been, why and what to try
 ([connection lost](docs/how-it-works.md#when-the-connection-is-lost)). See [how it works](docs/how-it-works.md) for the meters and
 every theme and level, and [all 15 levels](docs/img/tiers_hero.png) side by side.

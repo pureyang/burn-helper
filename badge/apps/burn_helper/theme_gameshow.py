@@ -23,6 +23,9 @@
 # the collar goes grey and the caption says how long and why; after a minute, the colour bars and
 # PLEASE STAND BY, with a lower third saying how long and why, and the caption taking turns between
 # the usage as of the last data and what to try. When it comes back: WE'RE BACK!
+#
+# The weekly pace (S.pace_*): a tick on the collar's weekly strip where an even pace would leave it,
+# and now and then, while agents work, the caption says the season ends early at this pace.
 
 import math
 import figure as F
@@ -133,6 +136,11 @@ CAPTIONS = {
     "arrive": ("PLEASE WELCOME...", "A NEW CONTESTANT!"),
     "refill": ("WE'LL BE RIGHT BACK", "COLLAR RECHARGED!"),
 }
+# the weekly pace's captions (S.pace_caption), two lines in turn: the week is the season
+PACE = {"watch": ("AT THIS PACE THE SEASON", "ENDS EARLY: ~%(at)s"),
+        "warn": ("SEASON OVER ~%(at)s", "%(early)s BEFORE THE NEW SEASON"),
+        "eased": ("PACE EASED: FULL SEASON", "NO EARLY FINALE NOW"),
+        "room": ("%(left)d%% OF THE SEASON LEFT", "NEW SEASON IN %(cd)s")}
 
 
 # the test card for the connection-lost page: the seven bars, and the short reversed row under them
@@ -173,6 +181,7 @@ class Theme(S.Theme):
         self.last_hearts = None
         self.ws = None          # the weekly reset's stage this frame (S.week_stage)
         self.lost = None        # the connection-lost stage this frame (S.lost_stage)
+        self.pace_kind = None   # the weekly pace's caption is showing: its kind (S.pace_caption)
 
     def build(self):
         rp = gfx.palette(RUNNER)
@@ -516,8 +525,9 @@ class Theme(S.Theme):
             gfx.box(cx - 2, y + 2, 5, 5, c)
             if units is not None and units - i * 2 >= 1 and not flash:
                 gfx.box(cx - 1, y + 3, 1, 1, (255, 255, 255))
-        # weekly budget: a thin charge strip under the collar
+        # weekly budget: a thin charge strip under the collar, with the pace tick
         gfx.meter(x + 4, y + 10, 76, 1, st.week, (150, 150, 160) if stale else CYAN, (30, 30, 60))
+        S.pace_tick(st, x + 4, y + 10, 76, 1)
 
     def rtext(self, s, c):
         x = 158 - gfx.width(s, font.sins)
@@ -530,6 +540,8 @@ class Theme(S.Theme):
             return
         msg = self.caption(st, t)
         bar = YELLOW
+        if self.pace_kind:
+            bar = {"warn": S.PACE_INK[2], "eased": S.BACK, "room": S.BACK}.get(self.pace_kind, bar)
         if self.lost is not None and msg.startswith("CONNECTION LOST"):
             bar = S.LOST
         elif S.back_online(st, t):
@@ -539,6 +551,7 @@ class Theme(S.Theme):
         gfx.ctext(gfx.fit(msg, 150, font.sins), 82, 107, BLACK, font.sins)
 
     def caption(self, st, t):
+        self.pace_kind = None
         if not st.online:
             return S.lost_caption(st, t) if self.lost else (st.net or "PLEASE STAND BY...")
         p = self.acting(t)
@@ -555,6 +568,10 @@ class Theme(S.Theme):
         if p is not None:
             a, b = CAPTIONS[self.action]
             return a if p < 0.45 else b
+        pc = S.pace_caption(st, t, PACE)
+        if pc:
+            msg, self.pace_kind = pc
+            return msg
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
             return "COLLAR LOW! RECHARGE " + gfx.countdown(st.left5)
         tc = S.tier_caption(st, t, "ULTRA RATINGS: HYPERSPACE!")
