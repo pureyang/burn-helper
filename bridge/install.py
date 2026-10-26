@@ -453,6 +453,10 @@ def main():
                     help="keep a local history of session wait times and daily usage (SQLite, on the "
                          "bridge computer only). Part of the bridge install, which is safe to run again to "
                          "change it")
+    ap.add_argument("--room-left", choices=("on", "off"),
+                    help="the weekly pace's end-of-week note: in the last 12 hours of a week with 20%% or "
+                         "more left, say so once on the badge and in Desktop mode and the status line "
+                         "(off unless you turn it on; set on the bridge computer)")
     ap.add_argument("--find-bridge", action="store_true",
                     help="print the join address of a bridge already on this network, if there is one")
     args = ap.parse_args()
@@ -520,6 +524,17 @@ def main():
                                  os.path.join(HERE, "stats.py")))
             else:
                 notes.append("History off (what was recorded stays in %s)." % os.path.join(STATE_DIR, "tracking.db"))
+    if args.room_left and not args.uninstall:
+        if args.bridge:
+            notes.append("The room-left note is the bridge's to say: run --room-left on the bridge computer.")
+        elif args.dry_run:
+            print("Would turn the room-left note %s." % args.room_left)
+        else:
+            import pace
+            pace.set_room(STATE_DIR, args.room_left == "on")
+            notes.append("Room-left note %s: %s" % (args.room_left, "in the last 12 hours of a week with 20% or more "
+                         "left, the badge says so once and Desktop mode and the status line show it."
+                         if args.room_left == "on" else "the week's end says nothing about what is left."))
     if args.dry_run:
         print(diff(old_text, new) or "settings.json: already up to date")
         if not args.no_launchd:

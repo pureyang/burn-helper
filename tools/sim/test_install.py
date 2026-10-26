@@ -198,3 +198,16 @@ r = subprocess.run([sys.executable, os.path.join(BRIDGE, "install.py"), "--bridg
                    env=env, capture_output=True, text=True)
 assert not _tracking.is_enabled(_tr_state) and "kept by the bridge" in r.stdout, r.stdout
 print("PASS install --tracking: on and off write the switch, a dry run changes nothing, joining leaves it alone")
+
+# the weekly pace's opt-in room-left note: --room-left on / off, the same way
+import pace as _pace  # noqa: E402
+_, out = run("--room-left", "on", "--dry-run")
+assert not _pace.room_enabled(_tr_state) and "Would turn the room-left note on" in out, out
+for flag, want in (("on", True), ("off", False)):
+    r = subprocess.run([sys.executable, os.path.join(BRIDGE, "install.py"), "--room-left", flag],
+                       env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and _pace.room_enabled(_tr_state) == want, (flag, r.stdout, r.stderr)
+r = subprocess.run([sys.executable, os.path.join(BRIDGE, "install.py"), "--bridge", "my-mac", "--room-left", "on"],
+                   env=env, capture_output=True, text=True)
+assert not _pace.room_enabled(_tr_state) and "the bridge's to say" in r.stdout, r.stdout
+print("PASS install --room-left: opt-in, on the bridge computer only")

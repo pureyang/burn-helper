@@ -141,7 +141,9 @@ bridge sees it (a scan every couple of seconds), not to the second.
 Always on. The bridge keeps `pace.json` in its state folder: the weekly percent at each report for
 the last 10 weeks, how many minutes agents worked in each hour of the week, and the 5-hour and
 weekly rises it has seen together. It stays on the bridge computer; `/status` carries only the
-verdict.
+verdict. The end-of-week room-left note is opt-in: `--room-left on` or `--room-left off` on the
+bridge install (it writes `pace_room.enabled` in the state folder, which the bridge checks as it
+goes, with no restart).
 
 ## Privacy
 
