@@ -17,6 +17,11 @@
 # countdown now and then (six), the caption carries it and the weekly road throbs (hour), a bus
 # pulls up at the bench every minute (ten), Jenny runs across the field with the count over her
 # (minute), huge flashing digits (ten_s), and a new box with the chocolates refilled (zero).
+#
+# When the connection is lost (S.lost_stage) he stands by the bench, the chocolates and the road go
+# grey and the caption says how long and why; after a minute he sits on the bench under the bus-stop
+# sign: THE BUS IS LATE, how long, why, and the caption taking turns between the usage as of the
+# last data and what to try. When it comes back: HERE COMES THE BUS!
 
 import math
 import figure as F
@@ -146,6 +151,9 @@ CHOC_HALF = ("...ddd....", ".dMMMMd...", "dMHHMMMd..", "dMMMMMMFF.", "CdMMMMMMdC
 CHOC_GONE = ("..........", "..........", "..........", ".c......c.", "CccccccccC", "CCccccccCC", ".CCCCCCCC.")
 CHOC_KEYS = {"d": (52, 26, 12), "M": (124, 68, 34), "H": (214, 156, 104), "C": (200, 154, 64),
              "c": (110, 82, 38), "F": (246, 176, 188)}
+# the same box in grey, while the connection is lost (the last known count)
+CHOC_GREY = {"d": (70, 70, 72), "M": (140, 140, 144), "H": (200, 200, 204), "C": (170, 170, 174),
+             "c": (110, 110, 114), "F": (200, 200, 204)}
 SHOE = ("...WW..", "..WWWW.", "WWRRWWW", "WWWWRRW", "KKKKKKK")
 
 # ---------------------------------------------------------------- the weekly reset
@@ -190,6 +198,7 @@ class Theme(S.Theme):
         self.refill_from = 0
         self.last_hearts = None
         self.wk = None             # the weekly reset's stage this frame (S.week_stage), or None
+        self.lost = None           # the connection-lost stage this frame (S.lost_stage), or None
         self.digit_key = [None, None]    # what the two scratch images hold now: shadow, face
 
     def build(self):
@@ -226,6 +235,8 @@ class Theme(S.Theme):
 
         self.chocs = (gfx.sprite(CHOC_FULL, CHOC_KEYS), gfx.sprite(CHOC_HALF, CHOC_KEYS),
                       gfx.sprite(CHOC_GONE, CHOC_KEYS))
+        self.chocs_grey = (gfx.sprite(CHOC_FULL, CHOC_GREY), gfx.sprite(CHOC_HALF, CHOC_GREY),
+                           gfx.sprite(CHOC_GONE, CHOC_GREY))
         self.shoe = gfx.sprite(SHOE, {"W": (250, 250, 250), "R": RED, "K": (90, 80, 76)})
         self.clock = gfx.clock_icon(INK, CREAM)
         self.feather = gfx.sprite(("....GWW", "..GWWW.", ".WWWG..", "WWG....", "G......"),
@@ -373,6 +384,10 @@ class Theme(S.Theme):
     # ------------------------------------------------------------ render
     def render(self, st, t):
         self.wk = S.week_stage(st)
+        self.lost = S.lost_stage(st, t)
+        if self.lost == "lost":
+            self.lost_page(st, t)
+            return
         if self.wk is None:
             self.render_road(st, t)
             return
@@ -485,11 +500,11 @@ class Theme(S.Theme):
         if st.waiting:
             gfx.bubble(x + 30, foot - 54, "JENNY!", INK, WHITE, font.sins)
 
-    def draw_chocolates(self, units, x, y, blink):
-        # the box: gold trim, dark tray, 2 rows of 5
-        gfx.box(x, y, 65, 19, (214, 172, 76))
-        gfx.box(x + 1, y + 1, 63, 17, (66, 36, 22))
-        full, half, gone = self.chocs
+    def draw_chocolates(self, units, x, y, blink, grey=False):
+        # the box: gold trim, dark tray, 2 rows of 5 (all grey while the connection is lost)
+        gfx.box(x, y, 65, 19, (170, 170, 174) if grey else (214, 172, 76))
+        gfx.box(x + 1, y + 1, 63, 17, (70, 70, 72) if grey else (66, 36, 22))
+        full, half, gone = self.chocs_grey if grey else self.chocs
         for i in range(10):
             if units is None:
                 img = gone
@@ -527,8 +542,9 @@ class Theme(S.Theme):
     def hud(self, st, t):
         gfx.box(0, 0, 160, 22, CREAM)
         gfx.box(0, 21, 160, 1, (200, 180, 150))
-        low = st.hearts is not None and st.hearts <= 4
-        self.draw_chocolates(st.hearts, 1, 1, low and S.blink(t, 300))
+        stale = self.lost is not None          # the connection is lost: the last known numbers, in grey
+        low = st.hearts is not None and st.hearts <= 4 and not stale
+        self.draw_chocolates(st.hearts, 1, 1, low and S.blink(t, 300), stale)
         # time until the box refills (the 5-hour window resets)
         screen.blit(self.clock, vec2(69, 2))
         gfx.text(S.cd5(st), 76, -2, gfx.countdown_color(st.left5, INK, (190, 120, 20), RED), font.sins)
@@ -542,8 +558,8 @@ class Theme(S.Theme):
             fw = int(88 * st.week)
             gfx.box(69, 13, fw, 6, (76, 72, 72))
             for x in range(71, 69 + fw - 4, 10):
-                gfx.box(x, 15, 5, 2, (255, 224, 90))
-            gfx.box(69 + fw - 2, 12, 3, 8, RED)
+                gfx.box(x, 15, 5, 2, (170, 170, 174) if stale else (255, 224, 90))
+            gfx.box(69 + fw - 2, 12, 3, 8, (130, 130, 134) if stale else RED)
         if not st.online and S.blink(t, 600):
             gfx.text("?", 62, -2, RED, font.sins)
         if self.wk is not None:
@@ -561,13 +577,18 @@ class Theme(S.Theme):
             if bar != GOLD:                            # (a gold box on the gold bar would vanish)
                 gift(2, 109)
             return
-        gfx.box(0, 108, 160, 12, (30, 24, 20))
         msg = self.caption(st, t)
-        gfx.ctext(gfx.fit(msg, 156, font.sins), 80, 107, CREAM, font.sins)
+        bar, ink = (30, 24, 20), CREAM
+        if self.lost is not None and msg.startswith("CONNECTION LOST"):
+            ink = S.LOST
+        elif S.back_online(st, t):
+            msg, bar, ink = "HERE COMES THE BUS!", S.BACK, INK
+        gfx.box(0, 108, 160, 12, bar)
+        gfx.ctext(gfx.fit(msg, 156, font.sins), 80, 107, ink, font.sins)
 
     def caption(self, st, t):
         if not st.online:
-            return st.net or "WAITING AT THE BUS STOP..."
+            return S.lost_caption(st, t) if self.lost else (st.net or "WAITING AT THE BUS STOP...")
         if self.playing(st, t) is not None:
             return CAPTIONS[self.action]
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
@@ -861,6 +882,29 @@ class Theme(S.Theme):
         # zero: the line, in two halves, as he says it on the bench
         gone = -st.left7 // 1000 if st.left7 is not None else 0
         return ("LIFE IS LIKE A BOX OF" if (gone // 1500) % 2 == 0 else "CHOCOLATES..."), GOLD, INK
+
+    # ------------------------------------------------------------ the connection lost
+    def lost_page(self, st, t):
+        """A minute without data: he sits on the bench with his box, under the bus-stop sign: THE BUS
+        IS LATE, how long and why. The caption takes turns between the usage as of the last data and
+        what to try."""
+        self.draw_park(st, t)
+        gfx.blit(self.sit_blink if (t % 4000) < 160 else self.sit, 16, 44, 2)    # at the bench's left end
+        # the sign on its post, over the trees on the right
+        x0, y0, w, h = 68, 24, 89, 50
+        gfx.box(x0 + w - 8, y0 + h, 3, 92 - y0 - h, (60, 60, 64))
+        gfx.box(x0 - 1, y0 - 1, w + 2, h + 2, INK)
+        gfx.box(x0, y0, w, h, CREAM)
+        gfx.box(x0, y0, w, 12, DARK)
+        gfx.ctext("THE BUS IS LATE", x0 + w // 2, y0 - 1, CREAM, font.sins)
+        gfx.text("LOST " + S.lost_for(S.lost_ms(st, t) or 0), x0 + 4, y0 + 12, VERMILLION, font.sins)
+        why = gfx.wrap(S.lost_reason(st), w - 8, font.sins)
+        for i, ln in enumerate(why[:2]):
+            gfx.text(gfx.fit(ln, w - 8, font.sins), x0 + 4, y0 + 24 + i * 11, INK, font.sins)
+        self.draw_hud(st, t)
+        tip = (t // 3000) % 2 == 1
+        gfx.box(0, 108, 160, 12, (30, 24, 20))
+        gfx.ctext(gfx.fit(S.lost_advice(st) if tip else S.last_usage(st), 156, font.sins), 80, 107, CREAM, font.sins)
 
     def pulse_frame(self, t, w=2, a=170):
         """An orange frame round the scene that breathes."""

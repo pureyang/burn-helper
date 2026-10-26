@@ -83,6 +83,7 @@ page = 0        # the page shown in Debug mode
 wait_sel = None # Desktop mode: which waiting session is shown in detail (None: the summary)
 wait_since = None        # ticks_ms when a session started waiting
 screen_off_at = None     # ticks_ms when the backlight goes off after the 0% note
+lost_test = None         # the @LOST test over USB: ticks_ms the data is taken to have stopped at
 demo = 0            # 0 off, 1 demo with a DEMO tag, 2 the hidden 20-second video take
 demo_t0 = 0         # ticks_ms when the demo started
 DEMO_HOLD_MS = 2000      # hold UP alone
@@ -588,14 +589,16 @@ def finish_portal():
 
 def power_save(t):
     global dimmed
-    if not dimmed and BRIGHT[prefs["bright"]] > 0.12 and st.level == S.SLEEP \
+    # asleep, or the connection-lost page left up (a bridge asleep for the night, say)
+    quiet = st.level == S.SLEEP or S.lost_stage(st, t) == "lost"
+    if not dimmed and BRIGHT[prefs["bright"]] > 0.12 and quiet \
             and time.ticks_diff(t, last_input) > 10 * 60 * 1000:
         dimmed = True
         try:
             display.backlight(0.12)
         except Exception:  # noqa: BLE001
             pass
-    if dimmed and st.level != S.SLEEP:
+    if dimmed and not quiet:
         dimmed = False
         set_brightness(prefs["bright"])
 
@@ -612,10 +615,10 @@ def draw_off_note(left_ms):
     gfx.ctext("DOWN: SCREEN BACK ON", 80, 65, (150, 150, 160), font.sins)
 
 
-def pace(t):  # noqa: ARG001
+def pace(t):
     """Cap the frame rate: smooth when busy, frugal when asleep."""
     global frame_t
-    target = 90 if (st.level == S.SLEEP and not st.waiting) else 40
+    target = 90 if ((st.level == S.SLEEP and not st.waiting) or S.lost_stage(st, t) == "lost") else 40
     if view or screen_dark():
         target = 100       # static screens or a dark screen: nothing animates, 10 fps still catches a quick tap
     spent = time.ticks_diff(time.ticks_ms(), frame_t)
@@ -697,9 +700,14 @@ def update():
     apply_bridge()
     st.online = link.fresh() or tether.fresh()
     st.net = "" if tether.fresh() else link.label()
+    st.trouble = link.trouble()
+    if lost_test is not None:
+        st.online = False                     # the @LOST test: as if the data had stopped then
+        st.seen_ms = lost_test
     if demo:
         demo_status(t)
     else:
+        S.track_lost(st, t)                   # while the data is lost, nothing is shown working
         st.tick()
         if test_state:
             apply_test_state()
@@ -731,6 +739,9 @@ def update():
         tether.key_req = None
         if key is not None:
             short_press(key)
+    if tether.lost_req is not None:
+        globals()["lost_test"] = None if tether.lost_req < 0 else time.ticks_add(t, -tether.lost_req * 1000)
+        tether.lost_req = None
     if tether.relay_req is not None:
         link.force_relay = bool(tether.relay_req)
         tether.relay_req = None

@@ -47,21 +47,8 @@ def draw(view, page, c, t):
 
 
 # ------------------------------------------------------------ shared pieces
-def left5(st):
-    """Percent of the 5-hour limit left, or None when unknown."""
-    if st.used5 is not None:
-        return max(0, min(100, int(100 - st.used5 + 0.5)))
-    if st.hearts is not None:
-        return st.hearts * 5
-    return None
-
-
-def left7(st):
-    if st.used7 is not None:
-        return max(0, min(100, int(100 - st.used7 + 0.5)))
-    if st.week is not None:
-        return int(st.week * 100 + 0.5)
-    return None
+left5 = S.pct5      # percent of each limit left, or None when unknown
+left7 = S.pct7
 
 
 def pct_colour(p):
@@ -82,9 +69,12 @@ def footer(s):
     gfx.text(s, 4, 107, (120, 120, 130), font.sins)
 
 
-def data_row(c):
+def data_row(c, t):
     if c.demo:
         return "DEMO%s" % (" (NO TAG)" if c.demo == 2 else "")
+    lost = S.lost_ms(c.st, t)
+    if lost is not None:
+        return "LOST %s AGO" % duration(lost // 1000)
     if not c.st.online:
         return "OFFLINE"
     return {"usb": "USB CABLE", "net": "WI-FI", "relay": "INTERNET RELAY"}.get(c.source, "NONE")
@@ -140,7 +130,7 @@ def duration(s):
 
 
 # ------------------------------------------------------------ Desktop mode
-def desktop(c, t):  # noqa: ARG001
+def desktop(c, t):
     st = c.st
     wl = st.waiting_list
     if c.wait_sel is not None and 0 <= c.wait_sel < len(wl):
@@ -149,18 +139,27 @@ def desktop(c, t):  # noqa: ARG001
     # the battery on the right: its charge, and the time left once learnt from a real run unplugged
     header("DESKTOP MODE", power.text(short=True))
     working = "%d WORKING" % st.agents
-    # usage left
+    lost = None if c.demo else S.lost_ms(st, t)
+    # usage left; while the connection is lost, dimmed and as of the last data
     for label, p, left, y in (("5 HOURS", left5(st), st.left5, 10), ("WEEK", left7(st), st.left7, 34)):
-        colour = pct_colour(p)
+        colour = pct_colour(p) if lost is None else DIM
         est = label == "5 HOURS" and st.est5
-        big = "--" if p is None else ("~%d%% LEFT" if est else "%d%% LEFT") % p
+        big = "--" if p is None else ("~%d%%" if est else "%d%%") % p
+        if p is not None:
+            big += " " + (S.as_of(st) if lost is not None and st.seen_clock else "LEFT")
         gfx.text(label, 4, y, FG, font.sins)
         gfx.text(big, 156 - gfx.width(big, font.sins), y, colour, font.sins)
         gfx.meter(4, y + 12, 152, 3, None if p is None else p / 100.0, colour, MUTED)
         gfx.text(resets(left, est) or no_report(st), 4, y + 13, gfx.countdown_color(left, DIM), font.sins)
     gfx.box(4, 59, 152, 1, MUTED)
     # waiting for you
-    if not st.online and not c.demo:
+    if lost is not None:
+        # had data, and it stopped: say how long ago and why; nothing is claimed as waiting
+        gfx.text(gfx.fit("CONNECTION LOST %s AGO" % duration(lost // 1000), 152, font.sins), 4, 59, S.LOST, font.sins)
+        gfx.text(gfx.fit(S.lost_reason(st), 152, font.sins), 4, 70, FG, font.sins)
+        gfx.text(gfx.fit(S.lost_advice(st), 152, font.sins), 4, 81, DIM, font.sins)
+        footer("B: DEBUG   HOLD B: SETUP")
+    elif not st.online and not c.demo:
         gfx.text("NO DATA YET", 4, 59, BAD, font.sins)
         gfx.text(gfx.fit(st.net or "WAITING FOR THE BRIDGE", 152, font.sins), 4, 70, DIM, font.sins)
         footer("B: DEBUG   HOLD B: SETUP")
@@ -215,19 +214,19 @@ def debug(page, c, t):
         return
     header(PAGES[page], right)
     if page == 0:
-        _overview(c)
+        _overview(c, t)
     else:
-        _connection(c)
+        _connection(c, t)
     footer("A/C: PAGE   B: ANIMATION")
 
 
-def _overview(c):
+def _overview(c, t):
     """Everything on one page (this was Desktop mode)."""
     st = c.st
     name, ip = wifi_name_ip(c)
     brg, age = bridge_text(c)
     rows = [
-        "DATA " + data_row(c),
+        "DATA " + data_row(c, t),
         "WIFI %s  %s" % (name[:10], ip),
         "BRDG %s %s" % (brg, age.replace(" AGO", "").lower()),
         "BUSY %d  WAIT %d  IDLE %d" % (st.busy, st.waiting, st.idle),
@@ -258,7 +257,7 @@ def battery_left():
     return "%s (%s)" % (power.left_text(left[0]), "LEARNT" if left[1] else "LEARNING")
 
 
-def _connection(c):
+def _connection(c, t):
     name, ip = wifi_name_ip(c)
     brg, age = bridge_text(c)
     signal = ""
@@ -267,7 +266,7 @@ def _connection(c):
         signal = "%d DBM" % info[0] if info else ""
     elif c.demo:
         signal = "-54 DBM"
-    rows = [("DATA", data_row(c)),
+    rows = [("DATA", data_row(c, t)),
             ("WI-FI", name),
             ("IP", ip or "-"),
             ("SIGNAL", signal or "-"),

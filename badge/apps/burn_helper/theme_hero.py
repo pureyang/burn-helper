@@ -19,6 +19,11 @@
 # (under 1 h), Navi's warning (under 10 min, at every whole minute), the Triforce building under a
 # ticking count (the last minute), huge flashing digits (the last 10 s) and an item-get under a glowing
 # Triforce (the reset itself). Full-screen stages give way to a waiting session or an activity.
+#
+# When the connection is lost (scene.lost_stage), the hero stands guard, the hearts and the magic
+# meter go grey and the agent and waiting counts read x?; after a minute, the field goes dark and
+# a dialog box says LOST CONTACT, how long, why and what to try, with the usage as of the last data
+# below. When it comes back: THE BRIDGE ANSWERS!
 
 import math
 import figure as F
@@ -161,6 +166,7 @@ class Theme(S.Theme):
         self.refill_from = 0
         self.last_hearts = None
         self.wk = None            # the weekly reset's stage this frame (scene.week_stage)
+        self.lost = None          # the connection-lost stage this frame (scene.lost_stage)
         self.week_from = 0.35     # the magic meter's level before the reset, to sweep it up from
 
     def build(self):
@@ -177,7 +183,8 @@ class Theme(S.Theme):
         self.spin = img(F.Pose(lf=(30, 10), lb=(-30, 10), af=(95, 0), ab=(-40, 40), prop="sword fwd"))
 
         self.hearts = gfx.heart_set(RED, DARK_RED, BLACK)
-        self.hearts_grey = gfx.heart_set((120, 120, 120), (60, 60, 60), BLACK)[2]
+        self.hearts_stale = gfx.heart_set((120, 120, 120), (60, 60, 60), BLACK)   # the connection is lost
+        self.hearts_grey = self.hearts_stale[2]
         self.rupee = gfx.sprite(RUPEE, {"G": (40, 200, 72), "g": (140, 240, 140), "W": WHITE})
         self.boomerang = gfx.sprite(BOOMERANG, {"O": (170, 110, 40), "L": (235, 180, 90)})
         self.ocarina = gfx.sprite(OCARINA, {"B": (60, 100, 220), "L": (160, 195, 255), "H": (20, 30, 90)})
@@ -316,6 +323,10 @@ class Theme(S.Theme):
     # ------------------------------------------------------------ render
     def render(self, st, t):
         self.wk = S.week_stage(st)
+        self.lost = S.lost_stage(st, t)
+        if self.lost == "lost":
+            self.lost_page(st, t)
+            return
         night = st.level == S.SLEEP
         gfx.box(0, 22, 160, 68, SKY)
         self.far.draw(self.scroll)
@@ -452,15 +463,16 @@ class Theme(S.Theme):
                 screen.rectangle(77, 19, 79, 2)
 
     def hud(self, st, t):
+        stale = self.lost is not None         # the connection is lost: the counts are unknown, the meters grey
         gfx.box(0, 0, 160, 22, BLACK)
         screen.blit(self.rupee, vec2(3, 2))
         gfx.text("x%d" % min(st.tools, 9999), 10, -1, WHITE, font.sins)
         screen.blit(self.boomerang, vec2(3, 12))
-        busy = "x%d" % st.agents
+        busy = "x?" if stale else "x%d" % st.agents
         gfx.text(busy, 12, 9, WHITE, font.sins)
         ox = max(30, 12 + gfx.width(busy, font.sins) + 3)    # make room for 3-digit counts
         screen.blit(self.ocarina, vec2(ox, 12))
-        gfx.text("x%d" % st.waiting, ox + 10, 9, WHITE, font.sins)
+        gfx.text("x?" if stale else "x%d" % st.waiting, ox + 10, 9, WHITE, font.sins)
 
         # time until the hearts refill (the 5-hour window resets)
         cd = S.cd5(st)
@@ -470,9 +482,13 @@ class Theme(S.Theme):
         gfx.text(cd, 158 - w, -2, gfx.countdown_color(st.left5, WHITE), font.sins)
         screen.blit(self.clock, vec2(int(158 - w - 8), 2))
         low = st.hearts is not None and st.hearts <= 4
-        gfx.draw_hearts(self.hearts, st.hearts, 76, 9, blink=low and S.blink(t, 300), unknown=self.hearts_grey)
-        # magic meter under the hearts = weekly budget
-        gfx.meter(77, 19, 79, 2, st.week, (48, 200, 64), (36, 52, 36))
+        if stale:
+            gfx.draw_hearts(self.hearts_stale, st.hearts, 76, 9, unknown=self.hearts_grey)
+            gfx.meter(77, 19, 79, 2, st.week, (130, 130, 130), (44, 44, 44))
+        else:
+            gfx.draw_hearts(self.hearts, st.hearts, 76, 9, blink=low and S.blink(t, 300), unknown=self.hearts_grey)
+            # magic meter under the hearts = weekly budget
+            gfx.meter(77, 19, 79, 2, st.week, (48, 200, 64), (36, 52, 36))
         if not st.online and S.blink(t, 600):
             gfx.text("?", 62, 4, RED, font.sins)
 
@@ -498,11 +514,16 @@ class Theme(S.Theme):
                     (t // 250) % 2 == 0
             elif w == "zero":
                 msg, hot = "MAGIC RESTORED!", True
-        gfx.ctext(gfx.fit(msg, 156, font.sins), 80, 107, GOLD if hot else WHITE, font.sins)
+        ink = GOLD if hot else WHITE
+        if self.lost is not None and msg.startswith("CONNECTION LOST"):
+            ink = S.LOST
+        elif S.back_online(st, t):
+            msg, ink = "THE BRIDGE ANSWERS!", S.BACK
+        gfx.ctext(gfx.fit(msg, 156, font.sins), 80, 107, ink, font.sins)
 
     def caption(self, st, t):
         if not st.online:
-            return st.net or "SEARCHING FOR BRIDGE..."
+            return S.lost_caption(st, t) if self.lost else (st.net or "SEARCHING FOR BRIDGE...")
         if self.action in CAPTIONS and self.acting(t) is not None:
             return CAPTIONS[self.action]
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
@@ -521,6 +542,50 @@ class Theme(S.Theme):
         if lv == S.RUN:
             return "PEGASUS BOOTS! %d AGENTS" % n
         return "IT'S DANGEROUS TO GO ALONE!" if (t // 3000) % 2 == 0 else "%d AGENTS, %d TOOLS/MIN" % (n, st.tpm)
+
+    # ------------------------------------------------------------ the connection lost
+    def lost_page(self, st, t):
+        """A minute without data: the field at night, the hero standing guard with a fairy asking
+        "?", and a dialog box with how long, why and what to try. The usage as of the last data is
+        in the caption, and grey in the HUD."""
+        gfx.box(0, 22, 160, 68, SKY)
+        self.far.draw(self.scroll)
+        self.mid.draw(self.scroll)
+        self.ground.draw(self.scroll)
+        screen.pen = color.rgb(8, 12, 48, 190)
+        screen.rectangle(0, 22, 160, 86)
+        for i, (x, y) in enumerate(self.stars):
+            if (t // 500 + i) % 7:
+                gfx.box(x, y - 2, 1, 1, (220, 220, 255))
+        # the hero, small at the foot of the box, and the fairy circling his head
+        img = self.stand[1] if (t % 3200) < 150 else self.stand[0]
+        gfx.blit(img, 18, 104 - img.height + 2, 1)
+        a = t / 700.0
+        fx = 42 + math.cos(a) * 9
+        fy = 92 + math.sin(a * 1.6) * 2
+        screen.pen = color.rgb(120, 200, 255, 70)
+        screen.shape(shape.circle(fx + 2, fy + 2, 5))
+        gfx.blit(self.fairy, fx, fy, 1, (t // 90) % 2 == 0)
+        gfx.bubble(int(fx) + 2, int(fy) - 1, "?", (24, 24, 48), WHITE, font.sins)
+        # the dialog box: a double white edge, like the game's
+        x0, y0, w, h = 5, 24, 150, 48
+        gfx.box(x0, y0, w, h, BLACK)
+        for k, c in ((0, WHITE), (2, (110, 110, 130))):
+            gfx.box(x0 + k, y0 + k, w - 2 * k, 1, c)
+            gfx.box(x0 + k, y0 + h - 1 - k, w - 2 * k, 1, c)
+            gfx.box(x0 + k, y0 + k, 1, h - 2 * k, c)
+            gfx.box(x0 + w - 1 - k, y0 + k, 1, h - 2 * k, c)
+        tx = x0 + 6
+        gfx.text("LOST CONTACT", tx, y0 + 1, S.LOST, font.sins)
+        gfx.text("NO WORD FOR " + S.lost_for(S.lost_ms(st, t) or 0), tx, y0 + 12, WHITE, font.sins)
+        gfx.text(gfx.fit(S.lost_reason(st), w - 14, font.sins), tx, y0 + 23, WHITE, font.sins)
+        gfx.text(gfx.fit(S.lost_advice(st), w - 18, font.sins), tx, y0 + 34, GOLD, font.sins)
+        if S.blink(t, 600):                 # the box's "more" arrow
+            screen.pen = gfx.rgb(WHITE)
+            screen.triangle(x0 + w - 11, y0 + h - 8, x0 + w - 5, y0 + h - 8, x0 + w - 8, y0 + h - 5)
+        self.hud(st, t)
+        gfx.box(0, 108, 160, 12, BLACK)
+        gfx.ctext(gfx.fit(S.last_usage(st), 156, font.sins), 80, 107, (180, 180, 196), font.sins)
 
     # ------------------------------------------------------------ the weekly reset, drawn over the scene
     def week_overlay(self, st, t):

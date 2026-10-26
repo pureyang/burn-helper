@@ -45,6 +45,7 @@ class Theme(S.Theme):
 | `st.week` | 7-day budget left, 0 to 1, or `None` |
 | `st.left5`, `st.left7` | microseconds until each limit resets (`gfx.countdown()` formats it) |
 | `st.online` | fresh data from the bridge. When false, show `st.net` and a "no signal" look |
+| `S.lost_stage(st, t)` | `None`, `"blip"` (data stopped under a minute ago: grey the meters, caption `S.lost_caption`) or `"lost"` (draw a connection-lost page with `S.lost_for`, `S.lost_reason`, `S.lost_advice`, `S.last_usage`); `S.back_online(st, t)` for the moment it returns. See [connection lost](how-it-works.md#when-the-connection-is-lost) |
 | `st.demo` | demo mode is running |
 
 ### What a theme should show

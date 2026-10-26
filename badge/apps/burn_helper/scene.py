@@ -91,6 +91,11 @@ class Status:
         self.usage_age = None
         self.pending = None     # the most telling activity not played yet
         self.pending_t = 0
+        self.seen_ms = None     # ticks_ms when data last came, or None: none since boot (see lost_stage)
+        self.seen_clock = ""    # the bridge's clock then, for "AS OF 12:41"
+        self.trouble = ""       # what is wrong while it is lost: wifi, relay or bridge (net.Net.trouble)
+        self.was_lost = False   # the connection-lost page was up: say so when the data comes back
+        self.back_ms = None     # ticks_ms when it came back
         self.ev_seen = None     # the bridge's number for the newest activity already handled
         self.used5 = None       # percent used, as reported
         self.used7 = None
@@ -148,6 +153,17 @@ class Status:
             now_ms = int(d.get("ts")) * 1000
         if now_ms is not None:
             self.anchor(int(now_ms))
+        self.seen_ms = time.ticks_ms()
+        self.seen_clock = self.clock
+
+    def lose(self):
+        """The data has stopped: what the agents are doing is unknown now, so nothing is shown
+        working or waiting. The usage and its reset times stay, shown as of when they came."""
+        self.level = IDLE
+        self.busy = self.subagents = self.waiting = self.tpm = 0
+        self.set_agents(0)
+        self.waiting_list = []
+        self.pending = None
 
     def anchor(self, now_ms):
         # Keep the running clock unless the bridge disagrees by over a second,
@@ -373,6 +389,113 @@ def week_zero_progress(st):
 def week_takes_screen(st, acting):
     """The two full-screen stages wait while a session is waiting for you or an activity plays."""
     return not (st.waiting or acting)
+
+
+# When the data stops. Until the first data after boot the themes keep the plain offline look (the
+# network state in the caption). Once data has come and then stopped (st.online goes false):
+#   blip   under a minute since the last data: the character stands by (what the agents do is
+#          unknown, so nothing is shown working or waiting), the meters go grey, and the caption
+#          says how long, in turn with why
+#   lost   a minute or more: each theme's connection-lost page, with how long, why, the usage as
+#          of the last data and what to try
+# When the data comes back after the lost page, the caption says so for BACK_MS.
+LOST_PAGE_MS = 60000
+BACK_MS = 2500
+LOST_CAPTION_MS = 2000        # the blip's caption: how long, then why, this long each
+LOST = (245, 160, 90)         # Okabe-Ito orange (light, for the dark screen), always with the word LOST
+BACK = (86, 180, 233)         # Okabe-Ito sky blue: the data is back, always with words
+ADVICE = {"wifi": "B x2: THE WI-FI PAGE", "relay": "IS THE BRIDGE ONLINE?", "bridge": "IS THE BRIDGE AWAKE?"}
+
+
+def lost_ms(st, t):
+    """How long since the last data, in ms, or None while it is fresh or none has come since boot."""
+    if st.online or st.seen_ms is None:
+        return None
+    return max(0, time.ticks_diff(t, st.seen_ms))
+
+
+def lost_stage(st, t):
+    """None, "blip" or "lost" (see above)."""
+    ms = lost_ms(st, t)
+    if ms is None:
+        return None
+    return "blip" if ms < LOST_PAGE_MS else "lost"
+
+
+def track_lost(st, t):
+    """Once a frame, after st.online is set (not in the demos): forget what the agents were doing
+    while the data is lost, and note when it comes back from the lost page."""
+    stage = lost_stage(st, t)
+    if stage is not None:
+        st.lose()
+        if stage == "lost":
+            st.was_lost = True
+    elif st.online and st.was_lost:
+        st.was_lost = False
+        st.back_ms = t
+
+
+def back_online(st, t):
+    """True for BACK_MS after the data came back from the lost page."""
+    return st.online and st.back_ms is not None and 0 <= time.ticks_diff(t, st.back_ms) < BACK_MS
+
+
+def lost_for(ms):
+    """How long the data has been gone, as the lost screens say it: 0:23, 4:12, 1H05M, 2D03H."""
+    s = ms // 1000
+    if s < 3600:
+        return "%d:%02d" % (s // 60, s % 60)
+    if s < 86400:
+        return "%dH%02dM" % (s // 3600, s % 3600 // 60)
+    return "%dD%02dH" % (s // 86400, s % 86400 // 3600)
+
+
+def lost_reason(st):
+    """Why, in a few words (the network's own label), for the caption and the lost pages."""
+    return st.net or "NO DATA FROM THE BRIDGE"
+
+
+def lost_advice(st):
+    """What to try."""
+    return ADVICE.get(st.trouble, ADVICE["bridge"])
+
+
+def lost_caption(st, t):
+    """The blip's caption: "CONNECTION LOST 0:23", in turn with why."""
+    if (t // LOST_CAPTION_MS) % 2 == 0:
+        return "CONNECTION LOST " + lost_for(lost_ms(st, t) or 0)
+    return lost_reason(st)
+
+
+def pct5(st):
+    """Percent of the 5-hour limit left, or None when unknown."""
+    if st.used5 is not None:
+        return max(0, min(100, int(100 - st.used5 + 0.5)))
+    if st.hearts is not None:
+        return st.hearts * 5
+    return None
+
+
+def pct7(st):
+    """Percent of the weekly limit left, or None when unknown."""
+    if st.used7 is not None:
+        return max(0, min(100, int(100 - st.used7 + 0.5)))
+    if st.week is not None:
+        return int(st.week * 100 + 0.5)
+    return None
+
+
+def as_of(st):
+    """When the numbers on a lost screen are from: "AS OF 12:41", or "" when the bridge sent no clock."""
+    return ("AS OF " + st.seen_clock) if st.seen_clock else ""
+
+
+def last_usage(st):
+    """The usage left at the last data, in one line: "AS OF 12:41: 5H 95% WK 42%"."""
+    p5, p7 = pct5(st), pct7(st)
+    nums = "5H %s WK %s" % ("--" if p5 is None else ("~%d%%" if st.est5 else "%d%%") % p5,
+                            "--" if p7 is None else "%d%%" % p7)
+    return (as_of(st) + ": " + nums) if st.seen_clock else "LAST: " + nums
 
 
 # The waiting bar: while sessions wait for you, the caption line names them, one at a time.

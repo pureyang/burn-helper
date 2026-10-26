@@ -102,6 +102,27 @@ A waiting session or an activity animation takes priority over the two full-scre
 the countdown is only shown while the badge knows when the week resets. Demo 1 plays the whole
 ladder sped up inside its 90-second window.
 
+## When the connection is lost
+
+Until the first data arrives after the badge starts, the caption shows what the network is doing
+(`SEARCHING FOR BRIDGE...`, `JOINING HOME-WIFI...`) and Desktop mode says `NO DATA YET`. Once data
+has arrived, the badge counts from the last update. The data counts as stale 12 seconds after the
+last update over Wi-Fi, or 8 seconds over the cable:
+
+| Since the last data | What the badge does |
+|---|---|
+| under 1 minute | The character stands by: nobody can see what the agents are doing, so nothing is shown working or waiting, the case LEDs stay off and the counts read `x?`. The 5-hour and weekly meters keep their last values but turn grey. The caption alternates between `CONNECTION LOST 0:23` and the reason (`BRIDGE NOT ANSWERING`, `WI-FI FAILING: PRESS B x2`, `REACHING THE RELAY...`). |
+| 1 minute or more | The theme's connection-lost page shows how long it has been, the reason and what to try (`IS THE BRIDGE AWAKE?`, or `B x2: THE WI-FI PAGE` when Wi-Fi is the problem). It also shows the usage as of the last data, for example `AS OF 12:41: 5H 95% WK 42%`. On Zelda, the field is dark, Navi asks "?" and a dialog box reads `LOST CONTACT`. On Running Man, colour bars read `PLEASE STAND BY / TECHNICAL DIFFICULTIES` above a `SIGNAL LOST` lower third. On Forrest, he waits on the bench under a bus-stop sign that reads `THE BUS IS LATE`. The page redraws at about 11 frames a second, and dims after 10 minutes without a button press, like a sleeping badge. |
+| back again, after the page | For 2.5 seconds the caption reads `THE BRIDGE ANSWERS!`, `WE'RE BACK! LIVE AGAIN` or `HERE COMES THE BUS!`. |
+
+The 5-hour and weekly countdowns keep running throughout, because the reset times do not change.
+Desktop mode shows `CONNECTION LOST 4M12S AGO` with the reason and what to try, and the usage rows
+dimmed with `AS OF 12:41`. Debug mode's `DATA` row shows `LOST 4M12S AGO`. Lost states use orange
+together with the word LOST, and the return uses sky blue together with words, so colour never
+carries the message alone. To see these screens without unplugging anything, send `@LOST 90` over
+USB (the data is treated as stopped 90 seconds ago; `@LOST -1` ends the test), or run
+`python3 tools/sim/preview_lost.py`.
+
 ## Usage meters
 
 In the Zelda theme the three counters at the top left are: green gem = tool calls today,

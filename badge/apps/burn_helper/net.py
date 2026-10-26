@@ -358,6 +358,12 @@ class Net:
             return "BRIDGE NOT ANSWERING"
         return ""
 
+    def trouble(self):
+        """What label() is about, in a word, for the connection-lost screens' advice: wifi, relay or bridge."""
+        if self.state != "up":
+            return "wifi"
+        return "relay" if self._use_relay() else "bridge"
+
     def stop(self):
         self._close_udp()
         self._close_relay()

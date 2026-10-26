@@ -18,6 +18,11 @@
 # "ON AIR IN" board for the last minute; flashing numbers for the last 10 s; and a NEW SEASON
 # title card with confetti when it arrives. The full-screen parts wait while a session is waiting
 # for you or an activity plays.
+#
+# When the connection is lost (scene.lost_stage) the show goes to NO SIGNAL: the runner stands by,
+# the collar goes grey and the caption says how long and why; after a minute, the colour bars and
+# PLEASE STAND BY, with a lower third saying how long and why, and the caption taking turns between
+# the usage as of the last data and what to try. When it comes back: WE'RE BACK!
 
 import math
 import figure as F
@@ -130,6 +135,11 @@ CAPTIONS = {
 }
 
 
+# the test card for the connection-lost page: the seven bars, and the short reversed row under them
+BARS = ((192, 192, 192), (192, 192, 0), (0, 192, 192), (0, 192, 0), (192, 0, 192), (192, 0, 0), (0, 0, 192))
+BARS_LOW = ((0, 0, 192), (16, 16, 20), (192, 0, 192), (16, 16, 20), (0, 192, 192), (16, 16, 20), (192, 192, 192))
+
+
 def week_digits(us, places):
     """The weekly countdown as big digits: "41.380" (places 3), "6.12" (places 2), "9:20" over a minute."""
     s = us if us > 0 else 0
@@ -162,6 +172,7 @@ class Theme(S.Theme):
         self.refill_from = 0
         self.last_hearts = None
         self.ws = None          # the weekly reset's stage this frame (S.week_stage)
+        self.lost = None        # the connection-lost stage this frame (S.lost_stage)
 
     def build(self):
         rp = gfx.palette(RUNNER)
@@ -279,6 +290,10 @@ class Theme(S.Theme):
         lv = st.level
         p = self.acting(t)
         ws = self.ws = S.week_stage(st)
+        self.lost = S.lost_stage(st, t)
+        if self.lost == "lost":
+            self.lost_page(st, t)
+            return
         fast = ws in ("hour", "ten", "minute", "ten_s")     # the searchlights sweep faster, at every level
         gfx.box(0, 22, 160, 30, (14, 2, 26))
         gfx.box(0, 52, 160, 38, NIGHT)
@@ -476,16 +491,20 @@ class Theme(S.Theme):
         lights the rest flash red. The strip under the band is the weekly budget.
         """
         units = st.hearts
+        stale = self.lost is not None       # the connection is lost: the last known charge, in grey
         gfx.box(x, y + 1, 84, 7, (58, 62, 74))
         gfx.box(x, y + 1, 84, 1, (110, 116, 132))
         gfx.box(x, y, 4, 9, (120, 126, 142))
         gfx.box(x + 80, y, 4, 9, (120, 126, 142))
-        low = units is not None and units <= 4
+        low = units is not None and units <= 4 and not stale
         flash = low and S.blink(t, 250)
         for i in range(10):
             cx = x + 8 + i * 7
             if units is None:
                 c = (40, 40, 48)
+            elif stale:
+                left = units - i * 2
+                c = (170, 170, 180) if left >= 2 else ((110, 110, 120) if left == 1 else (40, 40, 48))
             else:
                 left = units - i * 2
                 if left >= 2:
@@ -498,7 +517,7 @@ class Theme(S.Theme):
             if units is not None and units - i * 2 >= 1 and not flash:
                 gfx.box(cx - 1, y + 3, 1, 1, (255, 255, 255))
         # weekly budget: a thin charge strip under the collar
-        gfx.meter(x + 4, y + 10, 76, 1, st.week, CYAN, (30, 30, 60))
+        gfx.meter(x + 4, y + 10, 76, 1, st.week, (150, 150, 160) if stale else CYAN, (30, 30, 60))
 
     def rtext(self, s, c):
         x = 158 - gfx.width(s, font.sins)
@@ -509,14 +528,19 @@ class Theme(S.Theme):
         if st.online and st.waiting:
             S.draw_waiting_bar(st, t)     # who is waiting, one name at a time
             return
-        gfx.box(0, 108, 160, 12, YELLOW)
-        gfx.box(0, 108, 4, 12, PINK)
         msg = self.caption(st, t)
+        bar = YELLOW
+        if self.lost is not None and msg.startswith("CONNECTION LOST"):
+            bar = S.LOST
+        elif S.back_online(st, t):
+            msg, bar = "WE'RE BACK! LIVE AGAIN", S.BACK
+        gfx.box(0, 108, 160, 12, bar)
+        gfx.box(0, 108, 4, 12, PINK)
         gfx.ctext(gfx.fit(msg, 150, font.sins), 82, 107, BLACK, font.sins)
 
     def caption(self, st, t):
         if not st.online:
-            return st.net or "PLEASE STAND BY..."
+            return S.lost_caption(st, t) if self.lost else (st.net or "PLEASE STAND BY...")
         p = self.acting(t)
         ws = self.ws
         if ws == "zero":
@@ -558,6 +582,37 @@ class Theme(S.Theme):
 
     def put(self, img, x, foot=104, flip=False, h=27, lift=0):
         gfx.blit(img, x, foot - h * 2 - lift, 2, flip)
+
+    # ------------------------------------------------------------ the connection lost
+    def lost_page(self, st, t):
+        """A minute without data: the colour bars and PLEASE STAND BY, a lower third with how long and
+        why, and the caption taking turns between the usage as of the last data and what to try."""
+        top = 22
+        for i, c in enumerate(BARS):
+            x0, x1 = i * 160 // 7, (i + 1) * 160 // 7
+            gfx.box(x0, top, x1 - x0, 46, c)
+            gfx.box(x0, top + 46, x1 - x0, 6, BARS_LOW[i])
+        k = (t % 5000) / 5000.0             # a soft dark band rolls down the picture, like a lost hold
+        screen.pen = color.rgb(0, 0, 0, 80)
+        screen.rectangle(0, int(top + k * 58) - 4, 160, 7)
+        gfx.box(12, 31, 136, 27, BLACK)
+        gfx.box(12, 31, 136, 1, WHITE)
+        gfx.box(12, 57, 136, 1, WHITE)
+        gfx.ctext("PLEASE STAND BY", 80, 31, WHITE, font.sins)
+        gfx.ctext("TECHNICAL DIFFICULTIES", 80, 43, YELLOW, font.sins)
+        # the lower third
+        gfx.box(0, 74, 160, 34, (14, 4, 28))
+        gfx.box(0, 74, 160, 2, PINK)
+        gfx.box(0, 76, 4, 32, S.LOST)
+        gfx.text("SIGNAL LOST " + S.lost_for(S.lost_ms(st, t) or 0), 8, 76, S.LOST, font.sins)
+        gfx.text(gfx.fit(S.lost_reason(st), 148, font.sins), 8, 88, WHITE, font.sins)
+        gfx.scanlines(22, 108, 34)
+        self.draw_hud(st, t)
+        tip = (t // 3000) % 2 == 1
+        gfx.box(0, 108, 160, 12, YELLOW)
+        gfx.box(0, 108, 4, 12, PINK)
+        msg = S.lost_advice(st) if tip else S.last_usage(st)
+        gfx.ctext(gfx.fit(msg, 150, font.sins), 82, 107, BLACK, font.sins)
 
     # ------------------------------------------------------------ the weekly reset
     def week_overlay(self, st, t, ws, acting):
