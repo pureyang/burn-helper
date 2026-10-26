@@ -15,9 +15,9 @@ BG = (12, 14, 20)
 FG = (230, 230, 230)
 DIM = (130, 136, 150)
 ACCENT = (217, 119, 87)
-GOOD = (110, 220, 120)
-WARN = (255, 214, 90)
-BAD = (255, 110, 100)
+GOOD = (86, 180, 233)       # Okabe-Ito sky blue, yellow and orange (light, for the dark screen),
+WARN = (239, 226, 122)      # never red and green; every one comes with a number or words
+BAD = (245, 160, 90)
 MUTED = (60, 64, 76)
 
 DESKTOP, DEBUG = 1, 2
