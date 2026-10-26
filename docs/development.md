@@ -17,6 +17,7 @@ python3 tools/sim/test_tiers.py                 # the 15 activity levels and the
 python3 tools/sim/test_waiting.py               # what the bridge says about sessions waiting for you
 python3 tools/sim/test_activity.py              # the activity feed: bridge categories, badge picking one
 python3 tools/sim/test_lost.py                  # the connection lost: stages, what is kept, back online
+python3 tools/sim/test_pace.py [weeks]          # the weekly pace, then its study over simulated weeks
 python3 tools/sim/proto_page.py                 # every theme's animations on one page -> tools/sim/out/animations.html
 python3 tools/sim/demo_script.py                # both demos beat by beat -> tools/sim/out/demo_script.html
 python3 tools/sim/test_relay.py                 # the internet relay listener: key, 404s, connection cap

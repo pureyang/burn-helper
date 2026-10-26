@@ -4,7 +4,7 @@
 Sources:
   * ~/.claude/sessions/*.json   live session registry written by Claude Code
   * POST /hook                  events from bridge/cc_hook.py (tool calls, subagents, remote hosts)
-  * POST /usage                 rate limits from bridge/cc_statusline.py
+  * POST /usage                 rate limits from bridge/cc_statusline.py (it answers with the weekly pace)
 
 Outputs:
   * GET /status                 compact JSON for the badge (counts only, no names or paths)
@@ -32,6 +32,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pace  # noqa: E402
 import portable  # noqa: E402
 import tracking  # noqa: E402
 
@@ -85,6 +86,7 @@ SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
 STATE_DIR = os.path.expanduser(env("STATE_DIR") or os.path.join(HOME, ".claude", "burn-helper"))
 OLD_STATE_DIRS = (os.path.join(HOME, ".claude", "hearts-left"), os.path.join(HOME, ".claude", "tufty-bridge"))
 STATE_FILE = os.path.join(STATE_DIR, "state.json")
+PACE_FILE = os.path.join(STATE_DIR, "pace.json")    # the weekly pace's history (bridge/pace.py)
 # Internet relay (bridge/relay.py turns it on): a second listener on 127.0.0.1 that only
 # Tailscale Funnel reaches, answering GET /status to callers with the key.
 RELAY_FILE = os.path.join(STATE_DIR, "relay.json")
@@ -190,6 +192,7 @@ class Bridge:
         self.est_start = None          # when work first began after the 5-hour window ended (a new window
         #                                starts then, though no status line has reported it yet)
         self.seven_day = None
+        self.pace = pace.Pace(PACE_FILE)    # the weekly pace: its history, ladder and latest verdict
         # theme
         self.theme = None
         self.theme_seq = 0
@@ -227,6 +230,7 @@ class Bridge:
     def persist(self, force=False):
         now = time.time()
         with self.lock:
+            self.pace.save(force)          # its own file, written at most once a minute
             if not (self._dirty or force):
                 return
             if not force and now - self._last_persist < PERSIST_INTERVAL:
@@ -450,7 +454,15 @@ class Bridge:
                 changed = True
             if changed:
                 self._dirty = True
+            self.pace.report(now, self.five_hour, self.seven_day)
         return changed
+
+    def pace_step(self):
+        """Once a scan: the weekly pace takes in whether agents work and steps its ladder."""
+        s = self.status()
+        room = pace.room_enabled(STATE_DIR)
+        with self.lock:
+            self.pace.step(time.time(), s["seven_day"], s["level"] >= 2, room)
 
     def set_theme(self, theme):
         theme = LEGACY_THEMES.get(theme, theme)
@@ -565,6 +577,8 @@ class Bridge:
             # why the hearts show what they show: ok (a recent report), old (no report for 30 minutes or
             # more), est (a new window the bridge has not been told about), stale, or none (never)
             "usage": usage_state(self.five_hour, self.seven_day, five, now),
+            # the weekly pace: is the week on course to reach its limit before the reset (bridge/pace.py)
+            "pace": self.pace.out,
             "hearts": hearts,
             "theme": theme,
             "theme_seq": theme_seq,
@@ -657,7 +671,8 @@ class Handler(BaseHTTPRequestHandler):
                 BRIDGE.on_hook(d)
                 self._send(200, {"ok": True})
             elif path == "/usage":
-                self._send(200, {"ok": BRIDGE.on_usage(d)})
+                ok = BRIDGE.on_usage(d)
+                self._send(200, {"ok": ok, "pace": BRIDGE.pace.out})     # the status line shows the pace
             elif path == "/theme":
                 ok = BRIDGE.set_theme(d.get("theme"))
                 if ok:
@@ -813,13 +828,16 @@ def scan_loop():
             BRIDGE.scan()
             BRIDGE.persist()
             BRIDGE.track()
+            BRIDGE.pace_step()
             now = time.time()
             if now - last_summary >= 60:
                 last_summary = now
                 s = BRIDGE.status()
-                log("level=%d busy=%d waiting=%d sessions=%d stuck=%d subagents=%d tpm=%d today=%d hearts=%s theme=%s" % (
+                pc = s["pace"]
+                log("level=%d busy=%d waiting=%d sessions=%d stuck=%d subagents=%d tpm=%d today=%d hearts=%s theme=%s pace=%s" % (
                     s["level"], s["busy"], s["waiting"], s["sessions"], BRIDGE.local.get("stale", 0), s["subagents"],
-                    s["tpm"], s["tools_today"], s["hearts"], s["theme"]))
+                    s["tpm"], s["tools_today"], s["hearts"], s["theme"],
+                    "%d/%d%%/%d" % (pc["s"], pc["p"], pc["f"]) if pc else None))
         except Exception as e:  # noqa: BLE001
             log("scan error: %r" % e)
         time.sleep(SCAN_INTERVAL)

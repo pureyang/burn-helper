@@ -78,6 +78,21 @@ change without reconfiguring anything.
   (SessionStart). The number counts up from 1 each time the bridge starts.
 - `theme` is set from the phone panel (`POST /theme {"theme": "hero" | "gameshow" | "chocolates" | "auto"}`).
   `theme_seq` increases on every change so the badge can tell a new choice from an old one.
+- `pace`: the weekly pace ([how it works](../docs/how-it-works.md#the-weekly-pace)), or `null`
+  until the week's usage is known:
+  `{"s":0,"p":0,"f":67,"lo":62,"hi":76,"eta":null,"at":"","early":null,"even":74,"left":40,"win":1.5,"learn":1,"cap":"","room":0,"eased":0,"reset":1793044800}`.
+  `s` is the step (0 calm, 1 watch, 2 heads-up, 3 out); `p` the chance in percent that the week
+  reaches its limit before `reset`; `f` the likely percent used at the reset with no limit, and
+  `lo`/`hi` its 80% range; `eta` when the likely use reaches the limit (epoch seconds, or null),
+  `at` the same as `SUN 4PM` in the bridge computer's time, and `early` how many seconds before the
+  reset that is; `even` the percent an even pace would have used by now; `left` the percent left;
+  `win` how many full 5-hour windows that is (null until enough has been seen); `learn` 1 while
+  under two weeks are recorded; `cap` the caption up now (`watch`, `warn`, `eased`, `room` or
+  empty); `room` 1 while the opt-in room-left note applies; `eased` 1 for 2 hours after the pace
+  drops back to calm.
+
+`POST /usage` (the status line's report) answers `{"ok": true, "pace": {...}}` with the same
+object.
 
 ## Other machines
 
@@ -120,6 +135,13 @@ python3 bridge/stats.py --csv waits     # or daily: a whole table as CSV
 
 Only the four longest-waiting sessions are tracked at any moment, and a wait is measured as the
 bridge sees it (a scan every couple of seconds), not to the second.
+
+## Weekly pace
+
+Always on. The bridge keeps `pace.json` in its state folder: the weekly percent at each report for
+the last 10 weeks, how many minutes agents worked in each hour of the week, and the 5-hour and
+weekly rises it has seen together. It stays on the bridge computer; `/status` carries only the
+verdict.
 
 ## Privacy
 
