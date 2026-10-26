@@ -68,6 +68,9 @@ Linux, shows when the connection gets through.
 - The joined computer's `~/.claude/settings.json` (backed up first) gets the same async hooks
   and hearts status line the bridge uses, plus `BURN_HELPER_BRIDGE_URL` in its `env` section, so
   every Claude Code session there knows where to send. Nothing runs in the background on it.
+  A bridge started there anyway, to try a change say, leaves the badge alone (no beacon, no USB
+  link), so the badge can be plugged into a joined computer for development
+  ([details](development.md#developing-on-another-computer)).
 - What it sends: the session id, event name, tool name and the computer's name, plus the usage
   numbers from the status line. When a session starts, gets a prompt, finishes a turn or starts
   waiting, also its name (as Claude Code shows it) and its folder's name, so the badge can say

@@ -30,8 +30,12 @@ event (they never block a session), adds the status line only if you have none,
 and installs a LaunchAgent (`com.burnhelper.bridge`, log in
 `~/Library/Logs/burn-helper.log`). It replaces the older `com.heartsleft.bridge` and `com.lexco.tufty-bridge` agents if present.
 
-Options: `--port`, `--bind`, `--no-beacon`, `--verbose`. Environment:
+Options: `--port`, `--bind`, `--no-beacon`, `--no-usb`, `--here`, `--verbose`. Environment:
 `BURN_HELPER_PORT`, `BURN_HELPER_TOKEN`, `BURN_HELPER_STATE_DIR` (state defaults to `~/.claude/burn-helper`). The older `TUFTY_*` names still work.
+
+On a computer joined to another bridge (`install.py --bridge`), the bridge runs without its beacon
+and USB link, as if given `--no-beacon --no-usb`. A badge plugged in there, to develop it say, then
+stays paired with its own bridge. `--here` makes it the badge's bridge anyway.
 
 ## Badge discovery
 

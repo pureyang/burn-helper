@@ -22,6 +22,7 @@ python3 tools/sim/test_pace.py [weeks]          # the weekly pace, then its stud
 python3 tools/sim/proto_page.py                 # every theme's animations on one page -> tools/sim/out/animations.html
 python3 tools/sim/demo_script.py                # both demos beat by beat -> tools/sim/out/demo_script.html
 python3 tools/sim/test_relay.py                 # the internet relay listener: key, 404s, connection cap
+python3 tools/sim/test_joined.py                # a bridge on a joined computer leaves the badge alone
 python3 scripts/badge.py exec "print(1)"        # raw REPL one-liner
 ```
 
@@ -38,6 +39,23 @@ the ROM pixel fonts with the firmware's spacing. So the PNGs match the real scre
 `tools/deploy.py` remounts the badge's read-only `/system` volume read-write over serial, so
 deploying doesn't need USB disk mode. The badge tools take a lock file so the bridge's USB
 tether pauses while they use the port.
+
+## Developing on another computer
+
+The badge can be developed on a computer that isn't its bridge. One computer stays the
+always-on bridge, and the badge's USB cable goes into the one you develop on.
+
+- On the development computer, run the join line ([other computers](other-computers.md)), not
+  the bridge install. Its Claude Code sessions then show on the badge too.
+- `tools/deploy.py` and the `@` test commands run there, over the cable (on Windows
+  `py tools\deploy.py`, after `py -m pip install pyserial`). On Wi-Fi the badge keeps reading
+  from its bridge.
+- The badge pairs with whichever bridge feeds it over its cable. So a bridge started on a joined
+  computer, to try a bridge change, runs without its beacon and USB link. `--here` overrides that.
+- `badge/secrets.py` isn't in git. Without one on the development computer, `deploy.py` leaves the
+  badge's copy alone. If you need it there, copy it across yourself: it holds the Wi-Fi password.
+- A bridge change takes effect once it is pulled on the bridge computer and the bridge restarted:
+  `git pull`, then `launchctl kickstart -k gui/$(id -u)/com.burnhelper.bridge` on a Mac.
 
 ## Contents
 

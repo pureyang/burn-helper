@@ -729,6 +729,21 @@ def find_join_url(port):
     log("join address %s (Tailscale isn't running here)" % JOIN_URL)
 
 
+def joined_to(home=HOME):
+    """The bridge this computer is joined to (install.py --bridge put its address in Claude Code's
+    settings.json), or None. A bridge started here anyway must not take the badge: the badge pairs
+    with whichever bridge feeds it over its USB cable, and then follows only that one on Wi-Fi."""
+    url = env("BRIDGE_URL")
+    if not url:
+        try:
+            with open(os.path.join(home, ".claude", "settings.json"), encoding="utf-8") as f:
+                url = (json.load(f).get("env") or {}).get("BURN_HELPER_BRIDGE_URL")
+        except (OSError, ValueError, AttributeError):
+            url = None
+    host = str(url or "").split("//")[-1].split("/")[0].rsplit(":", 1)[0].strip("[]")
+    return None if host in ("", "127.0.0.1", "localhost", "::1") else url
+
+
 def load_relay():
     try:
         with open(RELAY_FILE) as f:
@@ -955,6 +970,8 @@ def main():
     ap.add_argument("--bind", default=env("BIND") or "0.0.0.0")
     ap.add_argument("--no-beacon", action="store_true", help="do not broadcast the UDP discovery beacon")
     ap.add_argument("--no-usb", action="store_true", help="do not push status to a USB-connected badge")
+    ap.add_argument("--here", action="store_true",
+                    help="be the badge's bridge although this computer is joined to another one")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--log", metavar="PATH", help="append the log here instead of printing it")
     args = ap.parse_args()
@@ -979,6 +996,12 @@ def main():
         log("could not write bridge.pid: %s" % e)
     BRIDGE_ID = bridge_id()
     log("bridge id %s" % BRIDGE_ID)
+    joined = None if args.here else joined_to()
+    if joined:
+        # a badge on this computer's cable (being developed here, say) stays with its bridge
+        args.no_beacon = args.no_usb = True
+        log("this computer is joined to the bridge at %s: no beacon or USB link here, so the badge "
+            "stays with that one (--here to be the badge's bridge anyway)" % joined)
     tracker = None
     if tracking.is_enabled(STATE_DIR):
         try:
