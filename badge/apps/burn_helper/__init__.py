@@ -682,6 +682,7 @@ def apply_test_state():
         st.usage_state = "est"
     elif test_state == "nobridge":
         st.online = False
+        st.seen_ms = None                    # as before the first data; @LOST shows the lost look
         st.net = "SEARCHING FOR BRIDGE..."
 
 
