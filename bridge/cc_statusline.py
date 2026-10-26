@@ -2,7 +2,11 @@
 """Claude Code status line: show remaining usage as hearts and report it to the Burn Helper bridge.
 
 Prints one line such as:
-    ♥♥♥♥♥♥❥♡♡♡ 5h 38% (resets in 1h23m) · 7d 12% (in 3d4h) · ctx 45% · Opus 5.5
+    ♥♥♥♥♥♥❥♡♡♡ 5h 38% (resets in 1h23m) · 7d 12% ✓ (in 3d4h) · ctx 45% · Opus 5.5
+
+The bridge answers the report with the weekly pace (bridge/pace.py), shown after the week's
+percent: ✓ on course to last the week, ≈ at this pace it runs out (when, if within 3 days and
+likely), ! the same, sooner and surer, ✗ the weekly limit is reached. Nothing when no bridge answers.
 """
 import json
 import os
@@ -72,9 +76,10 @@ def num(v):
 
 
 def report(d):
+    """Send the rate limits to the bridge; returns its weekly pace, or None."""
     rl = d.get("rate_limits")
     if not isinstance(rl, dict) or not rl:
-        return
+        return None
     body = {"session_id": d.get("session_id"), "host": socket.gethostname(), "rate_limits": rl}
     url = (env("BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/usage"
     headers = {"Content-Type": "application/json"}
@@ -83,12 +88,46 @@ def report(d):
         headers["X-Burn-Helper-Token"] = token
     try:
         req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
-        urllib.request.urlopen(req, timeout=0.3).close()
+        with urllib.request.urlopen(req, timeout=0.3) as r:
+            got = json.loads(r.read(8192).decode("utf-8") or "{}")
     except Exception:  # noqa: BLE001
-        pass
+        return None
+    p = got.get("pace") if isinstance(got, dict) else None
+    return p if isinstance(p, dict) else None
 
 
-def line(d):
+def day_hour(ts):
+    """"Sun 4pm": local time to the nearest hour."""
+    try:
+        t = time.localtime(float(ts) + 1800)
+    except (TypeError, ValueError, OverflowError):
+        return ""
+    return "%s %d%s" % (time.strftime("%a", t), t.tm_hour % 12 or 12, "am" if t.tm_hour < 12 else "pm")
+
+
+def pace_text(p):
+    """What goes after the week's percent: the pace's sign and, when there is something to say, a
+    few words. Every forecast says "at this pace" and carries a ~."""
+    s = p.get("s")
+    if s == 3:
+        return "✗"
+    if s in (1, 2):
+        when = day_hour(p.get("eta")) if p.get("eta") else ""
+        out = "at this pace out ~" + when if when else "at this pace it runs out"
+        early = num(p.get("early"))
+        if s == 2 and early and early > 0:
+            out += ", %s before reset" % (left(time.time() + early, time.time()) if early >= 172800
+                                         else "%dh" % max(1, early // 3600))
+        return ("! " if s == 2 else "≈ ") + out
+    if p.get("room"):
+        win = num(p.get("win"))
+        return "✓ " + ("~%.1f full 5h windows left" % win if win else "%d%% left" % (p.get("left") or 0))
+    if p.get("eased"):
+        return "✓ pace eased"
+    return "✓"
+
+
+def line(d, pace=None):
     parts = []
     rl = d.get("rate_limits") if isinstance(d.get("rate_limits"), dict) else {}
     now = time.time()
@@ -114,8 +153,11 @@ def line(d):
         parts[-1] += " " + s
     if u7 is not None:
         s = "7d %d%%" % round(u7)
-        if r7 and r7 > now:
-            s += " (in %s)" % left(r7, now)
+        mark = pace_text(pace) if isinstance(pace, dict) else ""
+        if mark:
+            s += " " + mark
+        if r7 and r7 > now and not (pace and pace.get("s") == 2):
+            s += " (%s %s)" % ("resets in" if pace and pace.get("s") == 1 else "in", left(r7, now))
         parts.append(s)
     cw = d.get("context_window") if isinstance(d.get("context_window"), dict) else {}
     ctx = num(cw.get("used_percentage"))
@@ -135,9 +177,14 @@ def main():
             d = {}
     except Exception:  # noqa: BLE001
         d = {}
+    pace = None
+    try:
+        pace = report(d)          # first: its answer carries the weekly pace
+    except Exception:  # noqa: BLE001
+        pass
     out = ""
     try:
-        out = line(d)
+        out = line(d, pace)
     except Exception:  # noqa: BLE001
         out = ""
     try:
@@ -146,10 +193,6 @@ def main():
         else:
             sys.stdout.write(out + "\n")
         sys.stdout.flush()
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        report(d)
     except Exception:  # noqa: BLE001
         pass
 

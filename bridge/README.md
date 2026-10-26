@@ -92,7 +92,7 @@ change without reconfiguring anything.
   drops back to calm.
 
 `POST /usage` (the status line's report) answers `{"ok": true, "pace": {...}}` with the same
-object.
+object, which the status line shows after the week's percent.
 
 ## Other machines
 
