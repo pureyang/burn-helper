@@ -1,7 +1,7 @@
 #!/bin/bash
 # Hearts Left installer for macOS. One line:
 #
-#   curl -fsSL https://raw.githubusercontent.com/pureyang/hearts-left/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash
 #
 # or from a checkout: ./install.sh
 #
@@ -19,7 +19,7 @@
 # copies the app onto it.
 set -e
 
-REPO_URL="${HEARTS_LEFT_REPO:-https://github.com/pureyang/hearts-left.git}"
+REPO_URL="${HEARTS_LEFT_REPO:-https://github.com/pureyang/burn-helper.git}"
 REF="${HEARTS_LEFT_REF:-main}"
 DEST="${HEARTS_LEFT_DIR:-$HOME/hearts-left}"
 PY=/usr/bin/python3

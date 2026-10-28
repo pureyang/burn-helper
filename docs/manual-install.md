@@ -4,7 +4,7 @@ You need the badge, a USB-C **data** cable, and a Mac with Claude Code and Homeb
 Plug the badge in, then run:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/pureyang/hearts-left/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash
 ```
 
 The installer does everything below and asks before each step that changes something:
@@ -39,8 +39,8 @@ The same steps by hand, from a clone:
 
 ```
 brew install picotool
-git clone https://github.com/pureyang/hearts-left.git
-cd hearts-left
+git clone https://github.com/pureyang/burn-helper.git
+cd burn-helper
 ```
 
 Download `tufty-v3.1.1-micropython-with-filesystem.uf2` from the
