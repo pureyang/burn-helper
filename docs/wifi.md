@@ -18,6 +18,11 @@ so it can hear the bridge's beacon.
   (`BRIDGE = "192.168.x.y:8787"` in `secrets.py`, or the portal's bridge field).
 - **Combined 2.4/5 GHz networks work.** Use the shared name (SSID) as is. The badge only hears
   the 2.4 GHz side and joins that.
+- **Several saved networks.** The badge tries the one that worked last, then the others in the
+  order they were added, and moves on by itself when one goes out of range (it rescans every
+  15 s). A network added in phone setup is used straight away, even if setup's test join failed.
+  A phone hotspot named with a curly apostrophe (`Sam’s iPhone`) matches a saved name typed with
+  a straight one.
 
 ## Shipping badges with a conference Wi-Fi pre-stored
 
@@ -45,10 +50,12 @@ those carefully.
 
 ![Wi-Fi debug screen (simulator render, placeholder names)](img/device_debug.png)
 
-**On the badge:** press **B** twice to open Paged mode. When Wi-Fi is not working it opens on its Wi-Fi debug
-page; otherwise press **C** until page 4/4. Each saved network gets a
+**On the badge:** press **B** twice to open Debug mode. When Wi-Fi is not working it opens on its Wi-Fi debug
+page; otherwise press **C** until page 3/3. Each saved network gets a
 line with its channel, signal strength and a verdict, and a plain-language hint sits at the
-bottom. Press **UP** there to rescan and retry immediately.
+bottom. Press **UP** there to pick a saved network: each press moves a highlight to the next one, and
+1.5 seconds after the last press the badge connects to it (pick the one it is already on to reconnect).
+If the one you picked can't be joined, the badge goes back to trying the others.
 
 **On the Mac:** with the badge plugged in and the app running, this prints the full diagnosis
 and the recent network log. It shows password lengths but never the passwords themselves.
@@ -66,4 +73,4 @@ python3 tools/netdebug.py
 | `OK`, but `BEACON NEVER` | On Wi-Fi but can't hear the bridge | The Mac is on another network or a guest/isolated network, or broadcasts are blocked. Put both on the same network, or set a fixed `BRIDGE` address |
 | `OK`, bridge not answering | Found the bridge but the HTTP poll fails | Check `curl http://<mac-ip>:8787/status` from another device, and the macOS firewall |
 
-The network log is also kept on the badge in `/state/hearts_left_net.log`.
+The network log is also kept on the badge in `/state/burn_helper_net.log`.

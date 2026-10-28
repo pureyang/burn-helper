@@ -20,7 +20,8 @@ st = S.Status()
 st.update({"level": 1, "busy": 6, "subagents": 2, "waiting": 1,
            "waiting_list": [{"n": "api-server", "s": 95}, {"bad": 1}, "junk"]})
 assert (st.agents, st.tier, st.level) == (8, 8, S.SPRINT), (st.agents, st.tier, st.level)
-assert st.waiting_list == [("api-server", 95), ("session", 0)], st.waiting_list
+assert [(w["n"], w["s"]) for w in st.waiting_list] == [("api-server", 95), ("session", 0)], st.waiting_list
+assert st.waiting_list[0]["d"] == "" and st.waiting_list[0]["w"] == "", "older bridges send no details"
 st.update({"level": 0, "busy": 0, "subagents": 0})
 assert (st.tier, st.level) == (0, S.SLEEP), "no agents: the bridge's asleep/idle level stands"
 print("PASS 15 tiers (1-10, 11-25, 26-50, 51-75, 76-100, 100+), gaits, agent count, waiting list")

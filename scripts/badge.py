@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Talk to the Tufty 2350 over USB serial using only the Python standard library.
+"""Talk to the Tufty 2350 over USB serial, on macOS, Linux or Windows.
+
+macOS and Linux need only the Python standard library; Windows needs pyserial
+(py -m pip install --user pyserial). The port handling is in bridge/portable.py.
 
     python3 scripts/badge.py exec "print(1+1)"     run a snippet in the raw REPL
     python3 scripts/badge.py run some_file.py       run a local file on the badge
@@ -11,23 +14,25 @@
 Ctrl-C stops the running badge app. Some firmware builds arm a watchdog, so
 snippets feed machine.WDT when one is requested with --wdt.
 """
-import glob
 import os
-import select
 import sys
-import termios
 import time
-import tty
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bridge"))
+import portable  # noqa: E402
 
 
 def find_port():
-    ports = sorted(glob.glob("/dev/cu.usbmodem*"))
+    missing = portable.serial_missing()
+    if missing:
+        sys.exit("Can't talk to the badge over USB: %s." % missing)
+    ports = portable.find_ports()
     if not ports:
-        sys.exit("No /dev/cu.usbmodem* device found. Is the badge plugged in and awake?")
+        sys.exit("No badge found on USB. Is the badge plugged in and awake?")
     return ports[0]
 
 
-LOCK = os.path.expanduser("~/.claude/hearts-left/usb.lock")
+LOCK = os.path.expanduser("~/.claude/burn-helper/usb.lock")
 
 
 def _lock():
@@ -54,36 +59,29 @@ class Badge:
     def __init__(self, port=None):
         _lock()
         self.port = port or os.environ.get("BADGE_PORT") or find_port()
-        self.fd = os.open(self.port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
-        tty.setraw(self.fd)
-        attrs = termios.tcgetattr(self.fd)
-        attrs[4] = attrs[5] = termios.B115200
-        termios.tcsetattr(self.fd, termios.TCSANOW, attrs)
+        try:
+            self.serial = portable.Port(self.port)
+        except Exception:
+            _unlock()
+            raise
 
     def read(self, timeout=1.0, idle=0.4, until=None):
         out = b""
         end = time.time() + timeout
         while time.time() < end:
-            r, _, _ = select.select([self.fd], [], [], 0.05)
-            if r:
-                try:
-                    chunk = os.read(self.fd, 4096)
-                except (BlockingIOError, OSError):
-                    chunk = b""
-                if chunk:
-                    out += chunk
-                    if until and until in out:
-                        break
-                    end = max(end, time.time() + idle) if idle else end
+            try:
+                chunk = self.serial.read(0.05)
+            except OSError:
+                chunk = b""
+            if chunk:
+                out += chunk
+                if until and until in out:
+                    break
+                end = max(end, time.time() + idle) if idle else end
         return out
 
     def write(self, data):
-        while data:
-            try:
-                n = os.write(self.fd, data)
-                data = data[n:]
-            except BlockingIOError:
-                time.sleep(0.01)
+        self.serial.write(data)
 
     def raw_repl(self):
         self.write(b"\r\x03\x03")
@@ -114,7 +112,7 @@ class Badge:
         self.write(b"\x02")
 
     def close(self):
-        os.close(self.fd)
+        self.serial.close()
         _unlock()
 
 
@@ -140,7 +138,7 @@ def main(argv):
         elif cmd == "bootloader":
             b.raw_repl()
             b.write(b"import machine\nmachine.bootloader()\x04")
-            print("Rebooting into BOOTSEL. Check with: picotool info")
+            print("Rebooting into BOOTSEL. Check with: picotool info (or look for the RP2350 drive)")
             return 0
         elif cmd == "disk":
             b.raw_repl()

@@ -5,7 +5,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-APP = os.path.join(REPO, "badge", "apps", "hearts_left")
+APP = os.path.join(REPO, "badge", "apps", "burn_helper")
 
 sys.path.insert(0, HERE)
 import pvshim  # noqa: E402
@@ -36,6 +36,9 @@ class FakeBadge:
 
     def battery_level(self):
         return 82
+
+    def battery_voltage(self):
+        return 3.95
 
     def usb_connected(self):
         return True

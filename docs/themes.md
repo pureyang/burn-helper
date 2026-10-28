@@ -6,7 +6,7 @@ Tufty 2350 (stock firmware v3.1.1, MicroPython 1.29), not guessed.
 
 ## The contract
 
-Create `badge/apps/hearts_left/theme_<id>.py` with a class that subclasses `scene.Theme`:
+Create `badge/apps/burn_helper/theme_<id>.py` with a class that subclasses `scene.Theme`:
 
 ```python
 import scene as S
@@ -45,6 +45,8 @@ class Theme(S.Theme):
 | `st.week` | 7-day budget left, 0 to 1, or `None` |
 | `st.left5`, `st.left7` | microseconds until each limit resets (`gfx.countdown()` formats it) |
 | `st.online` | fresh data from the bridge. When false, show `st.net` and a "no signal" look |
+| `S.lost_stage(st, t)` | `None`, `"blip"` (data stopped under a minute ago: grey the meters, caption `S.lost_caption`) or `"lost"` (draw a connection-lost page with `S.lost_for`, `S.lost_reason`, `S.lost_advice`, `S.last_usage`); `S.back_online(st, t)` for the moment it returns. See [connection lost](how-it-works.md#when-the-connection-is-lost) |
+| `st.pace` | the weekly pace from the bridge, or `None`: call `S.pace_tick(st, x, y, w, h)` after drawing the weekly meter, and return `S.pace_caption(st, t, PACE)` from the caption (after activity captions) with the theme's own `PACE` words; `S.pace_ink(kind, ink)` colours it. See [weekly pace](how-it-works.md#the-weekly-pace) |
 | `st.demo` | demo mode is running |
 
 ### What a theme should show
@@ -77,8 +79,8 @@ a few event animations is well inside the budget.
 
 1. Write `theme_<id>.py` as above.
 2. Register the id in four places, which is the main barrier to community themes right now:
-   `THEMES` and `LABELS` in `badge/apps/hearts_left/__init__.py`, `THEMES` and the phone-panel
-   button in `bridge/hearts_left_bridge.py`, and `THEMES` in `tools/simulate.py`.
+   `THEMES` and `LABELS` in `badge/apps/burn_helper/__init__.py`, `THEMES` and the phone-panel
+   button in `bridge/burn_helper_bridge.py`, and `THEMES` in `tools/simulate.py`.
 3. Preview it without a badge: `python3 tools/simulate.py <id>` writes every level to
    `tools/sim/out/`.
 4. Put it on the badge: `python3 tools/deploy.py`. Then run `python3 tools/netdebug.py`: its

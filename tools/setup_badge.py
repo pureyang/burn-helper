@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Get a Pimoroni Tufty 2350 ready for Hearts Left, step by step.
+"""Get a Pimoroni Tufty 2350 ready for Burn Helper, step by step.
 
     python3 tools/setup_badge.py             ask before anything that changes the badge
     python3 tools/setup_badge.py --yes       no questions (flashes if needed; Wi-Fi via phone later)
@@ -14,12 +14,15 @@
    it up from a phone) and write badge/secrets.py.
 4. Test the Wi-Fi from the badge itself, over USB (a combined 2.4/5 GHz network is fine; the
    badge joins its 2.4 GHz side). A wrong password is caught here, not after the install.
-5. Copy the Hearts Left app onto the badge and check that it starts.
+5. Copy the Burn Helper app onto the badge and check that it starts.
 
 If the badge stops answering at any point the installer asks you to press its RESET button
 and keeps going once it hears the badge again.
 
-Questions are read from /dev/tty, so this also works under `curl ... | bash`.
+Questions are read from /dev/tty, so this also works under `curl ... | bash` (on Windows,
+from the console). On Windows, flashing uses picotool when it is on the PATH; without it the
+firmware can still be copied onto the badge's RP2350 drive, but then nothing backs up the old
+firmware first, so the installer asks before doing that.
 """
 import argparse
 import getpass
@@ -37,6 +40,9 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 sys.path.insert(0, os.path.join(REPO, "bridge"))
 from badge import Badge  # noqa: E402
+import portable  # noqa: E402
+
+HOST = "this Mac" if portable.MAC else "this computer"
 
 FW_NAME = "tufty-v3.1.1-micropython-with-filesystem.uf2"
 FW_URL = "https://github.com/pimoroni/tufty2350/releases/download/v3.1.1/" + FW_NAME
@@ -65,6 +71,8 @@ def tty_line(prompt, secret=False):
     try:
         if secret:
             return getpass.getpass(prompt)
+        if portable.WINDOWS:
+            return input(prompt).strip()          # no /dev/tty: the console is stdin there
         with open("/dev/tty", "r+") as t:
             t.write(prompt)
             t.flush()
@@ -85,10 +93,19 @@ def ask(question, default=True):
     return ans.lower() in ("y", "yes")
 
 
+def find_picotool():
+    if portable.WINDOWS:
+        return shutil.which("picotool")
+    return shutil.which("picotool") or ("/opt/homebrew/bin/picotool" if os.path.exists("/opt/homebrew/bin/picotool") else None)
+
+
 def picotool():
-    p = shutil.which("picotool") or ("/opt/homebrew/bin/picotool" if os.path.exists("/opt/homebrew/bin/picotool") else None)
+    p = find_picotool()
     if p:
         return p
+    if portable.WINDOWS:
+        sys.exit("picotool is needed to back up the badge. Get it from "
+                 "https://github.com/raspberrypi/pico-sdk-tools/releases, put it on your PATH, then rerun.")
     brew = shutil.which("brew") or ("/opt/homebrew/bin/brew" if os.path.exists("/opt/homebrew/bin/brew") else None)
     if not brew:
         sys.exit("picotool is needed to flash the badge. Install Homebrew (https://brew.sh), then rerun.")
@@ -102,15 +119,35 @@ def picotool():
 
 
 def serial_port():
-    try:
-        from hearts_left_bridge import find_badge_ports
-        ports = find_badge_ports()
-    except Exception:  # noqa: BLE001
-        ports = []
+    if portable.MAC:
+        try:
+            from burn_helper_bridge import find_badge_ports      # by USB product name
+            ports = find_badge_ports()
+        except Exception:  # noqa: BLE001
+            ports = []
+    else:
+        ports = portable.find_ports()
     return ports[0] if ports else None
 
 
+def uf2_drive():
+    """The badge's drive while it is in bootloader mode (Windows), or None."""
+    for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":
+        root = letter + ":\\"
+        if os.path.exists(os.path.join(root, "INFO_UF2.TXT")):
+            return root
+    return None
+
+
 def in_bootloader():
+    if portable.WINDOWS:
+        if uf2_drive():
+            return True
+        p = find_picotool()
+        if not p:
+            return False
+        r = subprocess.run([p, "info"], capture_output=True, text=True)
+        return "Program Information" in r.stdout or "no program" in r.stdout.lower()
     p = shutil.which("picotool") or "/opt/homebrew/bin/picotool"
     if not os.path.exists(p) and not shutil.which("picotool"):
         return False
@@ -128,7 +165,7 @@ def wait_for_badge(timeout=120):
         if in_bootloader():
             return "bootloader", None
         if not said:
-            say("Plug the Tufty 2350 into this Mac with a USB-C data cable (press RESET if the screen is off)...")
+            say("Plug the Tufty 2350 into %s with a USB-C data cable (press RESET if the screen is off)..." % HOST)
             said = True
         time.sleep(2)
     sys.exit("No badge found. Check the cable (some only charge), then rerun.")
@@ -343,6 +380,10 @@ def backup_and_flash(port):
     say("Backup verified. Restore any time with: picotool load -v -x %s" % img)
     say("Flashing stock firmware...")
     run([tool, "load", "-v", "-x", fw], "Flashing")
+    return back_after_flash()
+
+
+def back_after_flash():
     for _ in range(40):
         time.sleep(1)
         p = serial_port()
@@ -350,6 +391,34 @@ def backup_and_flash(port):
             time.sleep(3)
             return p
     sys.exit("The badge did not come back after flashing. Unplug it, plug it back in, and rerun.")
+
+
+def flash_without_backup(port):
+    """Windows without picotool: copy the firmware onto the badge's RP2350 drive. Nothing backs up
+    the old firmware this way, so it only happens after a question that defaults to No."""
+    say("picotool (Raspberry Pi's flashing tool) is not installed, so the badge's current firmware "
+        "cannot be backed up before it is replaced.")
+    get_it = ("Install picotool from https://github.com/raspberrypi/pico-sdk-tools/releases (put it on "
+              "your PATH) and rerun to back the badge up first.")
+    if ARGS.yes:
+        sys.exit("Stopped before changing the badge: --yes never flashes without a backup. " + get_it)
+    if not ask("Replace the firmware with stock Pimoroni v3.1.1 anyway? The current firmware cannot be "
+               "restored afterwards.", default=False):
+        sys.exit("Stopped before changing the badge. " + get_it)
+    fw = firmware()
+    to_bootloader(port)
+    drive = uf2_drive()
+    if not drive:
+        sys.exit("The badge's RP2350 drive did not show up. Hold HOME, tap RESET, release HOME, then rerun.")
+    say("Copying the firmware onto the badge's drive %s ..." % drive)
+    with open(fw, "rb") as f:
+        data = f.read()
+    try:
+        with open(os.path.join(drive, FW_NAME), "wb") as out:
+            out.write(data)
+    except OSError:
+        pass        # the badge reboots as soon as the last block lands, taking the drive with it
+    return back_after_flash()
 
 
 def wifi():
@@ -361,7 +430,7 @@ def wifi():
         return
     ssid = None
     if not ARGS.yes:
-        say("The badge needs a 2.4 GHz Wi-Fi network on the same network as this Mac.")
+        say("The badge needs a 2.4 GHz Wi-Fi network on the same network as %s." % HOST)
         say("Leave it blank to skip: hold B on the badge later to add one from your phone.")
         ssid = tty_line("  Wi-Fi name (SSID): ")
     psk = ""
@@ -372,7 +441,7 @@ def wifi():
 
 
 def deploy():
-    say("Copying the Hearts Left app onto the badge (about 40 seconds)...")
+    say("Copying the Burn Helper app onto the badge (about 40 seconds)...")
     r = subprocess.run([sys.executable, os.path.join(HERE, "deploy.py"), "--all"])
     if r.returncode != 0:
         sys.exit("Copying the app failed; rerun the installer.")
@@ -416,32 +485,38 @@ def main(argv):
         if info is None:
             port, info = wait_for_response(port, "Looking at the badge:", patience=60)
         flash, why = needs_flash(info)
-        if info is not None and ("hearts_left" in info["apps"] or "claude_buddy" in info["apps"]):
-            why += ", with Hearts Left installed"
+        if info is not None and ("burn_helper" in info["apps"] or "hearts_left" in info["apps"] or "claude_buddy" in info["apps"]):
+            why += ", with Burn Helper installed"
     say("Found the badge: %s." % why)
 
     if flash:
         if ARGS.no_flash:
             sys.exit("Stopped: the badge needs stock firmware and --no-flash was given.")
-        if ARGS.dry_run:
+        if ARGS.dry_run and portable.WINDOWS and not find_picotool():
+            say("Would ask to flash stock Tufty firmware v3.1.1 by copying it to the badge's drive "
+                "(no backup without picotool).")
+        elif ARGS.dry_run:
             say("Would back up the badge's flash to backup/<date>/ and flash stock Tufty firmware v3.1.1.")
         else:
-            if not ask("Back up the badge and replace its firmware with stock Pimoroni v3.1.1? "
-                       "(the backup can restore it exactly)"):
-                sys.exit("Stopped before changing the badge.")
-            port = backup_and_flash(port)
+            if portable.WINDOWS and not find_picotool():
+                port = flash_without_backup(port)
+            else:
+                if not ask("Back up the badge and replace its firmware with stock Pimoroni v3.1.1? "
+                           "(the backup can restore it exactly)"):
+                    sys.exit("Stopped before changing the badge.")
+                port = backup_and_flash(port)
             say("Stock firmware installed.")
     wifi()
     if ARGS.dry_run:
-        say("Would test the Wi-Fi from the badge, copy the Hearts Left app onto it and restart it.")
+        say("Would test the Wi-Fi from the badge, copy the Burn Helper app onto it and restart it.")
         return 0
     port = verify_wifi(port)
     deploy()
     if check_running():
-        say("Hearts Left is running on the badge.")
+        say("Burn Helper is running on the badge.")
     else:
         say("The app was copied but did not answer yet. Press the badge's RESET button, wait a minute, "
-            "then run: python3 tools/netdebug.py")
+            "then run: %s tools/netdebug.py" % ("py" if portable.WINDOWS else "python3"))
     return 0
 
 

@@ -9,15 +9,15 @@ curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.s
 
 The installer does everything below and asks before each step that changes something:
 
-1. Downloads the code into `~/hearts-left` (or updates it).
+1. Downloads the code into `~/burn-helper` (or updates it).
 2. Installs the Mac bridge: async hooks and the status line in `~/.claude/settings.json`
    (backed up first) and a login item.
 3. Finds the badge. If it runs a conference build or anything other than stock Pimoroni
-   firmware, it saves and verifies a full flash backup in `~/hearts-left/backup/`, then
+   firmware, it saves and verifies a full flash backup in `~/burn-helper/backup/`, then
    flashes the stock Tufty 2350 v3.1.1 firmware, downloaded and checked against a pinned
    checksum. It installs `picotool` with Homebrew if needed.
 4. Asks for a 2.4 GHz Wi-Fi network. Leave it blank to set it up from your phone later.
-5. Copies the Hearts Left app onto the badge and checks that it starts.
+5. Copies the Burn Helper app onto the badge and checks that it starts.
 
 Options go after `bash -s --`, for example `... | bash -s -- --yes`:
 
@@ -97,7 +97,7 @@ python3 bridge/install.py
 ```
 
 This backs up `~/.claude/settings.json`, then adds the async hooks and the hearts status line,
-and starts the bridge as a login item. The log is at `~/Library/Logs/hearts-left.log`. Restart
+and starts the bridge as a login item. The log is at `~/Library/Logs/burn-helper.log`. Restart
 open Claude Code sessions so they pick up the hooks. To remove everything it added, run
 `python3 bridge/install.py --uninstall`.
 
@@ -107,8 +107,8 @@ open Claude Code sessions so they pick up the hooks. To remove everything it add
 curl -s http://127.0.0.1:8787/status    # level, busy, hearts...
 ```
 
-- With the badge on USB it should show your activity within a few seconds. Press **B** for
-  Desktop mode: its first line should read `DATA USB CABLE`.
+- With the badge on USB it should show your activity within a few seconds. Press **B** twice for
+  Debug mode: its first line should read `DATA USB CABLE`.
 - Open `http://<your-mac-ip>:8787/` on your phone for the status panel and theme picker.
-- Unplug the badge to run on Wi-Fi. Press **B** twice for Paged mode, which opens on the Wi-Fi debug
+- Unplug the badge to run on Wi-Fi. Press **B** twice for Debug mode, which opens on the Wi-Fi debug
   page if it doesn't connect.

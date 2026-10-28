@@ -5,8 +5,8 @@
     python3 tools/deploy.py --all      copy everything
     python3 tools/deploy.py --no-reset leave the badge at the REPL afterwards
     python3 tools/deploy.py --shot out.png   restart, wait, then pull a screenshot
-    python3 tools/deploy.py --shot-only out.png [--view 0-3] [--page 0-3] [--demo 0|1|2]
-        screenshot now (view 1 Desktop, 2 Paged, 3 Waiting focus; page 3 = Wi-Fi debug;
+    python3 tools/deploy.py --shot-only out.png [--view 0-2] [--page 0-2] [--demo 0|1|2]
+        screenshot now (view 1 Desktop, 2 Debug; page 2 of Debug = Wi-Fi debug;
         demo 1 = tagged demo, 2 = untagged)
 
 The stock firmware mounts /system read-only. Outside USB disk mode nothing else
@@ -14,6 +14,7 @@ is using that FAT volume, so this remounts it read-write for the copy, then
 unmounts it (flushing writes) and resets.
 
 badge/secrets.py (git-ignored) is installed as /system/secrets.py when present.
+Works on macOS, Linux and Windows (use `py` instead of `python3` there; it needs pyserial).
 """
 import base64
 import hashlib
@@ -25,10 +26,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 from badge import Badge  # noqa: E402
+import portable  # noqa: E402  (badge.py puts bridge/ on the path)
 
 SRC = os.path.join(REPO, "badge")
 # app folders from earlier versions, removed so the launcher does not list them
-OLD_APPS = ("/system/apps/claude_buddy",)
+OLD_APPS = ("/system/apps/claude_buddy", "/system/apps/hearts_left")
 
 REMOVE = """
 import os
@@ -74,7 +76,7 @@ def _walk(p):
                     if not b: break
                     h.update(b)
             print(q, binascii.hexlify(h.digest()).decode())
-for _p in ('/system/apps/hearts_left',):
+for _p in ('/system/apps/burn_helper',):
     try:
         _walk(_p)
     except OSError:
@@ -127,9 +129,19 @@ def pull(b, remote, local):
     open(local, "wb").write(base64.b64decode(out.strip()))
 
 
+def wait_for_port(timeout=30.0):
+    """After a restart the badge's USB port comes back after a few seconds (longer on Windows)."""
+    end = time.time() + timeout
+    while time.time() < end:
+        if os.environ.get("BADGE_PORT") or portable.find_ports():
+            return
+        time.sleep(0.5)
+
+
 def screenshot(path, wait=12.0, view=None, demo=None, page=None):
     """Ask the running app for its current frame over USB and save it as a PNG."""
     time.sleep(wait)
+    wait_for_port()
     b = Badge()
     try:
         if demo is not None:
@@ -153,7 +165,7 @@ def screenshot(path, wait=12.0, view=None, demo=None, page=None):
                     print("  " + got.split(b"@INFO ", 1)[1].split(b"\n", 1)[0].decode(errors="replace").strip())
                 return path
             time.sleep(2)
-        raise RuntimeError("badge app did not answer @SHOT (is the Hearts Left app running?)")
+        raise RuntimeError("badge app did not answer @SHOT (is the Burn Helper app running?)")
     finally:
         b.close()
 
@@ -192,10 +204,10 @@ def main(argv):
         sent += 1
         print("  sent", rpath, len(data), "bytes")
     # drop files the badge still has from earlier versions (renamed or deleted here)
-    keep = sorted(r.rsplit("/", 1)[1] for r in files if r.startswith("/system/apps/hearts_left/") and r.count("/") == 4)
-    out, err = b.exec("import os\nkeep = %r\nfor n in os.listdir('/system/apps/hearts_left'):\n"
-                      "    if n not in keep and not (os.stat('/system/apps/hearts_left/' + n)[0] & 0x4000):\n"
-                      "        os.remove('/system/apps/hearts_left/' + n)\n        print('pruned', n)\n" % (keep,))
+    keep = sorted(r.rsplit("/", 1)[1] for r in files if r.startswith("/system/apps/burn_helper/") and r.count("/") == 4)
+    out, err = b.exec("import os\nkeep = %r\nfor n in os.listdir('/system/apps/burn_helper'):\n"
+                      "    if n not in keep and not (os.stat('/system/apps/burn_helper/' + n)[0] & 0x4000):\n"
+                      "        os.remove('/system/apps/burn_helper/' + n)\n        print('pruned', n)\n" % (keep,))
     for line in out.splitlines():
         if line.startswith("pruned"):
             print("  removed stale", line.split(" ", 1)[1])

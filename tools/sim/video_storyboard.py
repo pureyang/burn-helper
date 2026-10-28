@@ -13,12 +13,13 @@ import simulate as sm  # noqa: E402  (installs the simulator)
 import pvshim  # noqa: E402
 import scene as S  # noqa: E402
 
-APP = os.path.join(os.path.dirname(TOOLS), "badge", "apps", "hearts_left", "__init__.py")
+APP = os.path.join(os.path.dirname(TOOLS), "badge", "apps", "burn_helper", "__init__.py")
 OUT = os.path.join(os.path.dirname(TOOLS), "docs", "img", "video_storyboard.png")
-BEATS = ((1.5, "0-3 s  asleep"), (3.7, "3-4.5 s  wakes up"), (5.5, "4.5-7 s  1 agent: walks"),
+BEATS = ((1.5, "0-3 s  asleep"), (3.9, "3-4.8 s  out of a cave"), (6.2, "5.6-7 s  sword combo"),
          (7.7, "7-8.5 s  5 agents: runs"), (9.2, "8.5-10 s  9 agents: sprints"),
-         (11.5, "10-13 s  a session needs you"), (14.0, "13-15 s  40 agents: sparks"),
-         (15.5, "15-16 s  88 agents: red edge"), (18.5, "16-20 s  128: hyperspace"))
+         (11.5, "10-12.4 s  a session needs you"), (13.3, "12.4-14 s  a new quest"),
+         (15.2, "14-16 s  quest complete"), (18.5, "16-20 s  128: hyperspace"))
+T0 = 10000      # the simulated clock when the take starts (keeps warm-up frames positive)
 
 
 def demo_code():
@@ -28,11 +29,11 @@ def demo_code():
 
 
 def main():
-    clock = {"ms": 0}
+    clock = {"ms": T0}
     ns = {"S": S, "st": S.Status(), "view": 0, "demo": 0, "demo_t0": 0,
           "time": types.SimpleNamespace(ticks_ms=lambda: clock["ms"], ticks_diff=lambda a, b: a - b,
-                                        ticks_us=lambda: 0),
-          "views": types.SimpleNamespace(WAITING=3), "prefs": {"theme": "hero"}, "switch": lambda **k: None}
+                                        ticks_add=lambda a, b: a + b, ticks_us=lambda: 0),
+          "views": types.SimpleNamespace(DESKTOP=1), "prefs": {"theme": "hero"}, "switch": lambda **k: None}
     exec(demo_code(), ns)
     ns["set_demo"](2)
     theme = sm.load("hero")
@@ -42,10 +43,12 @@ def main():
     big.clear()
     big.font = pvshim.font.sins
     for i, (sec, label) in enumerate(BEATS):
-        clock["ms"] = int(sec * 1000)
+        clock["ms"] = T0 + int(sec * 1000)
         ns["demo_status"](clock["ms"])
         theme.last_t = None
-        img = sm.render(theme, ns["st"], clock["ms"] + 5000)
+        theme.action = None
+        theme.act_seen = 0
+        img = sm.render(theme, ns["st"], clock["ms"])
         x = pad + (i % cols) * (160 * scale + pad)
         y = pad + (i // cols) * (120 * scale + pad + 14)
         big.pen = pvshim.color(220, 220, 220)
