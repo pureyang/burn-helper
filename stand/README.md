@@ -19,6 +19,8 @@ badges may differ in size or port position, so check the measurements under
 | `badge_stand.stl` | Plain stand, one colour |
 | `badge_stand_2colors_body.stl` | Two-colour stand: the body, in your base colour |
 | `badge_stand_2colors_hearts.stl` | Two-colour stand: the hearts, in red |
+| `badge_stand_2colors_body.3mf` | Slicer project for the two-colour stand, with the two parts already set up |
+| `tufty_stand.3mf` | Slicer project for the first, older version of the stand |
 | `badge_stand.py` | Script that builds the plain stand. All sizes are settings at the top |
 | `badge_stand_2colors.py` | Script that adds the hearts on top of the plain stand |
 
