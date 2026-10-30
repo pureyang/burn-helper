@@ -41,6 +41,10 @@ DEFAULT_RATE = 11.0          # %/hour until it has learnt its own (one full run 
 LEARN_MIN_MINUTES = 30       # a run on battery teaches the drain only if it lasted this long
 LEARN_MIN_DROP = 5.0         # and used this much
 
+LOW_PCT = 20                 # on battery at or under this: a banner now and then
+CRITICAL_PCT = 10            # and at or under this: a banner that stays
+
+fake = None                  # a reading shown for testing over USB ("@STATE batlow"), or None
 _cache = [None, None]        # reading, ticks_ms it was taken
 _log = [None, None]          # ticks_ms of the last log line, usb state at that line
 _est = {"v": None, "soc": None, "t": None, "saved": None,
@@ -126,6 +130,8 @@ def minutes_left(soc, rate, runs, run_minutes, run_drop):
 
 def read():
     """(usb, charging, volts, percent), or None if the firmware cannot tell. Cached for 2 s."""
+    if fake is not None:
+        return fake
     now = time.ticks_ms()
     if _cache[1] is not None and time.ticks_diff(now, _cache[1]) < CACHE_MS:
         return _cache[0]
@@ -190,6 +196,22 @@ def left_text(minutes):
     if minutes >= 60:
         return "%dH%02dM" % (minutes // 60, minutes % 60)
     return "%dM" % minutes
+
+
+def warning(r=None, left=None):
+    """None, or (level, first line, second line) when it is running on battery and low.
+    Level 1 is low (LOW_PCT), level 2 critical (CRITICAL_PCT). r and left default to the live
+    reading and time_left(); the time left is only quoted once the estimate has a run to go on."""
+    if r is None:
+        r = read()
+        left = time_left()
+    if r is None or r[0] or r[3] > LOW_PCT:
+        return None
+    pct = r[3]
+    when = "~" + left_text(left[0]) + " LEFT" if left else None
+    if pct <= CRITICAL_PCT:
+        return 2, "BATTERY %d%%: PLUG IN NOW" % pct, when or "IT WILL TURN OFF SOON"
+    return 1, "LOW BATTERY %d%%" % pct, ("PLUG IN: " + when) if when else "PLUG IN SOON"
 
 
 def text(short=False):

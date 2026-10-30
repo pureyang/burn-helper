@@ -666,16 +666,21 @@ def draw_frame(t):
         gfx.box(80 - w // 2, 48, w, 13, (0, 0, 0))
         gfx.box(80 - w // 2, 48, w, 1, (217, 119, 87))
         gfx.ctext(toast, 80, 48, (255, 255, 255), font.sins)
+    bw = power.warning()
+    if views.battery_banner(bw, t) and screen_off_at is None:
+        views.draw_battery_warning(bw)
     if screen_off_at is not None:
         draw_off_note(time.ticks_diff(screen_off_at, t))
 
 
 test_state = None        # a state shown for testing over USB ("@STATE est"), or None
+BAT_FAKE = {"batlow": (False, False, 3.40, 18), "batcrit": (False, False, 3.28, 7)}   # (usb, charging, volts, %)
 
 
 def apply_test_state():
     """Show a state that is hard to catch for real, over what the bridge says (USB "@STATE name").
-    est: a new 5-hour window nobody has reported (full hearts, a ~ countdown); nobridge: no data."""
+    est: a new 5-hour window nobody has reported (full hearts, a ~ countdown); nobridge: no data;
+    batlow, batcrit: the battery warning (18% and 7%, unplugged), whatever the battery really is."""
     if test_state == "est":
         st.used5, st.est5, st.hearts = None, True, 20
         st.left5 = (4 * 3600 + 49 * 60) * 1000000 - (time.ticks_ms() % 1000) * 1000
@@ -704,6 +709,7 @@ def update():
     st.online = link.fresh() or tether.fresh()
     st.net = "" if tether.fresh() else link.label()
     st.trouble = link.trouble()
+    power.fake = BAT_FAKE.get(test_state)     # the @STATE batlow / batcrit tests; None otherwise
     if lost_test is not None:
         st.online = False                     # the @LOST test: as if the data had stopped then
         st.seen_ms = lost_test

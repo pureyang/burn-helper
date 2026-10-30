@@ -173,6 +173,12 @@ modes pause the animation to save battery. Usage is always shown as what is **le
 - **Debug mode**: everything on one page, then the connection and Wi-Fi debug pages (A/C turn
   pages), including the battery's estimated time left unplugged. When Wi-Fi is not working it opens on the Wi-Fi page.
 
+**Low battery**: unplugged at 20% or less, an orange banner on any of the three screens says
+`LOW BATTERY` with the charge and, once the badge has learnt its drain, the time left. It comes
+round for 6 seconds every 45 seconds. At 10% or less it stays, as `BATTERY 10%: PLUG IN NOW`.
+It never shows on USB or while charging. (Over USB, `@STATE batlow` and `@STATE batcrit` show
+both, whatever the battery.)
+
 ## Buttons
 
 Short presses act when you let go, so holding a button never also triggers its press.

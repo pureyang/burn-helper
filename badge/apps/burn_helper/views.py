@@ -70,6 +70,24 @@ def footer(s):
     gfx.text(s, 4, 107, (120, 120, 130), font.sins)
 
 
+LOW_BANNER_MS, LOW_BANNER_EVERY_MS = 6000, 45000    # low: shown for 6 s of every 45 s
+
+
+def battery_banner(w, t):
+    """Whether the battery warning `w` (from power.warning) is on screen at tick t: critical stays,
+    low comes round now and then so it does not sit on the scene all the time."""
+    return w is not None and (w[0] >= 2 or t % LOW_BANNER_EVERY_MS < LOW_BANNER_MS)
+
+
+def draw_battery_warning(w):
+    """A banner over any screen: the charge, and the time left when the badge knows it. Orange, with
+    words, never red and green. The critical one has a thicker border."""
+    gfx.box(6, 38, 148, 30, (0, 0, 0))
+    gfx.box(6, 38, 148, 3 if w[0] >= 2 else 1, BAD)
+    gfx.ctext(w[1], 80, 43, (255, 255, 255), font.sins)
+    gfx.ctext(w[2], 80, 55, BAD, font.sins)
+
+
 def data_row(c, t):
     if c.demo:
         return "DEMO%s" % (" (NO TAG)" if c.demo == 2 else "")
