@@ -64,6 +64,11 @@ class Badge:
         except Exception:
             _unlock()
             raise
+        s = getattr(self.serial, "s", None)
+        if s is not None and hasattr(s, "write_timeout"):
+            # the badge stops reading while it writes its flash: give a copy more than the
+            # bridge's 1 s (pyserial, so Windows)
+            s.write_timeout = 10
 
     def read(self, timeout=1.0, idle=0.4, until=None):
         out = b""
@@ -101,7 +106,10 @@ class Badge:
         ack = self.read(2.0, until=b"OK")
         if b"OK" not in ack:
             raise RuntimeError("badge did not accept code: %r" % ack)
-        out = self.read(timeout, idle=0, until=b"\x04>")
+        # the reply can arrive in the same read as the OK (it does on Windows): keep it
+        out = ack.split(b"OK", 1)[1]
+        if b"\x04>" not in out:
+            out += self.read(timeout, idle=0, until=b"\x04>")
         # raw REPL replies: OK <stdout> \x04 <stderr> \x04 >
         body = out.split(b"\x04")
         stdout = body[0].decode(errors="replace") if body else ""
