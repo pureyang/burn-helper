@@ -52,6 +52,12 @@ left5 = S.pct5      # percent of each limit left, or None when unknown
 left7 = S.pct7
 
 
+def end_pct(st):
+    """Percent of the week likely left at the reset, at this pace (the pace's forecast), or None."""
+    pc = st.pace
+    return None if pc is None else max(0, min(100, 100 - pc["f"]))
+
+
 def pct_colour(p):
     if p is None:
         return DIM
@@ -159,11 +165,15 @@ def desktop(c, t):
     header("DESKTOP MODE", power.text(short=True))
     working = "%d WORKING" % st.agents
     lost = None if c.demo else S.lost_ms(st, t)
-    # usage left; while the connection is lost, dimmed and as of the last data
-    for label, p, left, y in (("5 HOURS", left5(st), st.left5, 10), ("WEEK", left7(st), st.left7, 34)):
+    # usage left; while the connection is lost, dimmed and as of the last data. In "week" mode (a
+    # plan with only a weekly limit) the week, then where it likely ends at this pace
+    week = st.mode == "week"
+    rows = (("WEEK", left7(st), st.left7, 10), ("AT RESET", end_pct(st), None, 34)) if week else \
+        (("5 HOURS", left5(st), st.left5, 10), ("WEEK", left7(st), st.left7, 34))
+    for label, p, left, y in rows:
         colour = pct_colour(p) if lost is None else DIM
         est = label == "5 HOURS" and st.est5
-        big = "--" if p is None else ("~%d%%" if est else "%d%%") % p
+        big = "--" if p is None else ("~%d%%" if est or label == "AT RESET" else "%d%%") % p
         if p is not None:
             big += " " + (S.as_of(st) if lost is not None and st.seen_clock else "LEFT")
         gfx.text(label, 4, y, FG, font.sins)
@@ -172,11 +182,16 @@ def desktop(c, t):
         line, ink = resets(left, est) or no_report(st), gfx.countdown_color(left, DIM)
         if label == "WEEK" and lost is None:
             # the weekly pace: its tick on the meter, and its lines in turn with the reset
-            S.pace_tick(st, 4, y + 12, 152, 3, FG)
-            turns = S.pace_lines(st) if left is not None else []
+            S.pace_tick(st, 4, y + 12, 152, 3, FG, budget=True)
+            turns = S.pace_lines(st) if left is not None and not week else []
             k = (t // S.PACE_LINE_MS) % (len(turns) + 1)
             if k:
                 line, ink = turns[k - 1]
+        elif label == "AT RESET":
+            # the pace's lines in turn (but the calm one, which is the number above); "AT THIS PACE"
+            # says what the number is
+            turns = [x for x in S.pace_lines(st) if not x[0].startswith("PACE: ")] if lost is None else []
+            line, ink = turns[(t // S.PACE_LINE_MS) % len(turns)] if turns else ("AT THIS PACE", DIM)
         gfx.text(gfx.fit(line, 152, font.sins), 4, y + 13, ink, font.sins)
     gfx.box(4, 59, 152, 1, MUTED)
     # waiting for you
@@ -260,13 +275,16 @@ def _overview(c, t):
         "LEVEL " + activity(st),
         "TOOLS/MIN %d  TODAY %d" % (st.tpm, st.tools),
     ]
-    for label, p, left in (("5H", left5(st), st.left5), ("7D", left7(st), st.left7)):
+    for label, p, left in ((("7D", left7(st), st.left7),) if st.mode == "week" else
+                           (("5H", left5(st), st.left5), ("7D", left7(st), st.left7))):
         when = gfx.countdown(left)
         est = label == "5H" and st.est5
         rows.append("%s %s LEFT%s%s" % (
             label, "--" if p is None else ("~%d%%" if est else "%d%%") % p,
             "" if left is None else (", RESET IN " + ("~" if est else "") + when if left > 0 else ", " + when),
             ", " + no_report(st)[:22] if left is None and label == "5H" else ""))
+    if st.mode == "week":
+        rows.append("MODE WEEKLY ONLY, END %s" % ("--" if st.hearts_end is None else "%d/20" % st.hearts_end))
     pc = st.pace
     if pc is not None:
         # the step, the chance of running out, the likely use at the reset, the caption up now

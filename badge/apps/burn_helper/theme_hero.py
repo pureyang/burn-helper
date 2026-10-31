@@ -483,20 +483,22 @@ class Theme(S.Theme):
         screen.blit(self.ocarina, vec2(ox, 12))
         gfx.text("x?" if stale else "x%d" % st.waiting, ox + 10, 9, WHITE, font.sins)
 
-        # time until the hearts refill (the 5-hour window resets)
-        cd = S.cd5(st)
+        # time until the hearts refill (the 5-hour window resets, or the week in "week" mode)
+        cd = S.cd_life(st)
         w = gfx.width(cd, font.sins)
         if 158 - w - 10 >= 76 + gfx.width("-LIFE-", font.sins):
             gfx.text("-LIFE-", 76, -2, RED, font.sins)     # dropped when the long final-seconds count needs the room
-        gfx.text(cd, 158 - w, -2, gfx.countdown_color(st.left5, WHITE), font.sins)
+        gfx.text(cd, 158 - w, -2, gfx.countdown_color(S.life_left(st), WHITE), font.sins)
         screen.blit(self.clock, vec2(int(158 - w - 8), 2))
         low = st.hearts is not None and st.hearts <= 4
         if stale:
             gfx.draw_hearts(self.hearts_stale, st.hearts, 76, 9, unknown=self.hearts_grey)
             gfx.meter(77, 19, 79, 2, st.week, (130, 130, 130), (44, 44, 44))
         else:
-            gfx.draw_hearts(self.hearts, st.hearts, 76, 9, blink=low and S.blink(t, 300), unknown=self.hearts_grey)
-            # magic meter under the hearts = weekly budget, with the pace tick
+            # in "week" mode the hearts likely spent by the reset go dark now and then
+            gfx.draw_hearts(self.hearts, S.icon_units(st, st.hearts, t), 76, 9, blink=low and S.blink(t, 300),
+                            unknown=self.hearts_grey)
+            # magic meter under the hearts = weekly budget, with the pace tick ("week" mode: the time left)
             gfx.meter(77, 19, 79, 2, st.week, (48, 200, 64), (36, 52, 36))
             S.pace_tick(st, 77, 19, 79, 2)
         if not st.online and S.blink(t, 600):
@@ -544,7 +546,7 @@ class Theme(S.Theme):
             msg, self.pace_kind = pc
             return msg
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
-            return "LOW HEARTS! REFILL IN " + gfx.countdown(st.left5)
+            return "LOW HEARTS! REFILL IN " + gfx.countdown(S.life_left(st))
         tc = S.tier_caption(st, t, "HYPERSPACE JUMP!")
         if tc:
             return tc

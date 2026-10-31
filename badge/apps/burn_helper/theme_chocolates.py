@@ -553,10 +553,11 @@ class Theme(S.Theme):
         gfx.box(0, 21, 160, 1, (200, 180, 150))
         stale = self.lost is not None          # the connection is lost: the last known numbers, in grey
         low = st.hearts is not None and st.hearts <= 4 and not stale
-        self.draw_chocolates(st.hearts, 1, 1, low and S.blink(t, 300), stale)
-        # time until the box refills (the 5-hour window resets)
+        # in "week" mode the chocolates likely eaten by the reset go now and then
+        self.draw_chocolates(st.hearts if stale else S.icon_units(st, st.hearts, t), 1, 1, low and S.blink(t, 300), stale)
+        # time until the box refills (the 5-hour window resets, or the week in "week" mode)
         screen.blit(self.clock, vec2(69, 2))
-        gfx.text(S.cd5(st), 76, -2, gfx.countdown_color(st.left5, INK, (190, 120, 20), RED), font.sins)
+        gfx.text(S.cd_life(st), 76, -2, gfx.countdown_color(S.life_left(st), INK, (190, 120, 20), RED), font.sins)
         miles = str(min(st.tools, 99999))
         w = gfx.width(miles, font.sins)
         gfx.text(miles, 158 - w, -2, INK, font.sins)
