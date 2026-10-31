@@ -463,17 +463,17 @@ class Theme(S.Theme):
                 screen.pen = gfx.rgb(RED)
                 screen.shape(shape.circle(x - 5, 5, 3))
         self.draw_collar(st, t, 2, 10)
-        # the show's game clock: time until the collar recharges (5-hour reset)
+        # the show's game clock: time until the collar recharges (5-hour reset, or the week's)
         gfx.box(94, 9, 64, 11, BLACK)
         gfx.box(94, 9, 64, 1, PINK)
-        cd = S.cd5(st)
+        cd = S.cd_life(st)
         w = gfx.width(cd, font.sins)
-        gfx.text(cd, 156 - w, 7, gfx.countdown_color(st.left5, YELLOW, (255, 150, 40), RED), font.sins)
+        gfx.text(cd, 156 - w, 7, gfx.countdown_color(S.life_left(st), YELLOW, (255, 150, 40), RED), font.sins)
         screen.blit(self.clock, vec2(int(156 - w - 8), 12))
         if ws == "six":
             if (t // 2200) % 2 == 1:
                 self.season_clock(st)           # the weekly clock takes turns with the game clock
-        elif ws == "hour":
+        elif ws == "hour" and st.mode != "week":
             # the weekly strip pulses, and the logo gives way to SEASON FINALE every other turn
             gfx.box(6, 19, 76, 3, PINK if (t // 220) % 2 == 0 else WHITE)
             gfx.meter(6, 20, 76, 1, st.week, CYAN, (30, 30, 60))
@@ -482,8 +482,9 @@ class Theme(S.Theme):
                 gfx.text("SEASON FINALE", 2, -2, PINK, font.sins, shadow=YELLOW)
         elif ws in ("ten", "minute", "ten_s"):
             self.season_clock(st)
-            gfx.box(6, 19, 76, 3, PINK if (t // 160) % 2 == 0 else WHITE)
-            gfx.meter(6, 20, 76, 1, st.week, CYAN, (30, 30, 60))
+            if st.mode != "week":
+                gfx.box(6, 19, 76, 3, PINK if (t // 160) % 2 == 0 else WHITE)
+                gfx.meter(6, 20, 76, 1, st.week, CYAN, (30, 30, 60))
 
     def season_clock(self, st):
         """The weekly countdown in the corner clock's place, in pink."""
@@ -497,10 +498,12 @@ class Theme(S.Theme):
         """The runner's explosive collar: 10 lights = the 5-hour budget.
 
         Green = charge left, amber = half a light, dark red = spent. Under two
-        lights the rest flash red. The strip under the band is the weekly budget.
+        lights the rest flash red. The strip under the band is the weekly budget. In "week" mode
+        the lights are the week, the ones likely spent by the reset go dark now and then, and there
+        is no strip.
         """
-        units = st.hearts
         stale = self.lost is not None       # the connection is lost: the last known charge, in grey
+        units = st.hearts if stale else S.icon_units(st, st.hearts, t)
         gfx.box(x, y + 1, 84, 7, (58, 62, 74))
         gfx.box(x, y + 1, 84, 1, (110, 116, 132))
         gfx.box(x, y, 4, 9, (120, 126, 142))
@@ -526,8 +529,9 @@ class Theme(S.Theme):
             if units is not None and units - i * 2 >= 1 and not flash:
                 gfx.box(cx - 1, y + 3, 1, 1, (255, 255, 255))
         # weekly budget: a thin charge strip under the collar, with the pace tick
-        gfx.meter(x + 4, y + 10, 76, 1, st.week, (150, 150, 160) if stale else CYAN, (30, 30, 60))
-        S.pace_tick(st, x + 4, y + 10, 76, 1)
+        if st.mode != "week":
+            gfx.meter(x + 4, y + 10, 76, 1, st.week, (150, 150, 160) if stale else CYAN, (30, 30, 60))
+            S.pace_tick(st, x + 4, y + 10, 76, 1)
 
     def rtext(self, s, c):
         x = 158 - gfx.width(s, font.sins)
@@ -573,7 +577,7 @@ class Theme(S.Theme):
             msg, self.pace_kind = pc
             return msg
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
-            return "COLLAR LOW! RECHARGE " + gfx.countdown(st.left5)
+            return "COLLAR LOW! RECHARGE " + gfx.countdown(S.life_left(st))
         tc = S.tier_caption(st, t, "ULTRA RATINGS: HYPERSPACE!")
         if tc:
             return tc

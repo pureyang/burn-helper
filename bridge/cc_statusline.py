@@ -30,10 +30,20 @@ def env(name, default=None):
 FULL, HALF, EMPTY = "♥", "❥", "♡"
 
 
-def hearts(used):
+END = "│"       # weekly-only mode: where the week likely ends, at this pace
+
+
+def hearts(used, end=None):
+    """Ten hearts for the percent used. end: the percent likely used at the reset, marked by a bar
+    after the last heart likely left then (before the first when none are)."""
     half_units = max(0, min(20, int(round((100.0 - used) / 5.0))))
     out = ""
+    mark = None
+    if end is not None and end > used:
+        mark = max(0, min(half_units, int(round((100.0 - end) / 5.0)))) // 2
     for i in range(10):
+        if i == mark:
+            out += END
         r = half_units - i * 2
         out += FULL if r >= 2 else (HALF if r == 1 else EMPTY)
     return out
@@ -76,7 +86,7 @@ def num(v):
 
 
 def report(d):
-    """Send the rate limits to the bridge; returns its weekly pace, or None."""
+    """Send the rate limits to the bridge; returns its answer ({"pace", "mode"}), or None."""
     rl = d.get("rate_limits")
     if not isinstance(rl, dict) or not rl:
         return None
@@ -92,8 +102,7 @@ def report(d):
             got = json.loads(r.read(8192).decode("utf-8") or "{}")
     except Exception:  # noqa: BLE001
         return None
-    p = got.get("pace") if isinstance(got, dict) else None
-    return p if isinstance(p, dict) else None
+    return got if isinstance(got, dict) else None
 
 
 def day_hour(ts):
@@ -105,9 +114,10 @@ def day_hour(ts):
     return "%s %d%s" % (time.strftime("%a", t), t.tm_hour % 12 or 12, "am" if t.tm_hour < 12 else "pm")
 
 
-def pace_text(p):
+def pace_text(p, week=False):
     """What goes after the week's percent: the pace's sign and, when there is something to say, a
-    few words. Every forecast says "at this pace" and carries a ~."""
+    few words. Every forecast says "at this pace" and carries a ~. week: weekly-only mode, where
+    5-hour windows mean nothing."""
     s = p.get("s")
     if s == 3:
         return "✗"
@@ -120,18 +130,21 @@ def pace_text(p):
                                          else "%dh" % max(1, early // 3600))
         return ("! " if s == 2 else "≈ ") + out
     if p.get("room"):
-        win = num(p.get("win"))
+        win = None if week else num(p.get("win"))
         return "✓ " + ("~%.1f full 5h windows left" % win if win else "%d%% left" % (p.get("left") or 0))
     if p.get("eased"):
         return "✓ pace eased"
     return "✓"
 
 
-def line(d, pace=None):
+def line(d, pace=None, mode=None):
+    """mode: the bridge's limit mode, "5h" or "week" (weekly only: the hearts are the week, with a
+    bar where it likely ends); None with no bridge, when the hearts follow what Claude Code reports."""
     parts = []
     rl = d.get("rate_limits") if isinstance(d.get("rate_limits"), dict) else {}
     now = time.time()
-    five = rl.get("five_hour") if isinstance(rl.get("five_hour"), dict) else None
+    week = mode == "week"
+    five = rl.get("five_hour") if isinstance(rl.get("five_hour"), dict) and not week else None
     seven = rl.get("seven_day") if isinstance(rl.get("seven_day"), dict) else None
 
     def used_of(w):
@@ -145,7 +158,8 @@ def line(d, pace=None):
     u7, r7 = used_of(seven)
     basis = u5 if u5 is not None else u7
     if basis is not None:
-        parts.append(hearts(basis))
+        end = num(pace.get("f")) if week and isinstance(pace, dict) and u5 is None else None
+        parts.append(hearts(basis, end))
     if u5 is not None:
         s = "5h %d%%" % round(u5)
         if r5 and r5 > now:
@@ -153,9 +167,11 @@ def line(d, pace=None):
         parts[-1] += " " + s
     if u7 is not None:
         s = "7d %d%%" % round(u7)
-        mark = pace_text(pace) if isinstance(pace, dict) else ""
+        mark = pace_text(pace, week) if isinstance(pace, dict) else ""
         if mark:
             s += " " + mark
+        if week and isinstance(pace, dict) and pace.get("s") in (0, None) and num(pace.get("f")) is not None:
+            s += " ends ~%d%%" % min(100, round(num(pace["f"])))     # likely used at the reset
         if r7 and r7 > now and not (pace and pace.get("s") == 2):
             s += " (%s %s)" % ("resets in" if pace and pace.get("s") == 1 else "in", left(r7, now))
         parts.append(s)
@@ -177,14 +193,16 @@ def main():
             d = {}
     except Exception:  # noqa: BLE001
         d = {}
-    pace = None
+    pace = mode = None
     try:
-        pace = report(d)          # first: its answer carries the weekly pace
+        got = report(d) or {}     # first: its answer carries the weekly pace and the limit mode
+        pace = got.get("pace") if isinstance(got.get("pace"), dict) else None
+        mode = got.get("mode") if got.get("mode") in ("5h", "week") else None
     except Exception:  # noqa: BLE001
         pass
     out = ""
     try:
-        out = line(d, pace)
+        out = line(d, pace, mode)
     except Exception:  # noqa: BLE001
         out = ""
     try:

@@ -553,17 +553,19 @@ class Theme(S.Theme):
         gfx.box(0, 21, 160, 1, (200, 180, 150))
         stale = self.lost is not None          # the connection is lost: the last known numbers, in grey
         low = st.hearts is not None and st.hearts <= 4 and not stale
-        self.draw_chocolates(st.hearts, 1, 1, low and S.blink(t, 300), stale)
-        # time until the box refills (the 5-hour window resets)
+        # in "week" mode the chocolates likely eaten by the reset go now and then
+        self.draw_chocolates(st.hearts if stale else S.icon_units(st, st.hearts, t), 1, 1, low and S.blink(t, 300), stale)
+        # time until the box refills (the 5-hour window resets, or the week in "week" mode)
         screen.blit(self.clock, vec2(69, 2))
-        gfx.text(S.cd5(st), 76, -2, gfx.countdown_color(st.left5, INK, (190, 120, 20), RED), font.sins)
+        gfx.text(S.cd_life(st), 76, -2, gfx.countdown_color(S.life_left(st), INK, (190, 120, 20), RED), font.sins)
         miles = str(min(st.tools, 99999))
         w = gfx.width(miles, font.sins)
         gfx.text(miles, 158 - w, -2, INK, font.sins)
         screen.blit(self.shoe, vec2(int(158 - w - 9), 2))
-        # the weekly budget as a road from coast to coast
-        gfx.box(69, 13, 88, 6, (96, 92, 92))
-        if st.week is not None:
+        # the weekly budget as a road from coast to coast (none in "week" mode, where the box is the week)
+        if st.mode != "week":
+            gfx.box(69, 13, 88, 6, (96, 92, 92))
+        if st.week is not None and st.mode != "week":
             fw = int(88 * st.week)
             gfx.box(69, 13, fw, 6, (76, 72, 72))
             for x in range(71, 69 + fw - 4, 10):
@@ -861,7 +863,7 @@ class Theme(S.Theme):
             gift(70, 2)
             gfx.text("WK", 82, -2, GIFT_BROWN, font.sins)
             gfx.text(gfx.countdown(st.left7), 98, -2, GIFT_BROWN, font.sins)
-        if wk in ("six", "hour", "ten"):
+        if wk in ("six", "hour", "ten") and st.mode != "week":     # (no road in "week" mode)
             if wk == "hour":
                 k = 0.5 + 0.5 * math.sin(t / 160.0)
                 g = 1 + int(1.4 * k)

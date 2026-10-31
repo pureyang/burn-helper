@@ -457,6 +457,11 @@ def main():
                     help="the weekly pace's end-of-week note: in the last 12 hours of a week with 20%% or "
                          "more left, say so once on the badge and in Desktop mode and the status line "
                          "(off unless you turn it on; set on the bridge computer)")
+    ap.add_argument("--limit", choices=("auto", "5h", "week"),
+                    help="what the hearts show: 5h (the 5-hour limit, the weekly one on its meter), week (a "
+                         "plan with only a weekly limit: the hearts are the week, with where it likely ends), "
+                         "or auto (week once Claude Code reports no 5-hour limit; the default). Set on the "
+                         "bridge computer")
     ap.add_argument("--find-bridge", action="store_true",
                     help="print the join address of a bridge already on this network, if there is one")
     args = ap.parse_args()
@@ -535,6 +540,19 @@ def main():
             notes.append("Room-left note %s: %s" % (args.room_left, "in the last 12 hours of a week with 20% or more "
                          "left, the badge says so once and Desktop mode and the status line show it."
                          if args.room_left == "on" else "the week's end says nothing about what is left."))
+    if args.limit and not args.uninstall:
+        if args.bridge:
+            notes.append("The limit mode is the bridge's to choose: run --limit on the bridge computer.")
+        elif args.dry_run:
+            print("Would set the limit mode to %s." % args.limit)
+        else:
+            import pace
+            pace.set_limit(STATE_DIR, args.limit)
+            notes.append("Limit mode %s: %s" % (args.limit, {
+                "5h": "the hearts are the 5-hour limit, the weekly one is the meter under them.",
+                "week": "the hearts are the weekly limit, with no meter under them; the ones likely "
+                        "spent by the reset blink.",
+                "auto": "weekly once Claude Code reports no 5-hour limit, else the 5-hour one."}[args.limit]))
     if args.dry_run:
         print(diff(old_text, new) or "settings.json: already up to date")
         if not args.no_launchd:

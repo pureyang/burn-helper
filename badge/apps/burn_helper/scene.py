@@ -63,8 +63,10 @@ class Status:
 
     def __init__(self):
         self.level = SLEEP
-        self.hearts = None      # remaining 5-hour budget, half units 0..20
+        self.hearts = None      # remaining 5-hour budget, half units 0..20 (the weekly one in "week" mode)
         self.week = None        # remaining 7-day budget, 0..1
+        self.mode = "5h"        # what the hearts show: "5h", or "week" on a plan with only a weekly limit
+        self.hearts_end = None  # "week" mode: half hearts likely left at the reset, at this pace, or None
         self.busy = 0
         self.agents = 0         # busy sessions + running subagents
         self.tier = 0           # 0 none working, 1..MAX_TIER (see tier_for)
@@ -132,6 +134,10 @@ class Status:
         self.used7 = wk.get("used")
         self.reset7 = None if wk.get("stale") else wk.get("resets_at")
         self.pace = pace_of(d.get("pace"))
+        self.mode = "week" if d.get("mode") == "week" else "5h"
+        he = d.get("hearts_end")
+        self.hearts_end = None if he is None or self.hearts is None or self.mode != "week" \
+            else max(0, min(self.hearts, int(he)))
         self.busy = int(d.get("busy") or 0)
         self.waiting = int(d.get("waiting") or 0)
         wl = []
@@ -354,6 +360,34 @@ def cd5(st):
     return ("~" if st.est5 and st.left5 is not None and st.left5 > 0 else "") + gfx.countdown(st.left5)
 
 
+# Two limit modes (the bridge's "mode"): "5h", where the hearts are the 5-hour limit and the meter
+# under them the weekly one; and "week", for a plan with only a weekly limit, where the hearts are
+# the week and their clock the weekly reset, with no weekly meter under them (it would only say the
+# same). In "week" mode the hearts likely spent by the reset, at this pace, blink out now and then:
+# what stays lit is where the week is likely to end.
+BURN_MS = 2000                # "week" mode: the hearts likely spent by the reset go dark
+BURN_OFF_MS = 700             # for this long every BURN_MS
+
+
+def life_left(st):
+    """Microseconds until the hearts refill: the 5-hour reset, or the weekly one in "week" mode."""
+    return st.left7 if st.mode == "week" else st.left5
+
+
+def cd_life(st):
+    """The hearts' countdown as the HUD shows it (see cd5)."""
+    return gfx.countdown(st.left7) if st.mode == "week" else cd5(st)
+
+
+def icon_units(st, units, t):
+    """The half units to draw the hearts (each theme's icons) with at t: in "week" mode, now and
+    then the ones likely spent by the reset go dark, leaving what is likely left then."""
+    e = st.hearts_end
+    if units is None or e is None or e >= units or not st.online:
+        return units
+    return e if t % BURN_MS >= BURN_MS - BURN_OFF_MS else units
+
+
 def week_stage(st):
     """The weekly reset's stage now ("six", "hour", "ten", "minute", "ten_s", "zero") or None."""
     us = st.left7
@@ -495,8 +529,9 @@ def as_of(st):
 def last_usage(st):
     """The usage left at the last data, in one line: "AS OF 12:41: 5H 95% WK 42%"."""
     p5, p7 = pct5(st), pct7(st)
-    nums = "5H %s WK %s" % ("--" if p5 is None else ("~%d%%" if st.est5 else "%d%%") % p5,
-                            "--" if p7 is None else "%d%%" % p7)
+    wk = "--" if p7 is None else "%d%%" % p7
+    nums = ("WEEK " + wk) if st.mode == "week" else \
+        "5H %s WK %s" % ("--" if p5 is None else ("~%d%%" if st.est5 else "%d%%") % p5, wk)
     return (as_of(st) + ": " + nums) if st.seen_clock else "LAST: " + nums
 
 
@@ -582,7 +617,7 @@ def pace_lines(st):
     s = pc["s"]
     if s == PACE_OUT:
         return [("WEEKLY LIMIT REACHED", PACE_INK[3])]
-    win = pc["win"] if pc["win"] is not None and pc["win"] < 10 else None
+    win = pc["win"] if pc["win"] is not None and pc["win"] < 10 and st.mode != "week" else None
     out = "AT THIS PACE OUT ~" + pc["at"] if pc["at"] else "AT THIS PACE IT RUNS OUT"
     if s == PACE_WARN:
         early = early_text(pc["early"])

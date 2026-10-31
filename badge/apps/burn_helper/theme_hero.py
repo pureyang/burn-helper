@@ -460,7 +460,7 @@ class Theme(S.Theme):
             hot = (w == "ten" or w == "minute" or w == "ten_s") and (t // 250) % 2 == 0
             gfx.text(cd, 158 - wd, -2, WHITE if hot else JAR_BLUE, font.sins)
             screen.blit(self.jar, vec2(int(158 - wd - 9), 1))
-        if w != "zero":
+        if w != "zero" and st.mode != "week":     # the magic meter calls attention (none in "week" mode)
             a = int(110 + 120 * (0.5 + 0.5 * math.sin(t / (260.0 if (w == "six" or w == "hour") else 130.0))))
             screen.pen = color.rgb(GOLD[0], GOLD[1], GOLD[2], a)
             screen.rectangle(76, 18, 81, 1)
@@ -483,22 +483,27 @@ class Theme(S.Theme):
         screen.blit(self.ocarina, vec2(ox, 12))
         gfx.text("x?" if stale else "x%d" % st.waiting, ox + 10, 9, WHITE, font.sins)
 
-        # time until the hearts refill (the 5-hour window resets)
-        cd = S.cd5(st)
+        # time until the hearts refill (the 5-hour window resets, or the week in "week" mode)
+        cd = S.cd_life(st)
         w = gfx.width(cd, font.sins)
         if 158 - w - 10 >= 76 + gfx.width("-LIFE-", font.sins):
             gfx.text("-LIFE-", 76, -2, RED, font.sins)     # dropped when the long final-seconds count needs the room
-        gfx.text(cd, 158 - w, -2, gfx.countdown_color(st.left5, WHITE), font.sins)
+        gfx.text(cd, 158 - w, -2, gfx.countdown_color(S.life_left(st), WHITE), font.sins)
         screen.blit(self.clock, vec2(int(158 - w - 8), 2))
         low = st.hearts is not None and st.hearts <= 4
         if stale:
             gfx.draw_hearts(self.hearts_stale, st.hearts, 76, 9, unknown=self.hearts_grey)
-            gfx.meter(77, 19, 79, 2, st.week, (130, 130, 130), (44, 44, 44))
+            if st.mode != "week":
+                gfx.meter(77, 19, 79, 2, st.week, (130, 130, 130), (44, 44, 44))
         else:
-            gfx.draw_hearts(self.hearts, st.hearts, 76, 9, blink=low and S.blink(t, 300), unknown=self.hearts_grey)
-            # magic meter under the hearts = weekly budget, with the pace tick
-            gfx.meter(77, 19, 79, 2, st.week, (48, 200, 64), (36, 52, 36))
-            S.pace_tick(st, 77, 19, 79, 2)
+            # in "week" mode the hearts likely spent by the reset go dark now and then
+            gfx.draw_hearts(self.hearts, S.icon_units(st, st.hearts, t), 76, 9, blink=low and S.blink(t, 300),
+                            unknown=self.hearts_grey)
+            # magic meter under the hearts = weekly budget, with the pace tick (none in "week" mode,
+            # where the hearts are the week)
+            if st.mode != "week":
+                gfx.meter(77, 19, 79, 2, st.week, (48, 200, 64), (36, 52, 36))
+                S.pace_tick(st, 77, 19, 79, 2)
         if not st.online and S.blink(t, 600):
             gfx.text("?", 62, 4, RED, font.sins)
 
@@ -544,7 +549,7 @@ class Theme(S.Theme):
             msg, self.pace_kind = pc
             return msg
         if st.hearts is not None and st.hearts <= 4 and (t // 3000) % 2:
-            return "LOW HEARTS! REFILL IN " + gfx.countdown(st.left5)
+            return "LOW HEARTS! REFILL IN " + gfx.countdown(S.life_left(st))
         tc = S.tier_caption(st, t, "HYPERSPACE JUMP!")
         if tc:
             return tc

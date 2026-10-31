@@ -680,8 +680,15 @@ BAT_FAKE = {"batlow": (False, False, 3.40, 18), "batcrit": (False, False, 3.28, 
 def apply_test_state():
     """Show a state that is hard to catch for real, over what the bridge says (USB "@STATE name").
     est: a new 5-hour window nobody has reported (full hearts, a ~ countdown); nobridge: no data;
-    batlow, batcrit: the battery warning (18% and 7%, unplugged), whatever the battery really is."""
-    if test_state == "est":
+    batlow, batcrit: the battery warning (18% and 7%, unplugged), whatever the battery really is;
+    week: "week" mode (a plan with only a weekly limit), 6 hearts now and 3 likely left at the reset."""
+    if test_state == "week":
+        st.mode, st.hearts, st.hearts_end, st.used7, st.used5 = "week", 12, 6, 40, None
+        st.left7 = (2 * 86400 + 5 * 3600) * 1000000 - (time.ticks_ms() % 1000) * 1000
+        st.week = 0.6
+        if st.pending == "refill":
+            st.pending = None                # the bridge's hearts after the test's own: no refill
+    elif test_state == "est":
         st.used5, st.est5, st.hearts = None, True, 20
         st.left5 = (4 * 3600 + 49 * 60) * 1000000 - (time.ticks_ms() % 1000) * 1000
         st.usage_state = "est"
