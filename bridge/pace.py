@@ -88,6 +88,42 @@ def set_room(state_dir, on):
     return False
 
 
+# Which limit the hearts show: "5h" (the 5-hour window, the weekly one on its meter) or "week" (a plan
+# with only a weekly limit: the hearts are the week, with where the week is likely to end). "auto"
+# picks "week" once the status line reports a weekly window and no 5-hour one.
+LIMIT_MODES = ("auto", "5h", "week")
+
+
+def limit_file(state_dir):
+    return os.path.join(state_dir, "limit_mode")
+
+
+def limit_setting(state_dir):
+    """The chosen mode: "auto" (the default), "5h" or "week"."""
+    try:
+        with open(limit_file(state_dir)) as f:
+            v = f.read(16).strip().lower()
+    except OSError:
+        return "auto"
+    return v if v in LIMIT_MODES else "auto"
+
+
+def set_limit(state_dir, mode):
+    """Choose the mode (the bridge checks it as it goes). True if it changed."""
+    if mode not in LIMIT_MODES:
+        raise ValueError(mode)
+    if limit_setting(state_dir) == mode:
+        return False
+    path = limit_file(state_dir)
+    if mode == "auto":
+        os.remove(path)
+    else:
+        os.makedirs(state_dir, exist_ok=True)
+        with open(path, "w") as f:
+            f.write(mode + "\n")
+    return True
+
+
 # ---------------------------------------------------------------- the forecast
 def phi(x):
     return _N.cdf(x)

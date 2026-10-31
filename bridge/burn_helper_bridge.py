@@ -192,6 +192,7 @@ class Bridge:
         self.est_start = None          # when work first began after the 5-hour window ended (a new window
         #                                starts then, though no status line has reported it yet)
         self.seven_day = None
+        self.has5 = None               # the last status line report had a 5-hour window (None: no report yet)
         self.pace = pace.Pace(PACE_FILE)    # the weekly pace: its history, ladder and latest verdict
         # theme
         self.theme = None
@@ -226,6 +227,7 @@ class Bridge:
         self.theme_seq = int(_num(d.get("theme_seq"), 0))
         self.last_active = _num(d.get("last_active"), 0.0)
         self.est_start = _num(d.get("est_start"), None)
+        self.has5 = d.get("has5") if isinstance(d.get("has5"), bool) else None
 
     def persist(self, force=False):
         now = time.time()
@@ -237,7 +239,7 @@ class Bridge:
                 return
             d = {"tools_today": self.tools_today, "tools_date": self.tools_date,
                  "five_hour": self.five_hour, "seven_day": self.seven_day, "est_start": self.est_start,
-                 "theme": self.theme, "theme_seq": self.theme_seq, "last_active": self.last_active}
+                 "has5": self.has5, "theme": self.theme, "theme_seq": self.theme_seq, "last_active": self.last_active}
             self._dirty = False
             self._last_persist = now
         try:
@@ -434,6 +436,12 @@ class Bridge:
         now = time.time()
         changed = False
         with self.lock:
+            if isinstance(rl.get("seven_day"), dict):
+                # a plan without a 5-hour limit reports only the weekly window (the "auto" limit mode)
+                has5 = isinstance(rl.get("five_hour"), dict) and _num(rl["five_hour"].get("used_percentage")) is not None
+                if has5 != self.has5:
+                    self.has5 = has5
+                    changed = True
             for key in ("five_hour", "seven_day"):
                 w = rl.get(key)
                 if not isinstance(w, dict):
@@ -463,6 +471,13 @@ class Bridge:
         room = pace.room_enabled(STATE_DIR)
         with self.lock:
             self.pace.step(time.time(), s["seven_day"], s["level"] >= 2, room)
+
+    def limit_mode(self):
+        """What the hearts show: "5h", or "week" for a plan with only a weekly limit (pace.LIMIT_MODES)."""
+        mode = pace.limit_setting(STATE_DIR)
+        if mode == "auto":
+            mode = "week" if self.has5 is False else "5h"
+        return mode
 
     def set_theme(self, theme):
         theme = LEGACY_THEMES.get(theme, theme)
@@ -520,9 +535,12 @@ class Bridge:
             if self._today() != self.tools_date:
                 self.tools_date, self.tools_today = self._today(), 0
             tools_today = self.tools_today
-            five = self._window(self.five_hour, now, self.last_active, self.est_start, 5 * 3600)
+            mode = self.limit_mode()
+            raw5 = self.five_hour if mode == "5h" else None      # weekly only: an old 5-hour window means nothing
+            five = self._window(raw5, now, self.last_active, self.est_start, 5 * 3600)
             seven = self._window(self.seven_day, now, self.last_active)
             theme, theme_seq, last_active = self.theme, self.theme_seq, self.last_active
+            pc = self.pace.out
             live = {w[3] for w in loc.get("waiting_list", [])}
             for sid in [s for s in self.why if s not in live and s not in self.remote]:
                 del self.why[sid]
@@ -551,6 +569,10 @@ class Bridge:
         elif basis is not None and basis["used"] is not None:
             hearts = int(round((100.0 - basis["used"]) / 5.0))
             hearts = max(0, min(20, hearts))
+        # weekly only: the hearts likely left when the week resets, at this pace (the pace's forecast)
+        hearts_end = None
+        if mode == "week" and hearts is not None and pc and pc.get("f") is not None:
+            hearts_end = max(0, min(hearts, int(round((100.0 - pc["f"]) / 5.0))))
 
         return {
             "v": 1,
@@ -576,10 +598,14 @@ class Bridge:
             "seven_day": seven,
             # why the hearts show what they show: ok (a recent report), old (no report for 30 minutes or
             # more), est (a new window the bridge has not been told about), stale, or none (never)
-            "usage": usage_state(self.five_hour, self.seven_day, five, now),
+            "usage": usage_state(raw5, self.seven_day, five, now),
             # the weekly pace: is the week on course to reach its limit before the reset (bridge/pace.py)
-            "pace": self.pace.out,
+            "pace": pc,
+            # what the hearts show: "5h" (the 5-hour window) or "week" (a plan with only a weekly
+            # limit; then hearts_end is how many half hearts are likely left at the reset)
+            "mode": mode,
             "hearts": hearts,
+            "hearts_end": hearts_end,
             "theme": theme,
             "theme_seq": theme_seq,
             "last_active": int(last_active or 0),
@@ -672,7 +698,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": True})
             elif path == "/usage":
                 ok = BRIDGE.on_usage(d)
-                self._send(200, {"ok": ok, "pace": BRIDGE.pace.out})     # the status line shows the pace
+                # the status line shows the pace, and in weekly-only mode where the week likely ends
+                self._send(200, {"ok": ok, "pace": BRIDGE.pace.out, "mode": BRIDGE.limit_mode()})
             elif path == "/theme":
                 ok = BRIDGE.set_theme(d.get("theme"))
                 if ok:
