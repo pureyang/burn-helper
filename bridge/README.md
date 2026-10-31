@@ -158,7 +158,7 @@ goes, with no restart).
 
 What the hearts show. `5h`: the 5-hour limit, with the weekly one on the meter under them. `week`,
 for a plan with only a weekly limit: the hearts are the week, their clock counts down to the weekly
-reset, the meter under them is the week's time left, and the hearts likely spent by the reset (at
+reset, there is no weekly meter under them, and the hearts likely spent by the reset (at
 this pace) go dark for 0.7 s every 2 s, so what stays lit is where the week is likely to end. The
 default, `auto`, is `week` once the status line reports a weekly window and no 5-hour one. Choose
 with `--limit 5h`, `--limit week` or `--limit auto` on the bridge install (it writes `limit_mode`

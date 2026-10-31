@@ -685,7 +685,7 @@ def apply_test_state():
     if test_state == "week":
         st.mode, st.hearts, st.hearts_end, st.used7, st.used5 = "week", 12, 6, 40, None
         st.left7 = (2 * 86400 + 5 * 3600) * 1000000 - (time.ticks_ms() % 1000) * 1000
-        st.week = st.left7 / S.WEEK_US
+        st.week = 0.6
         if st.pending == "refill":
             st.pending = None                # the bridge's hearts after the test's own: no refill
     elif test_state == "est":

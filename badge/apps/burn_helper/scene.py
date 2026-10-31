@@ -64,7 +64,7 @@ class Status:
     def __init__(self):
         self.level = SLEEP
         self.hearts = None      # remaining 5-hour budget, half units 0..20 (the weekly one in "week" mode)
-        self.week = None        # remaining 7-day budget, 0..1 (in "week" mode: the week's time left)
+        self.week = None        # remaining 7-day budget, 0..1
         self.mode = "5h"        # what the hearts show: "5h", or "week" on a plan with only a weekly limit
         self.hearts_end = None  # "week" mode: half hearts likely left at the reset, at this pace, or None
         self.busy = 0
@@ -258,9 +258,6 @@ class Status:
         now = self._now_us()
         self.left5 = None if (now is None or not self.reset5) else int(self.reset5) * 1000000 - now
         self.left7 = None if (now is None or not self.reset7) else int(self.reset7) * 1000000 - now
-        if self.mode == "week":
-            # the hearts are the week's budget; the meter under them is the week's time left
-            self.week = None if self.left7 is None else max(0.0, min(1.0, self.left7 / WEEK_US))
 
 
 class Layer:
@@ -365,10 +362,9 @@ def cd5(st):
 
 # Two limit modes (the bridge's "mode"): "5h", where the hearts are the 5-hour limit and the meter
 # under them the weekly one; and "week", for a plan with only a weekly limit, where the hearts are
-# the week, their clock the weekly reset, and the meter under them the week's time left. In "week"
-# mode the hearts likely spent by the reset, at this pace, blink out now and then: what stays lit
-# is where the week is likely to end.
-WEEK_US = 7 * 86400 * 1000000
+# the week and their clock the weekly reset, with no weekly meter under them (it would only say the
+# same). In "week" mode the hearts likely spent by the reset, at this pace, blink out now and then:
+# what stays lit is where the week is likely to end.
 BURN_MS = 2000                # "week" mode: the hearts likely spent by the reset go dark
 BURN_OFF_MS = 700             # for this long every BURN_MS
 
@@ -520,7 +516,7 @@ def pct7(st):
     """Percent of the weekly limit left, or None when unknown."""
     if st.used7 is not None:
         return max(0, min(100, int(100 - st.used7 + 0.5)))
-    if st.week is not None and st.mode != "week":     # in "week" mode st.week is the time left
+    if st.week is not None:
         return int(st.week * 100 + 0.5)
     return None
 
@@ -581,12 +577,11 @@ def early_text(secs):
     return "%dM" % max(1, secs // 60)
 
 
-def pace_tick(st, x, y, w, h, calm=(255, 255, 255), edge=None, budget=False):
+def pace_tick(st, x, y, w, h, calm=(255, 255, 255), edge=None):
     """The pace tick on a weekly meter at (x, y, w, h), with a 1-pixel edge either side on a light
-    background. Not drawn while the data is lost, or once the limit is reached, or on a theme's
-    meter in "week" mode, which shows the time left (budget: the meter is the weekly budget)."""
+    background. Not drawn while the data is lost, or once the limit is reached."""
     pc = st.pace
-    if pc is None or st.week is None or not st.online or pc["s"] == PACE_OUT or (st.mode == "week" and not budget):
+    if pc is None or st.week is None or not st.online or pc["s"] == PACE_OUT:
         return
     tx = min(x + w - 1, x + (w * (100 - pc["even"]) + 50) // 100)
     if edge is not None:

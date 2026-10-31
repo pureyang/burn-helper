@@ -188,8 +188,8 @@ flash once less than 20% is left.
 ![Forrest usage meter](img/meter_chocolates.png)
 
 **Plans with only a weekly limit.** On a plan with no 5-hour limit, the icons are the weekly limit
-(`week` mode). Their countdown is the weekly reset, and the meter under them is the time left in
-the week: a row of icons longer than the meter is under pace. The icons likely spent by the reset,
+(`week` mode). Their countdown is the weekly reset, and the weekly meter is gone, since the icons
+say the same. The icons likely spent by the reset,
 at this pace, go dark for 0.7 s every 2 s. What stays lit is where the week is likely to end. If the
 week is on course to run out, every icon goes dark. Desktop mode shows the week, then `AT RESET
 ~30% LEFT`. The status line marks the spot with a bar: `♥♥♥│♥♥♥♡♡♡♡ · 7d 40% ✓ ends ~70%`. The

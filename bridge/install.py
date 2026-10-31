@@ -550,8 +550,8 @@ def main():
             pace.set_limit(STATE_DIR, args.limit)
             notes.append("Limit mode %s: %s" % (args.limit, {
                 "5h": "the hearts are the 5-hour limit, the weekly one is the meter under them.",
-                "week": "the hearts are the weekly limit; the ones likely spent by the reset blink, and the "
-                        "meter under them is the time left in the week.",
+                "week": "the hearts are the weekly limit, with no meter under them; the ones likely "
+                        "spent by the reset blink.",
                 "auto": "weekly once Claude Code reports no 5-hour limit, else the 5-hour one."}[args.limit]))
     if args.dry_run:
         print(diff(old_text, new) or "settings.json: already up to date")

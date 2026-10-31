@@ -76,7 +76,6 @@ st.online = True
 st.tick()
 assert st.mode == "week" and st.hearts == 12 and st.hearts_end == 6
 assert S.life_left(st) == st.left7 and S.cd_life(st) == S.gfx.countdown(st.left7)
-assert abs(st.week - 2 / 7.0) < 0.01, "the meter is the week's time left"
 assert S.pct7(st) == 60
 lit = [S.icon_units(st, st.hearts, t) for t in range(0, S.BURN_MS, 50)]
 assert set(lit) == {12, 6} and lit.count(6) * 50 == S.BURN_OFF_MS, "the likely-spent hearts go dark 0.7 s in 2 s"
@@ -88,7 +87,7 @@ assert S.last_usage(st).endswith("WEEK 60%"), S.last_usage(st)
 st5 = S.Status()
 st5.update(dict(b.status(), mode="5h", hearts_end=6))
 assert st5.hearts_end is None and S.icon_units(st5, 12, S.BURN_MS - 1) == 12, "5h mode: no forecast on the hearts"
-print("PASS badge week mode: weekly hearts and clock, the time-left meter, the likely-spent hearts go dark")
+print("PASS badge week mode: weekly hearts and clock, no weekly meter, the likely-spent hearts go dark")
 
 # the status line: a bar where the week likely ends, and no 5-hour figures
 d = {"rate_limits": {"five_hour": {"used_percentage": 10, "resets_at": now + 3600},

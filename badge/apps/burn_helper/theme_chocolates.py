@@ -562,9 +562,10 @@ class Theme(S.Theme):
         w = gfx.width(miles, font.sins)
         gfx.text(miles, 158 - w, -2, INK, font.sins)
         screen.blit(self.shoe, vec2(int(158 - w - 9), 2))
-        # the weekly budget as a road from coast to coast
-        gfx.box(69, 13, 88, 6, (96, 92, 92))
-        if st.week is not None:
+        # the weekly budget as a road from coast to coast (none in "week" mode, where the box is the week)
+        if st.mode != "week":
+            gfx.box(69, 13, 88, 6, (96, 92, 92))
+        if st.week is not None and st.mode != "week":
             fw = int(88 * st.week)
             gfx.box(69, 13, fw, 6, (76, 72, 72))
             for x in range(71, 69 + fw - 4, 10):
@@ -862,7 +863,7 @@ class Theme(S.Theme):
             gift(70, 2)
             gfx.text("WK", 82, -2, GIFT_BROWN, font.sins)
             gfx.text(gfx.countdown(st.left7), 98, -2, GIFT_BROWN, font.sins)
-        if wk in ("six", "hour", "ten"):
+        if wk in ("six", "hour", "ten") and st.mode != "week":     # (no road in "week" mode)
             if wk == "hour":
                 k = 0.5 + 0.5 * math.sin(t / 160.0)
                 g = 1 + int(1.4 * k)

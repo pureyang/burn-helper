@@ -182,7 +182,7 @@ def desktop(c, t):
         line, ink = resets(left, est) or no_report(st), gfx.countdown_color(left, DIM)
         if label == "WEEK" and lost is None:
             # the weekly pace: its tick on the meter, and its lines in turn with the reset
-            S.pace_tick(st, 4, y + 12, 152, 3, FG, budget=True)
+            S.pace_tick(st, 4, y + 12, 152, 3, FG)
             turns = S.pace_lines(st) if left is not None and not week else []
             k = (t // S.PACE_LINE_MS) % (len(turns) + 1)
             if k:

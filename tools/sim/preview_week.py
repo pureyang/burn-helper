@@ -40,7 +40,6 @@ def status(story, cap=""):
                "pace": dict(pc, left=100 - used, cap=cap)})
     st.online = True
     st.left7 = int((168 - hours) * 3600) * M
-    st.week = st.left7 / S.WEEK_US          # what tick() works out from the reset time
     return st
 
 
