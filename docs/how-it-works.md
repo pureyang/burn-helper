@@ -187,6 +187,17 @@ flash once less than 20% is left.
 ![Running Man usage meter](img/meter_gameshow.png)
 ![Forrest usage meter](img/meter_chocolates.png)
 
+**Plans with only a weekly limit.** On a plan with no 5-hour limit, the icons are the weekly limit
+(`week` mode). Their countdown is the weekly reset, and the meter under them is the time left in
+the week: a row of icons longer than the meter is under pace. The icons likely spent by the reset,
+at this pace, go dark for 0.7 s every 2 s. What stays lit is where the week is likely to end. If the
+week is on course to run out, every icon goes dark. Desktop mode shows the week, then `AT RESET
+~30% LEFT`. The status line marks the spot with a bar: `♥♥♥│♥♥♥♡♡♡♡ · 7d 40% ✓ ends ~70%`. The
+bridge switches on its own once Claude Code stops reporting a 5-hour limit. To choose, run
+`python3 bridge/install.py --limit week` (or `5h`, or `auto`) on the bridge computer. To see it on
+the badge, send `@STATE week` over USB (`@STATE normal` ends it), or run
+`python3 tools/sim/preview_week.py`.
+
 The countdown shows hours and minutes while the reset is far off (`2H13M`). Under an hour it
 becomes a ticking clock (`13:42`), under a minute it shows milliseconds (`42.173`), and in the
 last ten seconds microseconds (`9.173248`). It turns yellow under 10 minutes and red under one.

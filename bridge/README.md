@@ -57,7 +57,11 @@ change without reconfiguring anything.
 
 - `hearts` is the remaining five-hour budget in half-heart units, 0 to 20. It is
   `null` until a status line has reported usage. A window whose `resets_at` has
-  passed counts as 0% used.
+  passed counts as 0% used. In `week` mode it is the weekly budget.
+- `mode`: what the hearts show, `5h` or `week` (a plan with only a weekly limit; see
+  [Limit mode](#limit-mode)). In `week` mode `five_hour` is `null`, and `hearts_end` is the half
+  hearts likely left at the weekly reset at this pace (from the pace's `f`, never more than
+  `hearts`), or `null` until there is a forecast. It is `null` in `5h` mode.
 - `level`: 0 asleep, 1 awake (activity in the last 5 minutes or someone waiting),
   2 walking (any busy agent), 3 running (load 2+ or 15+ tool calls a minute),
   4 sprinting (load 4+ or 40+ tool calls a minute). Load is busy sessions plus
@@ -95,8 +99,9 @@ change without reconfiguring anything.
   empty); `room` 1 while the opt-in room-left note applies; `eased` 1 for 2 hours after the pace
   drops back to calm.
 
-`POST /usage` (the status line's report) answers `{"ok": true, "pace": {...}}` with the same
-object, which the status line shows after the week's percent.
+`POST /usage` (the status line's report) answers `{"ok": true, "pace": {...}, "mode": "5h"}` with
+the same objects; the status line shows the pace after the week's percent, and in `week` mode a
+bar in the hearts where the week likely ends.
 
 ## Other machines
 
@@ -148,6 +153,16 @@ weekly rises it has seen together. It stays on the bridge computer; `/status` ca
 verdict. The end-of-week room-left note is opt-in: `--room-left on` or `--room-left off` on the
 bridge install (it writes `pace_room.enabled` in the state folder, which the bridge checks as it
 goes, with no restart).
+
+## Limit mode
+
+What the hearts show. `5h`: the 5-hour limit, with the weekly one on the meter under them. `week`,
+for a plan with only a weekly limit: the hearts are the week, their clock counts down to the weekly
+reset, the meter under them is the week's time left, and the hearts likely spent by the reset (at
+this pace) go dark for 0.7 s every 2 s, so what stays lit is where the week is likely to end. The
+default, `auto`, is `week` once the status line reports a weekly window and no 5-hour one. Choose
+with `--limit 5h`, `--limit week` or `--limit auto` on the bridge install (it writes `limit_mode`
+in the state folder, which the bridge checks as it goes, with no restart).
 
 ## Privacy
 
