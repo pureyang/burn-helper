@@ -36,6 +36,9 @@ s2, out = run("--bridge", "http://my-mac:8787")
 assert s2 == s and "already up to date" in out, "running it again changes nothing"
 s, _ = run("--bridge", "http://my-mac:8787", "--token", "abc")
 assert s["env"]["BURN_HELPER_TOKEN"] == "abc"
+# the user's own status line stays, and the note says how to report usage from it
+_, notes = install.add_ours({"statusLine": {"type": "command", "command": "my-line"}})
+assert notes and install.STATUS_CMD in notes[0] and "never reaches the bridge" in notes[0], notes
 s, _ = run("--uninstall", "--no-launchd")
 assert s == mine, "uninstall leaves exactly what was there before: %s" % s
 

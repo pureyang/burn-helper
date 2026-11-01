@@ -152,8 +152,11 @@ def add_ours(settings, bridge_url=None, token=None):
             group = {"matcher": "", "hooks": [our_hook()]}
         hooks.setdefault(event, []).append(group)
     if "statusLine" in settings:
-        notes.append("A status line is already configured, so it was left alone. Usage hearts need "
-                     "cc_statusline.py to run; add its POST to your own status line command if you want them.")
+        notes.append("A status line is already configured, so it was left alone. Until it also runs "
+                     "cc_statusline.py, this computer's usage never reaches the bridge, and the hearts lag "
+                     "whatever you spend here. In your status line command, pipe the same input to\n  %s\n"
+                     "and discard what it prints. Leave it out only if this computer signs into a "
+                     "different Claude account." % STATUS_CMD)
     else:
         settings["statusLine"] = {"type": "command", "command": STATUS_CMD, "refreshInterval": 60}
     return settings, notes

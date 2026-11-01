@@ -192,6 +192,10 @@ def desktop(c, t):
             # says what the number is
             turns = [x for x in S.pace_lines(st) if not x[0].startswith("PACE: ")] if lost is None else []
             line, ink = turns[(t // S.PACE_LINE_MS) % len(turns)] if turns else ("AT THIS PACE", DIM)
+        if y == 10 and lost is None and st.usage_state == "old" and st.usage_age and (t // S.PACE_LINE_MS) % 2:
+            # no status line has reported for 30 minutes or more: the numbers may be behind
+            a = st.usage_age
+            line, ink = "LAST REPORT %s AGO" % ("%dH%02dM" % (a // 3600, a % 3600 // 60) if a >= 3600 else "%dM" % (a // 60)), WARN
         gfx.text(gfx.fit(line, 152, font.sins), 4, y + 13, ink, font.sins)
     gfx.box(4, 59, 152, 1, MUTED)
     # waiting for you

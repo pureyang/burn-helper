@@ -78,7 +78,18 @@ Linux, shows when the connection gets through.
   instead; run the join line there again to update it. Never prompts, file
   names, commands or tool output.
 - If you already have a status line there, it is left alone, and that computer's usage won't
-  feed the hearts. That is also the way to go if it signs into a different Claude account, so
+  reach the bridge: the hearts then lag whatever you spend there until another computer's status
+  line reports. To report it, have your status line command also pipe its input to
+  `cc_statusline.py` and discard what that prints. In PowerShell, for example, at the top of your
+  script:
+
+  ```powershell
+  $raw = $input | Out-String
+  try { $raw | & "<python.exe>" "<burn-helper>/bridge/cc_statusline.py" | Out-Null } catch {}
+  $json = $raw | ConvertFrom-Json
+  ```
+
+  Leaving it out is the way to go if that computer signs into a different Claude account, so
   the hearts don't mix two accounts.
 - Anyone who can reach port 8787 could post made-up activity. To stop that, set a shared secret:
   run `bridge/install.py --bridge <url> --token <secret>` on the joined computer, and set the same
