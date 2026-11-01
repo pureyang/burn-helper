@@ -138,7 +138,9 @@ of the week agents usually work, and how much of the week one full 5-hour window
 meters' rises between the same reports; about 27% on the bridge where this was built). It reads
 this week's use so far against the usual shape of a week, and puts odds on it from how wrong that
 reading was on past weeks. With under two weeks recorded it is still learning: the shape comes
-from the hours agents work, and the odds are wider. Forecasts always say "at this pace" and carry
+from the hours agents work, and the odds are wider. Since that shape is a guess, and one that
+expects a quiet weekend would hide a run-out in a busy one, the week is also read at an even pace
+(how Claude Code projects it), and the reading with more still to come wins. Forecasts always say "at this pace" and carry
 a `~`. The thresholds come from a study of thousands of simulated weeks of different kinds of
 users; `python3 tools/sim/test_pace.py` replays it against the bridge's code (about 80% of
 run-outs flagged 12 hours or more ahead, under 3% missed, under 2% false alarms).

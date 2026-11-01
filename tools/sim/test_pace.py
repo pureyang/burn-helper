@@ -47,6 +47,14 @@ fc = P.forecast(m, 70, 84)                       # far ahead of the usual: out b
 assert fc["final"] > 100 and fc["p"] > 0.8 and 84 < fc["eta"] < H, fc
 assert P.forecast(m, 100, 84)["p"] == 1.0
 
+# learning: a desk week expects a quiet weekend, but a busy one is also read at an even pace
+# (88% used by Saturday evening runs out on Sunday, as Claude Code projects it)
+cold = P.cold_model([P.desk(1793649600 - P.WEEK_S + b * HOUR) + 0.03 for b in range(H)])
+fc = P.forecast(cold, 88, 128.6)
+assert fc["final"] > 105 and fc["p"] > 0.8 and 128.6 + 12 < fc["eta"] < 128.6 + 30, fc
+assert P.forecast(dict(cold, n=2), 88, 128.6)["final"] < 100, "a learnt shape is read as it is"
+assert P.forecast(cold, 40, 84)["eta"] is None, "an even week stays calm"
+
 # the ladder: quiet on the first day, louder at once, quieter only after DWELL_S, then "eased"
 hot = {"p": 0.95, "eta": 40.0, "final": 130}
 cool = {"p": 0.1, "eta": None, "final": 70}
