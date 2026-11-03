@@ -207,6 +207,23 @@ After the reset it shows `RESET!` for a minute, then `FULL`. The badge redraws 2
 second, so the last digits blur by design. The countdown runs on the badge's own clock,
 synced to the bridge, so it ticks smoothly between updates.
 
+**More than one Claude account.** Each status line tags its report with the account it runs
+under: a short hash of the account id and a label, read from its config folder's `.claude.json`.
+The email itself never leaves the computer. The account signed in to `~/.claude` drives the
+theme's own icons as before. Each other account gets a row under the top bar, the same in every
+theme: its label, a countdown, and ten hearts in its own colour (blue, green, gold, purple). A
+row's hearts follow whichever of that account's limits has less left, and the countdown is that
+limit's reset. On a weekly limit, the hearts likely spent by the reset go dark now and then, as in
+`week` mode. A row goes grey when its numbers are 30 minutes old or more. There is room for four
+rows; an account with no report for two weeks drops off. To run a second account side by side with
+the first, run `python3 bridge/install.py --add-account lexco`. It makes the config folder
+`~/.claude-lexco` with the hooks, the status line and the label LEXCO, and the alias `claude-lexco`
+that runs Claude Code with that folder. Run `claude-lexco`, then `/login` once. Its own label: set
+`BURN_HELPER_LABEL` in that folder's `settings.json`. To see the rows, run
+`python3 tools/sim/preview_accounts.py`.
+
+![More than one account](img/accounts_hero.png)
+
 **How often the numbers update:** the usage percentages come from Claude Code's status line.
 The status line reruns after every Claude response and at least every 60 seconds in each
 open session (`refreshInterval` in `~/.claude/settings.json`), and the badge picks the new

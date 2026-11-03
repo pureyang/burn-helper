@@ -98,6 +98,20 @@ Linux, shows when the connection gets through.
 To leave the bridge, run the same line with `--uninstall` instead of `--join ...` (on Windows,
 `$env:BURN_HELPER_UNINSTALL=1` before the line instead of `BURN_HELPER_JOIN`).
 
+## A second Claude account
+
+To run another Claude account side by side with the first, set it up in a config folder of its own
+(see [More than one Claude account](how-it-works.md#usage-meters)). On the bridge computer:
+
+    python3 bridge/install.py --add-account lexco
+
+On a joined computer, add the bridge's address:
+
+    python3 bridge/install.py --add-account lexco --bridge http://<bridge-computer>:8787
+
+Then run `claude-lexco` and `/login` once with that account. On Windows the installer prints a
+`claude-lexco` function to add to your PowerShell profile instead of a shell alias.
+
 ## Limits
 
 - A session on a joined computer counts as waiting while it asks for permission or asks you a
