@@ -4,7 +4,8 @@
 Sources:
   * ~/.claude/sessions/*.json   live session registry written by Claude Code
   * POST /hook                  events from bridge/cc_hook.py (tool calls, subagents, remote hosts)
-  * POST /usage                 rate limits from bridge/cc_statusline.py (it answers with the weekly pace)
+  * POST /usage                 rate limits from bridge/cc_statusline.py (it answers with the weekly pace),
+                                tagged with the Claude account it comes from (a short hash and a label)
 
 Outputs:
   * GET /status                 compact JSON for the badge (counts only, no names or paths)
@@ -80,9 +81,15 @@ EVENT_ACTIVITY = {"PostToolUseFailure": "fail", "Stop": "done", "UserPromptSubmi
                   "SubagentStart": "spawn", "SubagentStop": "back", "SessionStart": "arrive"}
 ACTIVITY_KEPT = 6              # the latest few go out in /status
 ACTIVITY_MAX_AGE_S = 10
+# More than one Claude account: the main one (signed in to ~/.claude) drives the hearts as always;
+# each other account gets a row of its own under the HUD, up to ACCOUNTS_MAX of them.
+ACCOUNTS_MAX = 4
+ACCOUNT_FORGET_S = 14 * 86400  # an account with no report for this long leaves the badge
 
 HOME = os.path.expanduser(env("HOME") or "~")
 SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
+# other accounts' config folders (CLAUDE_CONFIG_DIR=~/.claude-<name>, set up by install.py
+# --add-account) keep their own sessions beside it, in ~/.claude-<name>/sessions (session_dirs)
 STATE_DIR = os.path.expanduser(env("STATE_DIR") or os.path.join(HOME, ".claude", "burn-helper"))
 OLD_STATE_DIRS = (os.path.join(HOME, ".claude", "hearts-left"), os.path.join(HOME, ".claude", "tufty-bridge"))
 STATE_FILE = os.path.join(STATE_DIR, "state.json")
@@ -170,6 +177,44 @@ def _badge_name(d):
     clean = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in str(raw))
     return " ".join(clean.split())[:40] or "session"
 
+def session_dirs():
+    """Every folder of session files to scan: ~/.claude's and each ~/.claude-<name>'s."""
+    import glob
+    home = os.path.dirname(os.path.dirname(SESSIONS_DIR))
+    return [SESSIONS_DIR] + sorted(glob.glob(os.path.join(home, ".claude-*", "sessions")))
+
+
+def merge_window(old, w, now):
+    """One window of a status line's report ({"used_percentage", "resets_at"}) taken in over what
+    was known: the new {"used", "resets_at", "rx"}, or None to keep the old one."""
+    used = _num(w.get("used_percentage"))
+    if used is None:
+        return None
+    resets = int(_num(w.get("resets_at"), 0) or 0)
+    if old and resets and old.get("resets_at"):
+        if resets < old["resets_at"]:
+            return None             # an idle session still reporting a window that has ended
+        if resets == old["resets_at"]:
+            used = max(used, old["used"])   # same window: usage only goes up
+    return {"used": round(used, 1), "resets_at": resets, "rx": now}
+
+
+def account_id(v):
+    """The status line's account tag: a short hex hash of the account id, or None."""
+    v = str(v or "")[:16].lower()
+    return v if len(v) >= 8 and all(c in "0123456789abcdef" for c in v) else None
+
+
+def account_label(v):
+    return _plain(v or "", 8).upper() or None
+
+
+def load_window(w):
+    if isinstance(w, dict) and _num(w.get("used")) is not None:
+        return {"used": _num(w["used"]), "resets_at": int(_num(w.get("resets_at"), 0)), "rx": _num(w.get("rx"), 0)}
+    return None
+
+
 class Bridge:
     def __init__(self):
         self.lock = threading.RLock()
@@ -194,6 +239,12 @@ class Bridge:
         self.seven_day = None
         self.has5 = None               # the last status line report had a 5-hour window (None: no report yet)
         self.pace = pace.Pace(PACE_FILE)    # the weekly pace: its history, ladder and latest verdict
+        # accounts: the main one (the fields above) is claimed by the first tagged report from
+        # ~/.claude (see is_main); others {hash: {"label", "five_hour", "seven_day", "has5", "seen",
+        # "pace"}}, first seen first
+        self.main_acct = None
+        self.main_label = None
+        self.others = {}
         # theme
         self.theme = None
         self.theme_seq = 0
@@ -218,10 +269,17 @@ class Bridge:
         if d.get("tools_date") == self._today():
             self.tools_today = int(_num(d.get("tools_today"), 0))
         for key in ("five_hour", "seven_day"):
-            w = d.get(key)
-            if isinstance(w, dict) and _num(w.get("used")) is not None:
-                setattr(self, key, {"used": _num(w["used"]), "resets_at": int(_num(w.get("resets_at"), 0)),
-                                    "rx": _num(w.get("rx"), 0)})
+            setattr(self, key, load_window(d.get(key)))
+        self.main_acct = account_id(d.get("main_acct"))
+        self.main_label = account_label(d.get("main_label"))
+        for a in d.get("accounts") or []:
+            acct = account_id(a.get("acct")) if isinstance(a, dict) else None
+            if acct and acct != self.main_acct:
+                self.others[acct] = {"label": account_label(a.get("label")) or "ACCT",
+                                     "five_hour": load_window(a.get("five_hour")),
+                                     "seven_day": load_window(a.get("seven_day")),
+                                     "has5": a.get("has5") if isinstance(a.get("has5"), bool) else None,
+                                     "seen": _num(a.get("seen"), 0), "pace": pace.Pace(self._pace_file(acct))}
         t = LEGACY_THEMES.get(d.get("theme"), d.get("theme"))
         self.theme = t if t in THEMES else None
         self.theme_seq = int(_num(d.get("theme_seq"), 0))
@@ -229,17 +287,26 @@ class Bridge:
         self.est_start = _num(d.get("est_start"), None)
         self.has5 = d.get("has5") if isinstance(d.get("has5"), bool) else None
 
+    @staticmethod
+    def _pace_file(acct):
+        return os.path.join(STATE_DIR, "pace-%s.json" % acct)
+
     def persist(self, force=False):
         now = time.time()
         with self.lock:
             self.pace.save(force)          # its own file, written at most once a minute
+            for a in self.others.values():
+                a["pace"].save(force)
             if not (self._dirty or force):
                 return
             if not force and now - self._last_persist < PERSIST_INTERVAL:
                 return
             d = {"tools_today": self.tools_today, "tools_date": self.tools_date,
                  "five_hour": self.five_hour, "seven_day": self.seven_day, "est_start": self.est_start,
-                 "has5": self.has5, "theme": self.theme, "theme_seq": self.theme_seq, "last_active": self.last_active}
+                 "has5": self.has5, "theme": self.theme, "theme_seq": self.theme_seq, "last_active": self.last_active,
+                 "main_acct": self.main_acct, "main_label": self.main_label,
+                 "accounts": [{"acct": k, "label": a["label"], "five_hour": a["five_hour"], "seven_day": a["seven_day"],
+                               "has5": a["has5"], "seen": a["seen"]} for k, a in self.others.items()]}
             self._dirty = False
             self._last_persist = now
         try:
@@ -272,15 +339,17 @@ class Bridge:
         now = time.time()
         waiting_list = []      # (display name, epoch seconds it started waiting)
         live_keys = set()
-        try:
-            names = os.listdir(SESSIONS_DIR)
-        except OSError:
-            names = []
-        for name in names:
-            if not name.endswith(".json"):
+        paths = []
+        for folder in session_dirs():
+            try:
+                paths += [os.path.join(folder, n) for n in os.listdir(folder)]
+            except OSError:
+                pass
+        for path in paths:
+            if not path.endswith(".json"):
                 continue          # never touch the .key files
             try:
-                with open(os.path.join(SESSIONS_DIR, name)) as f:
+                with open(path) as f:
                     d = json.load(f)
             except (OSError, ValueError):
                 continue
@@ -429,13 +498,32 @@ class Bridge:
         w5, w7 = self._window(five, now, self.last_active, self.est_start, 5 * 3600), self._window(seven, now, self.last_active)
         self.tracker.usage(w5["used"] if w5 else None, w7["used"] if w7 else None)    # None: unknown, skipped
 
+    def is_main(self, acct, default):
+        """Whether a report tagged acct is the main account's (the lock is held). An untagged one,
+        from an older status line, is. The main account is claimed by the first tagged report from
+        a default config folder (~/.claude), or by any tagged report while nothing is known yet."""
+        if acct is None or acct == self.main_acct:
+            return True
+        if self.main_acct is None and acct not in self.others and (
+                default or (self.five_hour is None and self.seven_day is None)):
+            self.main_acct = acct
+            self._dirty = True
+            return True
+        return False
+
     def on_usage(self, d):
         rl = d.get("rate_limits")
         if not isinstance(rl, dict):
             return False
         now = time.time()
         changed = False
+        acct, label = account_id(d.get("acct")), account_label(d.get("label"))
         with self.lock:
+            if not self.is_main(acct, bool(d.get("default"))):
+                return self._on_other(acct, label, rl, now)
+            if label and label != self.main_label:
+                self.main_label = label
+                self._dirty = True
             if isinstance(rl.get("seven_day"), dict):
                 # a plan without a 5-hour limit reports only the weekly window (the "auto" limit mode)
                 has5 = isinstance(rl.get("five_hour"), dict) and _num(rl["five_hour"].get("used_percentage")) is not None
@@ -444,19 +532,10 @@ class Bridge:
                     changed = True
             for key in ("five_hour", "seven_day"):
                 w = rl.get(key)
-                if not isinstance(w, dict):
+                new = merge_window(getattr(self, key), w, now) if isinstance(w, dict) else None
+                if new is None:
                     continue
-                used = _num(w.get("used_percentage"))
-                if used is None:
-                    continue
-                resets = int(_num(w.get("resets_at"), 0) or 0)
-                old = getattr(self, key)
-                if old and resets and old.get("resets_at"):
-                    if resets < old["resets_at"]:
-                        continue        # an idle session still reporting a window that has ended
-                    if resets == old["resets_at"]:
-                        used = max(used, old["used"])   # same window: usage only goes up
-                setattr(self, key, {"used": round(used, 1), "resets_at": resets, "rx": now})
+                setattr(self, key, new)
                 if key == "five_hour":
                     self.est_start = None        # the new window is known now: no estimate needed
                 changed = True
@@ -465,19 +544,84 @@ class Bridge:
             self.pace.report(now, self.five_hour, self.seven_day)
         return changed
 
+    def _on_other(self, acct, label, rl, now):
+        """A report from an account other than the main one (the lock is held)."""
+        a = self.others.get(acct)
+        if a is None:
+            for k in [k for k, o in self.others.items() if now - o["seen"] > ACCOUNT_FORGET_S]:
+                del self.others[k]
+            if len(self.others) >= ACCOUNTS_MAX:      # full: the one quiet longest makes room
+                del self.others[min(self.others, key=lambda k: self.others[k]["seen"])]
+            a = self.others[acct] = {"label": label or "ACCT", "five_hour": None, "seven_day": None,
+                                     "has5": None, "seen": now, "pace": pace.Pace(self._pace_file(acct))}
+        a["seen"] = now
+        if label:
+            a["label"] = label
+        if isinstance(rl.get("seven_day"), dict):
+            a["has5"] = isinstance(rl.get("five_hour"), dict) and _num(rl["five_hour"].get("used_percentage")) is not None
+        for key in ("five_hour", "seven_day"):
+            w = rl.get(key)
+            new = merge_window(a[key], w, now) if isinstance(w, dict) else None
+            if new is not None:
+                a[key] = new
+        a["pace"].report(now, a["five_hour"], a["seven_day"])
+        self._dirty = True
+        return True
+
+    def answer(self, d):
+        """What /usage answers a status line with: its own account's weekly pace and limit mode."""
+        with self.lock:
+            a = self.others.get(account_id(d.get("acct")))
+            if a is not None:
+                return {"pace": a["pace"].out, "mode": self.acct_mode(a["has5"])}
+            return {"pace": self.pace.out, "mode": self.limit_mode()}
+
     def pace_step(self):
         """Once a scan: the weekly pace takes in whether agents work and steps its ladder."""
         s = self.status()
         room = pace.room_enabled(STATE_DIR)
+        now = time.time()
         with self.lock:
-            self.pace.step(time.time(), s["seven_day"], s["level"] >= 2, room)
+            self.pace.step(now, s["seven_day"], s["level"] >= 2, room)
+            for k in [k for k, a in self.others.items() if now - a["seen"] > ACCOUNT_FORGET_S]:
+                del self.others[k]
+                self._dirty = True
+            for a in self.others.values():
+                a["pace"].step(now, self._window(a["seven_day"], now), s["level"] >= 2, room)
 
     def limit_mode(self):
         """What the hearts show: "5h", or "week" for a plan with only a weekly limit (pace.LIMIT_MODES)."""
+        return self.acct_mode(self.has5)
+
+    @staticmethod
+    def acct_mode(has5):
+        """The limit mode for an account whose last report had a 5-hour window (has5) or didn't."""
         mode = pace.limit_setting(STATE_DIR)
         if mode == "auto":
-            mode = "week" if self.has5 is False else "5h"
+            mode = "week" if has5 is False else "5h"
         return mode
+
+    def account_row(self, a, now):
+        """Another account's row on the badge. Its hearts follow whichever of its limits has less
+        left, and count down to that limit's reset: l label, h half hearts left (None: unknown), e
+        half hearts likely left at the weekly reset (None: no forecast), r the reset (epoch s), w
+        which limit ("5h" or "wk"), u how fresh its numbers are (ok, old or none)."""
+        mode = self.acct_mode(a["has5"])
+        five = self._window(a["five_hour"], now) if mode == "5h" else None
+        seven = self._window(a["seven_day"], now)
+        b = None
+        for w in (five, seven):
+            if w and w["used"] is not None and (b is None or w["used"] > b["used"]):
+                b = w
+        hearts = end = None
+        if b is not None:
+            hearts = max(0, min(20, int(round((100.0 - b["used"]) / 5.0))))
+            pc = a["pace"].out
+            if b is seven and pc and pc.get("f") is not None:
+                end = max(0, min(hearts, int(round((100.0 - pc["f"]) / 5.0))))
+        state = usage_state(a["five_hour"] if mode == "5h" else None, a["seven_day"], five, now)["state"]
+        return {"l": a["label"], "h": hearts, "e": end, "r": b["resets_at"] if b else None,
+                "w": "5h" if b is not None and b is five else "wk", "u": state}
 
     def set_theme(self, theme):
         theme = LEGACY_THEMES.get(theme, theme)
@@ -541,6 +685,8 @@ class Bridge:
             seven = self._window(self.seven_day, now, self.last_active)
             theme, theme_seq, last_active = self.theme, self.theme_seq, self.last_active
             pc = self.pace.out
+            accounts = [self.account_row(a, now) for a in self.others.values()]
+            label = self.main_label
             live = {w[3] for w in loc.get("waiting_list", [])}
             for sid in [s for s in self.why if s not in live and s not in self.remote]:
                 del self.why[sid]
@@ -606,6 +752,10 @@ class Bridge:
             "mode": mode,
             "hearts": hearts,
             "hearts_end": hearts_end,
+            # more than one Claude account: the main one's label (it drives everything above) and a
+            # row for each other one (see account_row), first seen first
+            "label": label,
+            "accounts": accounts,
             "theme": theme,
             "theme_seq": theme_seq,
             "last_active": int(last_active or 0),
@@ -698,8 +848,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": True})
             elif path == "/usage":
                 ok = BRIDGE.on_usage(d)
-                # the status line shows the pace, and in weekly-only mode where the week likely ends
-                self._send(200, {"ok": ok, "pace": BRIDGE.pace.out, "mode": BRIDGE.limit_mode()})
+                # the status line shows its account's pace, and in weekly-only mode where the week likely ends
+                self._send(200, dict(BRIDGE.answer(d), ok=ok))
             elif path == "/theme":
                 ok = BRIDGE.set_theme(d.get("theme"))
                 if ok:
