@@ -103,12 +103,14 @@ def account(config_dir=None, home=None):
         with open(path, encoding="utf-8", errors="replace") as f:
             text = f.read()
     except OSError:
-        return None, label, default
+        text = ""
     # searched, not json.load: the file can run to megabytes, and this runs at every redraw
     at = text.find('"oauthAccount"')
     part = text[at:at + 8000] if at >= 0 else ""
     uuid = re.search(r'"accountUuid"\s*:\s*"([^"]+)"', part)
     if not uuid:
+        if config_dir:      # still not the main account's: tell it apart by its folder
+            return hashlib.sha256(("dir:" + os.path.abspath(config_dir)).encode()).hexdigest()[:12], label, default
         return None, label, default
     if not label:
         mail = re.search(r'"emailAddress"\s*:\s*"[^"@]*@([^".]+)', part)

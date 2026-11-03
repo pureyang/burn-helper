@@ -41,7 +41,9 @@ l_tag, l_label, l_default = SL.account(config_dir=lexco, home=home)
 assert (g_label, g_default, l_label, l_default) == ("GMAIL", True, "LEXCO", False), (g_label, l_label)
 assert g_tag and l_tag and g_tag != l_tag and len(g_tag) == 12, (g_tag, l_tag)
 assert "uuid" not in g_tag and "gmail" not in g_tag, "only a hash leaves the computer"
-assert SL.account(config_dir=os.path.join(home, "nope"), home=home)[0] is None, "signed out: untagged"
+assert SL.account(config_dir=None, home=os.path.join(home, "nope"))[0] is None, "~/.claude signed out: untagged"
+other = SL.account(config_dir=os.path.join(home, "nope"), home=home)[0]
+assert other and other not in (g_tag, l_tag), "another folder without the file is still its own account, never the main"
 os.environ["BURN_HELPER_LABEL"] = "work"
 assert SL.account(config_dir=lexco, home=home)[1] == "WORK", "the installer's label wins"
 del os.environ["BURN_HELPER_LABEL"]
