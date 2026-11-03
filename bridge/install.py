@@ -16,6 +16,12 @@ This adds the hooks and status line only, and puts the bridge's address in setti
 "env", where every Claude Code session (and so every hook) picks it up. See
 docs/other-computers.md.
 
+A second Claude account, run side by side with the first (on either kind of computer):
+    python3 bridge/install.py --add-account lexco [--bridge URL]
+This makes the config folder ~/.claude-lexco with the hooks and status line, labelled LEXCO,
+and the shell alias claude-lexco that runs Claude Code with it (CLAUDE_CONFIG_DIR). Sign in
+once with /login; from then on that account's usage has its own row on the badge.
+
 Set BURN_HELPER_HOME to point at a different home directory (used for testing).
 With it set, launchctl, the registry and the bridge process are never touched, and
 BURN_HELPER_TEST_OS=windows makes this behave as on Windows. Installs from older versions
@@ -54,7 +60,7 @@ def command(script, py=PY, here=HERE, windows=WINDOWS):
 
 HOOK_CMD = command("cc_hook.py")
 STATUS_CMD = command("cc_statusline.py")
-ENV_KEYS = ("BURN_HELPER_BRIDGE_URL", "BURN_HELPER_TOKEN")      # set by --bridge / --token
+ENV_KEYS = ("BURN_HELPER_BRIDGE_URL", "BURN_HELPER_TOKEN", "BURN_HELPER_LABEL")  # --bridge, --token, --add-account
 INSTALL_SH = "https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh"
 INSTALL_PS1 = "https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1"
 BRIDGE = os.path.join(HERE, "burn_helper_bridge.py")
@@ -137,14 +143,17 @@ def strip_ours(settings):
     return settings
 
 
-def add_ours(settings, bridge_url=None, token=None):
+def add_ours(settings, bridge_url=None, token=None, label=None):
     notes = []
     settings = strip_ours(settings)          # idempotent: remove then add once
-    if bridge_url:
+    if bridge_url or label:
         env = settings.setdefault("env", {})
-        env["BURN_HELPER_BRIDGE_URL"] = bridge_url
-        if token:
-            env["BURN_HELPER_TOKEN"] = token
+        if bridge_url:
+            env["BURN_HELPER_BRIDGE_URL"] = bridge_url
+            if token:
+                env["BURN_HELPER_TOKEN"] = token
+        if label:
+            env["BURN_HELPER_LABEL"] = label
     hooks = settings.setdefault("hooks", {})
     for event in EVENTS:
         group = {"hooks": [our_hook()]}
@@ -436,6 +445,50 @@ def check_bridge(url):
     return "Something answered at %s, but it isn't a Burn Helper bridge." % url
 
 
+def account_name(name):
+    """--add-account's name, checked: letters, digits and dashes (it becomes a folder and an alias)."""
+    name = (name or "").strip().lower()
+    if not name or len(name) > 20 or not all(c.isalnum() or c == "-" for c in name):
+        sys.exit("--add-account takes a short name of letters, digits and dashes, like: --add-account lexco")
+    return name
+
+
+def alias_line(name, windows=None):
+    """The shell line that runs Claude Code as the account in ~/.claude-<name>."""
+    if WINDOWS if windows is None else windows:
+        return ("function claude-%s { $env:CLAUDE_CONFIG_DIR = \"$HOME\\.claude-%s\"; claude @args; "
+                "Remove-Item Env:CLAUDE_CONFIG_DIR }" % (name, name))
+    return "alias claude-%s='CLAUDE_CONFIG_DIR=\"$HOME/.claude-%s\" claude'" % (name, name)
+
+
+def shell_rc():
+    """The shell start-up file the alias goes in (zsh on a Mac, bash elsewhere), or None on Windows."""
+    if WINDOWS:
+        return None
+    return os.path.join(HOME, ".zshrc" if MAC or os.environ.get("SHELL", "").endswith("zsh") else ".bashrc")
+
+
+def add_alias(name, dry_run=False):
+    """Put the alias in the shell's start-up file once. Returns a note to print."""
+    line = alias_line(name)
+    rc = shell_rc()
+    if rc is None:
+        return ("To run Claude Code as this account, add this line to your PowerShell profile "
+                "(notepad $PROFILE), then open a new window and run claude-%s:\n  %s" % (name, line))
+    try:
+        with open(rc, encoding="utf-8") as f:
+            have = line in f.read()
+    except OSError:
+        have = False
+    if have:
+        return "The alias claude-%s is already in %s." % (name, rc)
+    if dry_run:
+        return "Would add to %s:\n  %s" % (rc, line)
+    with open(rc, "a", encoding="utf-8") as f:
+        f.write("\n# Burn Helper: Claude Code as the %s account\n%s\n" % (name, line))
+    return "Added the alias claude-%s to %s. Open a new terminal (or: source %s) to use it." % (name, rc, rc)
+
+
 def diff(old_text, settings):
     new_text = json.dumps(settings, indent=2) + "\n"
     return "".join(difflib.unified_diff(old_text.splitlines(True), new_text.splitlines(True),
@@ -465,6 +518,10 @@ def main():
                          "plan with only a weekly limit: the hearts are the week, with where it likely ends), "
                          "or auto (week once Claude Code reports no 5-hour limit; the default). Set on the "
                          "bridge computer")
+    ap.add_argument("--add-account", metavar="NAME",
+                    help="set up another Claude account to run side by side: the config folder ~/.claude-NAME "
+                         "with the hooks and status line, and the alias claude-NAME. With --uninstall, take "
+                         "ours out of that folder again")
     ap.add_argument("--find-bridge", action="store_true",
                     help="print the join address of a bridge already on this network, if there is one")
     args = ap.parse_args()
@@ -476,13 +533,18 @@ def main():
         if url:
             print(url)
         return 0 if url else 1
+    global SETTINGS
+    account = account_name(args.add_account) if args.add_account else None
+    if account:
+        SETTINGS = os.path.join(HOME, ".claude-" + account, "settings.json")
+        args.no_launchd = True               # the bridge, if it runs here, is already set up
     if args.bridge:
         if not args.bridge.startswith(("http://", "https://")):
             args.bridge = "http://" + args.bridge
         if args.bridge.rstrip("/").count(":") < 2:
             args.bridge = args.bridge.rstrip("/") + ":8787"
         args.no_launchd = True               # the bridge runs elsewhere
-    elif not (MAC or WINDOWS) and not args.uninstall:
+    elif not (MAC or WINDOWS) and not args.uninstall and not account:
         sys.exit("The bridge runs on a Mac or a Windows PC. On this computer, point the hooks at one:\n"
                  "    python3 bridge/install.py --bridge http://<bridge-computer>:8787")
     if not (MAC or WINDOWS):
@@ -515,7 +577,11 @@ def main():
                     remove_agent(domain, label)
         return 0
 
-    new, notes = add_ours(settings, args.bridge, args.token)
+    new, notes = add_ours(settings, args.bridge, args.token, account.upper()[:8] if account else None)
+    if account:
+        notes.append(add_alias(account, args.dry_run))
+        notes.append("Then run claude-%s and /login with that account, once. Its usage gets its own row of hearts "
+                     "on the badge from its first answer." % account)
     if args.tracking and not args.uninstall:
         if args.bridge:
             notes.append("The history is kept by the bridge, not by a computer that joins it: "
@@ -603,7 +669,7 @@ def main():
             print("launchctl bootstrap returned %s; check %s" % (rc, LOGFILE))
         else:
             print("Bridge started. Logs:", LOGFILE)
-    if args.bridge and remove_local_bridge(domain):
+    if args.bridge and not account and remove_local_bridge(domain):
         notes.append("This computer was running a bridge of its own. It is stopped and removed: the badge "
                      "talks to one bridge, and two on one network pull it back and forth.")
     for n in notes:
