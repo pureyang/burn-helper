@@ -99,11 +99,11 @@ print("PASS bridge on Windows: login item runs pythonw with --log, Tailscale fou
 
 # ---------------------------------------------------------------- joining a bridge
 lines = "\n".join(install.join_lines("192.168.1.20", "100.64.1.2"))
-assert "bash -s -- --join http://100.64.1.2:8787" in lines, lines
+assert "bash -s -- --join 'http://100.64.1.2:8787'" in lines, lines
 assert "$env:BURN_HELPER_JOIN='http://100.64.1.2:8787'; irm " in lines and "install.ps1 | iex" in lines
 assert "http://192.168.1.20:8787" in lines, "names the local address too"
 lines = "\n".join(install.join_lines("192.168.1.20", None, windows=True))
-assert "--join http://192.168.1.20:8787" in lines and "can change" in lines and "py " in lines, lines
+assert "--join 'http://192.168.1.20:8787'" in lines and "can change" in lines and "py " in lines, lines
 
 import http.server  # noqa: E402
 import threading  # noqa: E402

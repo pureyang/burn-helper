@@ -11,9 +11,10 @@ windowless pythonw.exe; neither needs admin rights.
 
 On any other computer where you run Claude Code (Windows, Linux or a Mac), so its
 sessions show on the badge too:
-    python bridge/install.py --bridge http://<bridge-computer>:8787
-This adds the hooks and status line only, and puts the bridge's address in settings.json's
-"env", where every Claude Code session (and so every hook) picks it up. See
+    python bridge/install.py --bridge 'http://<bridge-computer>:8787/#k=<key>'
+This adds the hooks and status line only, and puts the bridge's address and key in
+settings.json's "env", where every Claude Code session (and so every hook) picks them up.
+--join-help on the bridge computer prints the address with its key. See
 docs/other-computers.md.
 
 Set BURN_HELPER_HOME to point at a different home directory (used for testing).
@@ -350,17 +351,32 @@ def this_computer():
     return lan, name
 
 
-def join_lines(lan, name, port=8787, windows=WINDOWS):
-    """What to run on another computer so that it reports to this bridge."""
+def split_key(url):
+    """("http://host:8787", key) from a join address that carries the bridge's key after #k=."""
+    base, _, frag = url.partition("#")
+    key = frag[2:].strip() if frag.startswith("k=") else None
+    return base.rstrip("/"), key or None
+
+
+def join_lines(lan, name, port=8787, windows=WINDOWS, key=None):
+    """What to run on another computer so that it reports to this bridge. The address carries the
+    bridge's key, so treat these lines like a password."""
     url = "http://%s:%d" % (name or lan or "<this-computer>", port)
+    join = url + ("/#k=" + key if key else "")
     again = "%s %s --join-help" % ("py" if windows else "python3", os.path.join(HERE, "install.py"))
     lines = ["To add another computer, so its Claude Code agents show on the badge too, run the join",
              "line on it (not the bridge line you just ran: there is only one bridge):",
              "",
              "  Mac or Linux, in Terminal:",
-             "    curl -fsSL %s | bash -s -- --join %s" % (INSTALL_SH, url),
+             "    curl -fsSL %s | bash -s -- --join '%s'" % (INSTALL_SH, join),
              "  Windows, in PowerShell:",
-             "    $env:BURN_HELPER_JOIN='%s'; irm %s | iex" % (url, INSTALL_PS1),
+             "    $env:BURN_HELPER_JOIN='%s'; irm %s | iex" % (join, INSTALL_PS1),
+             "",
+             "The phone panel, on a phone that can reach this computer: %s" % join,
+             "",
+             "These carry the bridge's key: anyone with it can read what your sessions are doing. Keep",
+             "them to yourself. To change the key, delete %s and restart the bridge," % os.path.join(STATE_DIR, "key"),
+             "then plug the badge in once and run the new join line on each computer again.",
              ""]
     if name and lan:
         lines += ["%s is this computer's Tailscale address, so this works from anywhere for computers on" % name,
@@ -409,7 +425,7 @@ def find_bridge(wait=4.0, port=47800):
                 continue
             url = "http://%s:%s" % (addr[0], parts[2].decode(errors="replace"))
             try:
-                with urllib.request.urlopen(url + "/status", timeout=3) as r:
+                with urllib.request.urlopen(url + "/health", timeout=3) as r:
                     return json.load(r).get("join") or url
             except Exception:  # noqa: BLE001
                 return url
@@ -418,19 +434,32 @@ def find_bridge(wait=4.0, port=47800):
     return None
 
 
-def check_bridge(url):
-    """Ask the bridge at url whether it is there. Returns a line to print."""
+def check_bridge(url, key=None):
+    """Ask the bridge at url whether it is there and takes this key. Returns a line to print."""
+    import urllib.error
     import urllib.request
+    url = url.rstrip("/")
     try:
-        with urllib.request.urlopen(url.rstrip("/") + "/health", timeout=5) as r:
+        with urllib.request.urlopen(url + "/health", timeout=5) as r:
             ok = json.load(r).get("ok")
-        if ok:
-            return "The bridge at %s answers." % url
     except Exception as e:  # noqa: BLE001
         return ("Can't reach the bridge at %s yet (%s). Check that the bridge computer is on, that this "
                 "computer can reach it (same network, or both on your tailnet) and, for a Windows bridge, "
                 "its firewall rule. The hooks are installed either way." % (url, e.__class__.__name__))
-    return "Something answered at %s, but it isn't a Burn Helper bridge." % url
+    if not ok:
+        return "Something answered at %s, but it isn't a Burn Helper bridge." % url
+    try:
+        req = urllib.request.Request(url + "/status", headers={"X-Burn-Helper-Token": key or ""})
+        with urllib.request.urlopen(req, timeout=5):
+            pass
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            return ("The bridge at %s answers, but %s. On the bridge computer, run install.py --join-help "
+                    "and use the join line it prints: it carries the key." % (
+                        url, "turned this key down" if key else "it needs its key"))
+    except Exception:  # noqa: BLE001
+        pass
+    return "The bridge at %s answers." % url
 
 
 def diff(old_text, settings):
@@ -446,7 +475,8 @@ def main():
     ap.add_argument("--no-launchd", action="store_true", help="only edit settings.json (no login item)")
     ap.add_argument("--bridge", metavar="URL",
                     help="the bridge runs on another computer: send this computer's events there")
-    ap.add_argument("--token", help="the bridge's BURN_HELPER_TOKEN, if you set one")
+    ap.add_argument("--token", help="the bridge's key (the join line carries it after #k=, so this is "
+                                    "rarely needed)")
     ap.add_argument("--join-help", action="store_true",
                     help="print what to run on another computer to add it to this bridge")
     ap.add_argument("--tracking", choices=("on", "off"),
@@ -466,7 +496,7 @@ def main():
                     help="print the join address of a bridge already on this network, if there is one")
     args = ap.parse_args()
     if args.join_help:
-        print("\n".join(join_lines(*this_computer())))
+        print("\n".join(join_lines(*this_computer(), key=portable.bridge_key(STATE_DIR))))
         return 0
     if args.find_bridge:
         url = find_bridge()
@@ -474,6 +504,8 @@ def main():
             print(url)
         return 0 if url else 1
     if args.bridge:
+        args.bridge, key = split_key(args.bridge)
+        args.token = args.token or key
         if not args.bridge.startswith(("http://", "https://")):
             args.bridge = "http://" + args.bridge
         if args.bridge.rstrip("/").count(":") < 2:
@@ -607,7 +639,7 @@ def main():
         print("Note:", n)
     if args.bridge:
         print("This computer now reports to the bridge at %s." % args.bridge)
-        print(check_bridge(args.bridge))
+        print(check_bridge(args.bridge, args.token))
         print("Restart open Claude Code sessions so they pick up the new address.")
     else:
         print("Open sessions pick up the hooks automatically; restart them if events do not arrive.")
