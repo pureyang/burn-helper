@@ -23,6 +23,7 @@
 #   -NoFlash    never replace the badge's firmware                                       [BURN_HELPER_NO_FLASH]
 #   -NoBadge    only set up this PC                                                       [BURN_HELPER_NO_BADGE]
 #   -NoBridge   only set up the badge                                                     [BURN_HELPER_NO_BRIDGE]
+#   -ForceStatusLine  replace a status line you already have with the hearts one  [BURN_HELPER_FORCE_STATUSLINE]
 #   -DryRun     show what would happen, change nothing                                    [BURN_HELPER_DRY_RUN]
 #   -Uninstall  remove the hooks, status line, login item and firewall rule from this PC [BURN_HELPER_UNINSTALL]
 #
@@ -39,6 +40,7 @@ param(
   [switch]$NoFlash,
   [switch]$NoBadge,
   [switch]$NoBridge,
+  [switch]$ForceStatusLine,
   [switch]$DryRun,
   [switch]$Uninstall
 )
@@ -123,6 +125,8 @@ function Install-BurnHelper {
   $dry = Flag $DryRun.IsPresent "BURN_HELPER_DRY_RUN"
   $remove = Flag $Uninstall.IsPresent "BURN_HELPER_UNINSTALL"
   $joinUrl = First @($Join, $env:BURN_HELPER_JOIN)
+  $forceArgs = @()                            # passed on to install.py
+  if (Flag $ForceStatusLine.IsPresent "BURN_HELPER_FORCE_STATUSLINE") { $forceArgs += "--force-statusline" }
   $track = ""                                 # on, off, or empty (ask)
   if ($NoTracking.IsPresent) { $track = "off" }
   elseif (Flag $Tracking.IsPresent "BURN_HELPER_TRACKING") { $track = "on" }
@@ -218,12 +222,15 @@ function Install-BurnHelper {
   # joining a bridge on another computer: hooks and a status line only
   if ($joinUrl) {
     if ($dry) {
-      Invoke-Py @($installPy, "--bridge", $joinUrl, "--dry-run")
+      Invoke-Py (@($installPy, "--bridge", $joinUrl, "--dry-run") + $forceArgs)
     } else {
       Say "This adds async hooks and a hearts status line to ~\.claude\settings.json (backed up first;"
       Say "undo with -Uninstall) that send this PC's Claude Code activity to the bridge."
-      if (Ask "Join the bridge at $joinUrl?") {
-        Invoke-Py @($installPy, "--bridge", $joinUrl)
+      # the address alone: the key stays off the screen. The braces matter: PowerShell reads "$joinUrl?"
+      # as a variable named joinUrl?, which is empty
+      $shown = ($joinUrl -split '#')[0].TrimEnd('/')
+      if (Ask "Join the bridge at ${shown}?") {
+        Invoke-Py (@($installPy, "--bridge", $joinUrl) + $forceArgs)
         if ($LASTEXITCODE -ne 0) { Fail "Joining did not finish; see the messages above." }
       } else {
         Say "Skipped."
@@ -253,7 +260,7 @@ function Install-BurnHelper {
     Say "already is your bridge, stop here (Ctrl+C) and run the join line on this one instead:"
     Say "  `$env:BURN_HELPER_JOIN='http://<bridge>:8787'; irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex"
     if ($dry) {
-      Invoke-Py @($installPy, "--dry-run")
+      Invoke-Py (@($installPy, "--dry-run") + $forceArgs)
       if (-not (Test-FirewallRule)) {
         Say "Would add a Windows Firewall rule '$RuleName': inbound TCP $BridgePort on Private networks (asks for admin approval)."
       }
@@ -267,7 +274,7 @@ function Install-BurnHelper {
           Say "SQLite file on this PC only (read it with bridge\stats.py; turn it off any time)."
           if (Ask "Keep that history?") { $track = "on" }
         }
-        if ($track) { Invoke-Py @($installPy, "--tracking", $track) } else { Invoke-Py @($installPy) }
+        if ($track) { Invoke-Py (@($installPy, "--tracking", $track) + $forceArgs) } else { Invoke-Py (@($installPy) + $forceArgs) }
         if ($LASTEXITCODE -ne 0) { Fail "The bridge install did not finish; see the messages above." }
       } else {
         Say "Skipped the bridge."

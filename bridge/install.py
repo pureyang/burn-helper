@@ -23,6 +23,11 @@ This makes the config folder ~/.claude-lexco with the hooks and status line, lab
 and the shell alias claude-lexco that runs Claude Code with it (CLAUDE_CONFIG_DIR). Sign in
 once with /login; from then on that account's usage has its own row on the badge.
 
+A status line you already have is left alone. To replace it with the hearts one:
+    python3 bridge/install.py --force-statusline
+settings.json is backed up first. A computer joined to a bridge stays joined, with the address and
+key it has, so this needs no --bridge there.
+
 Set BURN_HELPER_HOME to point at a different home directory (used for testing).
 With it set, launchctl, the registry and the bridge process are never touched, and
 BURN_HELPER_TEST_OS=windows makes this behave as on Windows. Installs from older versions
@@ -144,7 +149,8 @@ def strip_ours(settings):
     return settings
 
 
-def add_ours(settings, bridge_url=None, token=None, label=None):
+def add_ours(settings, bridge_url=None, token=None, label=None, force_statusline=False, again=None):
+    """force_statusline: replace a status line that isn't ours. again: the command that would."""
     notes = []
     settings = strip_ours(settings)          # idempotent: remove then add once
     if bridge_url or label:
@@ -161,13 +167,18 @@ def add_ours(settings, bridge_url=None, token=None, label=None):
         if event in TOOL_EVENTS:
             group = {"matcher": "", "hooks": [our_hook()]}
         hooks.setdefault(event, []).append(group)
-    if "statusLine" in settings:
+    if "statusLine" in settings and not force_statusline:
         notes.append("A status line is already configured, so it was left alone. Until it also runs "
                      "cc_statusline.py, this computer's usage never reaches the bridge, and the hearts lag "
-                     "whatever you spend here. In your status line command, pipe the same input to\n  %s\n"
-                     "and discard what it prints. Leave it out only if this computer signs into a "
-                     "different Claude account." % STATUS_CMD)
+                     "whatever you spend here. To replace it with the hearts status line, run\n  %s\n"
+                     "Or to keep yours, pipe the same input from your status line command to\n  %s\n"
+                     "and discard what it prints." % (again or "install.py --force-statusline", STATUS_CMD))
     else:
+        if "statusLine" in settings:
+            old = settings["statusLine"]
+            was = old.get("command") if isinstance(old, dict) else None
+            notes.append("This replaces your status line%s with the hearts one. The settings.json backup "
+                         "keeps it." % (" (%s)" % was if was else ""))
         settings["statusLine"] = {"type": "command", "command": STATUS_CMD, "refreshInterval": 60}
     return settings, notes
 
@@ -363,6 +374,15 @@ def this_computer():
     return lan, name
 
 
+def joined_url(settings):
+    """The bridge on another computer that these settings report to, or None. As the bridge's
+    joined_to: an address on this computer isn't joining anything."""
+    env = settings.get("env")
+    url = env.get("BURN_HELPER_BRIDGE_URL") if isinstance(env, dict) else None
+    host = str(url or "").split("//")[-1].split("/")[0].rsplit(":", 1)[0].strip("[]")
+    return None if host in ("", "127.0.0.1", "localhost", "::1") else url
+
+
 def split_key(url):
     """("http://host:8787", key) from a join address that carries the bridge's key after #k=."""
     base, _, frag = url.partition("#")
@@ -553,6 +573,9 @@ def main():
                     help="set up another Claude account to run side by side: the config folder ~/.claude-NAME "
                          "with the hooks and status line, and the alias claude-NAME. With --uninstall, take "
                          "ours out of that folder again")
+    ap.add_argument("--force-statusline", action="store_true",
+                    help="replace a status line you already have with the hearts one (settings.json is backed "
+                         "up first). A computer joined to a bridge stays joined, so this needs no --bridge there")
     ap.add_argument("--find-bridge", action="store_true",
                     help="print the join address of a bridge already on this network, if there is one")
     args = ap.parse_args()
@@ -569,6 +592,13 @@ def main():
     if account:
         SETTINGS = os.path.join(HOME, ".claude-" + account, "settings.json")
         args.no_launchd = True               # the bridge, if it runs here, is already set up
+    if args.force_statusline and not args.bridge and not args.uninstall:
+        # already joined: stay so. Without --bridge this would drop the address and key from
+        # settings.json and start a second bridge on this computer.
+        saved = load_settings()[0]
+        if joined_url(saved):
+            args.bridge = joined_url(saved)
+            args.token = args.token or saved["env"].get("BURN_HELPER_TOKEN")
     if args.bridge:
         args.bridge, key = split_key(args.bridge)
         args.token = args.token or key
@@ -610,7 +640,10 @@ def main():
                     remove_agent(domain, label)
         return 0
 
-    new, notes = add_ours(settings, args.bridge, args.token, account.upper()[:8] if account else None)
+    again = "%s %s %s--force-statusline" % ("py" if WINDOWS else "python3", os.path.join(HERE, "install.py"),
+                                            "--add-account %s " % account if account else "")
+    new, notes = add_ours(settings, args.bridge, args.token, account.upper()[:8] if account else None,
+                          args.force_statusline, again)
     if account:
         notes.append(add_alias(account, args.dry_run))
         notes.append("Then run claude-%s and /login with that account, once. Its usage gets its own row of hearts "

@@ -26,7 +26,8 @@ python3 bridge/install.py --uninstall     # remove exactly what install added
 ```
 
 `install.py` backs up `~/.claude/settings.json` first, adds one async hook per
-event (they never block a session), adds the status line only if you have none,
+event (they never block a session), adds the status line only if you have none
+(`--force-statusline` replaces yours, and a computer joined to a bridge stays joined),
 and installs a LaunchAgent (`com.burnhelper.bridge`, log in
 `~/Library/Logs/burn-helper.log`). It replaces the older `com.heartsleft.bridge` and `com.lexco.tufty-bridge` agents if present.
 

@@ -2,6 +2,7 @@
 """bridge/install.py: the --bridge mode for other computers, and Windows command lines."""
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -214,3 +215,83 @@ r = subprocess.run([sys.executable, os.path.join(BRIDGE, "install.py"), "--bridg
                    env=env, capture_output=True, text=True)
 assert not _pace.room_enabled(_tr_state) and "the bridge's to say" in r.stdout, r.stdout
 print("PASS install --room-left: opt-in, on the bridge computer only")
+
+# a status line you already have: left alone unless forced, and forcing never un-joins a computer
+fhome = tempfile.mkdtemp()
+fset = os.path.join(fhome, ".claude", "settings.json")
+os.makedirs(os.path.dirname(fset))
+MINE = {"type": "command", "command": "my-own-line.sh"}
+fkey = "00112233445566778899aabbccddeeff"
+
+
+def fput(d):
+    with open(fset, "w") as f:
+        json.dump(d, f)
+
+
+def frun(*args, **extra):
+    r = subprocess.run([sys.executable, os.path.join(BRIDGE, "install.py")] + list(args),
+                       env=dict(os.environ, BURN_HELPER_HOME=fhome, **extra), capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    with open(fset) as f:
+        return json.load(f), r.stdout
+
+
+fput({"statusLine": MINE})
+s, out = frun("--bridge", "http://my-mac:8787/#k=" + fkey)
+assert s["statusLine"] == MINE and "left alone" in out and "--force-statusline" in out, out
+assert "different Claude account" not in out, "an account of its own gets its own row now"
+want_env = {"BURN_HELPER_BRIDGE_URL": "http://my-mac:8787", "BURN_HELPER_TOKEN": fkey}
+assert s["env"] == want_env, s["env"]
+s, out = frun("--force-statusline", "--dry-run")
+assert s["statusLine"] == MINE and "cc_statusline.py" in out, "a dry run changes nothing"
+s, out = frun("--force-statusline")
+assert "cc_statusline.py" in s["statusLine"]["command"] and s["statusLine"]["refreshInterval"] == 60, s
+assert s["env"] == want_env, "already joined: the address and key stay, with no --bridge needed"
+assert "my-own-line.sh" in out and "now reports to the bridge at http://my-mac:8787" in out, out
+assert fkey not in out, "the key isn't printed"
+assert "Bridge started" not in out and not os.path.exists(
+    os.path.join(fhome, "Library", "LaunchAgents", "com.burnhelper.bridge.plist")), "no second bridge"
+backups = [p for p in os.listdir(os.path.dirname(fset)) if ".bak-" in p]
+kept = []
+for p in backups:
+    with open(os.path.join(os.path.dirname(fset), p)) as f:
+        kept.append(json.load(f).get("statusLine"))
+assert MINE in kept, "the backup keeps the old one"
+s, out = frun("--force-statusline")
+assert "my-own-line.sh" not in out and "This replaces" not in out, "run again: nothing left to replace"
+
+fput({"statusLine": MINE, "env": dict(want_env)})     # the same, as Windows
+s, out = frun("--force-statusline", BURN_HELPER_TEST_OS="windows")
+assert "cc_statusline.py" in s["statusLine"]["command"] and s["env"] == want_env, s
+assert "Bridge started" not in out and "Firewall" not in out and "now reports to" in out, out
+
+fput({"statusLine": MINE, "env": {"BURN_HELPER_BRIDGE_URL": "http://127.0.0.1:8787"}})
+s, out = frun("--force-statusline")
+assert "cc_statusline.py" in s["statusLine"]["command"] and "now reports to" not in out, "this computer isn't joined"
+fput({"statusLine": MINE})
+s, out = frun("--force-statusline")       # the bridge computer: the usual install, with the hearts
+assert "cc_statusline.py" in s["statusLine"]["command"] and "now reports to" not in out and "my-own-line.sh" in out, out
+print("PASS install --force-statusline: replaces yours (kept in the backup), a joined computer stays joined")
+
+# the install scripts: the flag goes through, and the prompt shows the address without its key
+with open(os.path.join(os.path.dirname(BRIDGE), "install.ps1"), encoding="utf-8") as f:
+    ps = f.read()
+with open(os.path.join(os.path.dirname(BRIDGE), "install.sh"), encoding="utf-8") as f:
+    sh = f.read()
+import re as _re  # noqa: E402
+code = "\n".join(l for l in ps.splitlines() if not l.lstrip().startswith("#"))
+assert not _re.search(r'"[^"\n]*(?<!`)\$[A-Za-z_][A-Za-z0-9_]*\?', code), "PowerShell reads $name? as a variable named name?"
+assert 'Ask "Join the bridge at ${shown}?"' in ps and "$joinUrl?" not in code
+assert ps.count("+ $forceArgs") == 5 and "BURN_HELPER_FORCE_STATUSLINE" in code, "every install.py that sets things up"
+assert 'ask "Join the bridge at ${shown%/}?"' in sh and 'at $JOIN?' not in sh
+assert sh.count("$FORCE_SL") == 4 and "--force-statusline) FORCE_SL" in sh
+if shutil.which("bash") and os.name != "nt":
+    r = subprocess.run(["bash", "-c", 'JOIN="$1"; shown="${JOIN%%#*}"; printf %s "${shown%/}"', "-",
+                        "http://my-mac:8787/#k=" + fkey], capture_output=True, text=True)
+    assert r.stdout == "http://my-mac:8787", r.stdout
+    r = subprocess.run(["bash", os.path.join(os.path.dirname(BRIDGE), "install.sh"), "--dry-run", "--force-statusline",
+                        "--join", "http://my-mac:8787/#k=" + fkey],
+                       env=dict(os.environ, BURN_HELPER_HOME=fhome), capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+print("PASS install scripts: --force-statusline goes through, and the prompt shows the address without its key")

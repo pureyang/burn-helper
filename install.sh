@@ -20,6 +20,7 @@
 #   --no-badge   only set up the Mac side
 #   --no-bridge  only set up the badge
 #   --dry-run    show what would happen, change nothing
+#   --force-statusline  replace a status line you already have with the hearts one
 #   --uninstall  remove the hooks, status line and login item from this computer
 #
 # What it does: gets the code into ~/burn-helper, installs the Mac bridge (async
@@ -36,6 +37,7 @@ PY=/usr/bin/python3
 YES=0 NO_BADGE=0 NO_BRIDGE=0 DRY=0 UNINSTALL=0
 JOIN="${BURN_HELPER_JOIN:-}"
 TRACK=""                     # on, off, or empty (ask)
+FORCE_SL=""                  # --force-statusline, passed on to install.py
 BADGE_ARGS=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -49,6 +51,7 @@ while [ $# -gt 0 ]; do
     --no-badge) NO_BADGE=1 ;;
     --no-bridge) NO_BRIDGE=1 ;;
     --dry-run) DRY=1; BADGE_ARGS="$BADGE_ARGS --dry-run" ;;
+    --force-statusline) FORCE_SL=--force-statusline ;;
     --uninstall) UNINSTALL=1 ;;
     -h|--help) sed -n '2,33p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1 (try --help)" >&2; exit 2 ;;
@@ -140,12 +143,13 @@ fi
 # joining a bridge on another computer: hooks and a status line only
 if [ -n "$JOIN" ]; then
   if [ "$DRY" = 1 ]; then
-    "$PY" "$ROOT/bridge/install.py" --bridge "$JOIN" --dry-run
+    "$PY" "$ROOT/bridge/install.py" --bridge "$JOIN" --dry-run $FORCE_SL
   else
     say "This adds async hooks and a hearts status line to ~/.claude/settings.json (backed up first;"
     say "undo with --uninstall) that send this computer's Claude Code activity to the bridge."
-    if ask "Join the bridge at $JOIN?"; then
-      "$PY" "$ROOT/bridge/install.py" --bridge "$JOIN"
+    shown="${JOIN%%#*}"                # the address alone: the key stays off the screen
+    if ask "Join the bridge at ${shown%/}?"; then
+      "$PY" "$ROOT/bridge/install.py" --bridge "$JOIN" $FORCE_SL
     else
       say "Skipped."
     fi
@@ -159,7 +163,7 @@ if [ "$NO_BRIDGE" = 0 ]; then
   say "already is your bridge, stop here (Ctrl-C) and run the join line on this one instead:"
   say "  curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join http://<bridge>:8787"
   if [ "$DRY" = 1 ]; then
-    "$PY" "$ROOT/bridge/install.py" --dry-run
+    "$PY" "$ROOT/bridge/install.py" --dry-run $FORCE_SL
   else
     say "The bridge adds async hooks and a hearts status line to ~/.claude/settings.json"
     say "(backed up first; undo with --uninstall) and starts at login."
@@ -170,7 +174,7 @@ if [ "$NO_BRIDGE" = 0 ]; then
         say "SQLite file on this computer only (read it with bridge/stats.py; turn it off any time)."
         ask "Keep that history?" && TRACK=on
       fi
-      "$PY" "$ROOT/bridge/install.py" ${TRACK:+--tracking "$TRACK"}
+      "$PY" "$ROOT/bridge/install.py" ${TRACK:+--tracking "$TRACK"} $FORCE_SL
     else
       say "Skipped the bridge."
     fi
