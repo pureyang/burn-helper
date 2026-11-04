@@ -80,9 +80,16 @@ Linux, shows when the connection gets through.
   names, commands or tool output.
 - If you already have a status line there, it is left alone, and that computer's usage won't
   reach the bridge: the hearts then lag whatever you spend there until another computer's status
-  line reports. To report it, have your status line command also pipe its input to
-  `cc_statusline.py` and discard what that prints. In PowerShell, for example, at the top of your
-  script:
+  line reports. There are two ways to report it.
+
+  To replace yours with the hearts one, run `python3 ~/burn-helper/bridge/install.py --force-statusline`
+  (on Windows: `py $HOME\burn-helper\bridge\install.py --force-statusline`). `settings.json` is
+  backed up first, and the computer stays joined. The join line can do the same: add
+  `--force-statusline` after the address, or in PowerShell set `$env:BURN_HELPER_FORCE_STATUSLINE=1`
+  first.
+
+  To keep yours, have your status line command also pipe its input to `cc_statusline.py` and discard
+  what that prints. In PowerShell, for example, at the top of your script:
 
   ```powershell
   $raw = $input | Out-String
@@ -90,8 +97,8 @@ Linux, shows when the connection gets through.
   $json = $raw | ConvertFrom-Json
   ```
 
-  Leaving it out is the way to go if that computer signs into a different Claude account, so
-  the hearts don't mix two accounts.
+  If that computer signs into a different Claude account, its usage gets its own row on the badge
+  and doesn't mix with the first account's hearts.
 - The bridge's key goes in `BURN_HELPER_TOKEN` in the same `env` section. What the hooks and status
   line send is sealed with it (encrypted and signed), so nothing about your sessions crosses the
   network in the clear, and without it the bridge turns a computer away (see the
