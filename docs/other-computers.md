@@ -81,9 +81,11 @@ Linux, shows when the connection gets through.
 - If you already have a status line there, it is left alone, and that computer's usage won't
   feed the hearts. That is also the way to go if it signs into a different Claude account, so
   the hearts don't mix two accounts.
-- The bridge's key goes in `BURN_HELPER_TOKEN` in the same `env` section. Without it nothing on
-  another computer can read the bridge's status or post to it (see the [bridge](../bridge/README.md)).
-  A computer joined before the key was added stops reporting until you run its join line again.
+- The bridge's key goes in `BURN_HELPER_TOKEN` in the same `env` section. What the hooks and status
+  line send is sealed with it (encrypted and signed), so nothing about your sessions crosses the
+  network in the clear, and without it the bridge turns a computer away (see the
+  [bridge](../bridge/README.md)). A computer joined before the key was added stops reporting until
+  you run its join line again.
 
 To leave the bridge, run the same line with `--uninstall` instead of `--join ...` (on Windows,
 `$env:BURN_HELPER_UNINSTALL=1` before the line instead of `BURN_HELPER_JOIN`).
