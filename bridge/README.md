@@ -109,12 +109,12 @@ Install the same hooks and status line on another computer (Windows, Linux or a 
 point them at this Mac:
 
 ```sh
-python3 bridge/install.py --bridge http://<mac>:8787 [--token <shared secret>]
+python3 bridge/install.py --bridge 'http://<mac>:8787/#k=<key>'
 ```
 
-That writes `BURN_HELPER_BRIDGE_URL` (and `BURN_HELPER_TOKEN`) into that computer's
-`~/.claude/settings.json` `env`; if you use a token, set the same `BURN_HELPER_TOKEN` for the
-bridge. Step by step, including PowerShell: [docs/other-computers.md](../docs/other-computers.md).
+That writes `BURN_HELPER_BRIDGE_URL` and `BURN_HELPER_TOKEN` (the key) into that computer's
+`~/.claude/settings.json` `env`. `python3 bridge/install.py --join-help` on the bridge prints the
+address with its key. Step by step, including PowerShell: [docs/other-computers.md](../docs/other-computers.md).
 
 Events from another host count as remote sessions: busy for 90 seconds after
 their last event. Cloud sessions on claude.ai/code cannot reach a home LAN, so
@@ -172,9 +172,18 @@ in the state folder, which the bridge checks as it goes, with no restart).
   leave the machine.
 - `/status` is mostly counts, plus the categories of recent activity (`ev`). For sessions
   waiting for you it also has their title or folder name, the folder's name and what they
-  need (see `waiting_list`); never full paths, prompts or tool inputs. Anyone on your LAN
-  can read it and change the theme. Set `BURN_HELPER_TOKEN` to stop other LAN devices from
-  posting fake activity.
+  need (see `waiting_list`); never full paths, prompts or tool inputs.
+- Every request but the page at `/` and `/health` needs the bridge's key in an
+  `X-Burn-Helper-Token` header, except from the bridge computer itself (its own hooks and
+  status line). So no one else on the network can read `/status`, change the theme or post
+  activity. The key is 128 random bits, made on first start in `<state dir>/key` (readable by
+  you only), or `BURN_HELPER_TOKEN` when set. It reaches the badge over the USB cable only,
+  other computers through their join line, and a phone through the link `--join-help`
+  prints (`http://<bridge>:8787/#k=<key>`: the part after `#` never leaves the phone, which
+  keeps it and sends it in the header). To change it, delete the file and restart the bridge,
+  then plug the badge in once and run the new join line on each computer.
+- The LAN side is plain HTTP, so someone who can watch your Wi-Fi traffic (an open network,
+  say) could see the key and the status go by. Over Tailscale it is encrypted.
 - `.key` files in `~/.claude/sessions` are never opened.
 
 ## Internet relay

@@ -18,16 +18,17 @@ bridge's address filled in. To see it again, on the bridge run
 On a Mac or Linux, in Terminal:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join http://<bridge>:8787
+curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join 'http://<bridge>:8787/#k=<key>'
 ```
 
 On Windows, in PowerShell (Python 3 is needed: `winget install -e --id Python.Python.3.12`):
 
 ```
-$env:BURN_HELPER_JOIN='http://<bridge>:8787'; irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
+$env:BURN_HELPER_JOIN='http://<bridge>:8787/#k=<key>'; irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
 ```
 
-It gets the code into `~/burn-helper`, adds the hooks and the hearts status line, and checks
+The part after `#k=` is the bridge's key: without it the bridge turns the computer away. Keep
+these lines to yourself. It gets the code into `~/burn-helper`, adds the hooks and the hearts status line, and checks
 that the bridge answers. Then restart Claude Code on that computer.
 
 ## Which address
@@ -80,9 +81,9 @@ Linux, shows when the connection gets through.
 - If you already have a status line there, it is left alone, and that computer's usage won't
   feed the hearts. That is also the way to go if it signs into a different Claude account, so
   the hearts don't mix two accounts.
-- Anyone who can reach port 8787 could post made-up activity. To stop that, set a shared secret:
-  run `bridge/install.py --bridge <url> --token <secret>` on the joined computer, and set the same
-  `BURN_HELPER_TOKEN` for the bridge (see the [bridge](../bridge/README.md)).
+- The bridge's key goes in `BURN_HELPER_TOKEN` in the same `env` section. Without it nothing on
+  another computer can read the bridge's status or post to it (see the [bridge](../bridge/README.md)).
+  A computer joined before the key was added stops reporting until you run its join line again.
 
 To leave the bridge, run the same line with `--uninstall` instead of `--join ...` (on Windows,
 `$env:BURN_HELPER_UNINSTALL=1` before the line instead of `BURN_HELPER_JOIN`).
