@@ -23,7 +23,8 @@ The forecast reads the use so far against the usual shape of a week: by hour h a
 done S(h) of its use, and usually ends at P percent. Its band comes from how wrong that reading was
 on past weeks (a week that hit the limit only shows how far it got, so the fit treats it as
 censored). With under two past weeks it is learning: the shape comes from when agents work (or a
-weekday desk week), the total is a guess, and the band is wider. The method and every threshold
+weekday desk week), the total is a guess, and the band is wider; the week is also read at an even
+pace, as Claude Code projects it, and the more cautious reading wins. The method and every threshold
 come from a study of thousands of simulated weeks, which tools/sim/test_pace.py replays against
 this code.
 """
@@ -162,6 +163,9 @@ def shape(weights):
     return s
 
 
+EVEN = [h / H for h in range(H + 1)]     # the shape of a week used at an even pace
+
+
 def cold_model(weights):
     return {"S": shape(weights), "P": COLD_TOTAL, "mu": [0.0] * (H + 1),
             "sd": [default_spread(h) + 0.1 for h in range(H + 1)], "n": 0}
@@ -266,9 +270,18 @@ def eta_shape(m, u, h, rest):
 
 def forecast(m, u, h):
     """{final, lo, hi, p, eta}: the likely use at the reset (and its 80% range), the chance it
-    reaches the limit, and the hour of the week it would (None if the likely use stays under)."""
+    reaches the limit, and the hour of the week it would (None if the likely use stays under).
+
+    While learning (under two weeks), the usual shape is a guess, and one that expects quiet
+    hours (a weekend, say) hides a run-out when this week is busier. So the week is also read at
+    an even pace, as Claude Code projects it, and the reading with more still to come wins."""
     i = _i(h)
     r = shape_remaining(m, u, h)
+    if m["n"] < 2:
+        even = dict(m, S=EVEN)
+        r_even = shape_remaining(even, u, h)
+        if r_even > r:
+            m, r = even, r_even
     need = 100 - u
 
     def at(q):

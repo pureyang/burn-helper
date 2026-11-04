@@ -506,6 +506,7 @@ class Theme(S.Theme):
                 S.pace_tick(st, 77, 19, 79, 2)
         if not st.online and S.blink(t, 600):
             gfx.text("?", 62, 4, RED, font.sins)
+        S.draw_accounts(st, t, stale)     # a row for each other Claude account
 
     def draw_caption(self, st, t):
         if st.online and st.waiting:

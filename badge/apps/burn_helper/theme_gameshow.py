@@ -485,6 +485,7 @@ class Theme(S.Theme):
             if st.mode != "week":
                 gfx.box(6, 19, 76, 3, PINK if (t // 160) % 2 == 0 else WHITE)
                 gfx.meter(6, 20, 76, 1, st.week, CYAN, (30, 30, 60))
+        S.draw_accounts(st, t, self.lost is not None)     # a row for each other Claude account
 
     def season_clock(self, st):
         """The weekly countdown in the corner clock's place, in pink."""

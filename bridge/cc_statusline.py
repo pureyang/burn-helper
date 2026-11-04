@@ -8,8 +8,10 @@ The bridge answers the report with the weekly pace (bridge/pace.py), shown after
 percent: ✓ on course to last the week, ≈ at this pace it runs out (when, if within 3 days and
 likely), ! the same, sooner and surer, ✗ the weekly limit is reached. Nothing when no bridge answers.
 """
+import hashlib
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -85,12 +87,49 @@ def num(v):
         return None
 
 
+def account(config_dir=None, home=None):
+    """(tag, label, default): which Claude account this status line reports for, read from its
+    config folder's .claude.json (Claude Code's own record of who is signed in). tag is a short
+    hash of the account id, so the bridge can tell accounts apart without ever seeing who they
+    are; label is BURN_HELPER_LABEL, else the email's domain ("GMAIL"); default is True for the
+    usual ~/.claude rather than a CLAUDE_CONFIG_DIR folder. (None, None, default) when unknown."""
+    if config_dir is None:
+        config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or None
+    default = config_dir is None
+    home = home or os.path.expanduser("~")
+    path = os.path.join(config_dir, ".claude.json") if config_dir else os.path.join(home, ".claude.json")
+    label = (env("LABEL") or "").strip().upper() or None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        text = ""
+    # searched, not json.load: the file can run to megabytes, and this runs at every redraw
+    at = text.find('"oauthAccount"')
+    part = text[at:at + 8000] if at >= 0 else ""
+    uuid = re.search(r'"accountUuid"\s*:\s*"([^"]+)"', part)
+    if not uuid:
+        if config_dir:      # still not the main account's: tell it apart by its folder
+            return hashlib.sha256(("dir:" + os.path.abspath(config_dir)).encode()).hexdigest()[:12], label, default
+        return None, label, default
+    if not label:
+        mail = re.search(r'"emailAddress"\s*:\s*"[^"@]*@([^".]+)', part)
+        label = mail.group(1).upper()[:8] if mail else None
+    return hashlib.sha256(uuid.group(1).encode()).hexdigest()[:12], label, default
+
+
 def report(d):
     """Send the rate limits to the bridge; returns its answer ({"pace", "mode"}), or None."""
     rl = d.get("rate_limits")
     if not isinstance(rl, dict) or not rl:
         return None
     body = {"session_id": d.get("session_id"), "host": socket.gethostname(), "rate_limits": rl}
+    try:
+        tag, label, default = account()
+    except Exception:  # noqa: BLE001
+        tag, label, default = None, None, True
+    if tag:
+        body.update(acct=tag, label=label, default=default)
     url = (env("BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/usage"
     token = env("TOKEN")
     try:

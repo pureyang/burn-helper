@@ -91,6 +91,9 @@ class Status:
         self.est5 = False       # the 5-hour countdown is an estimate (shown with a ~)
         self.usage_state = ""
         self.usage_age = None
+        self.label = ""         # the main account's label (GMAIL), when the bridge knows more than one
+        self.accounts = []      # the other accounts' rows: [{l: label, h: half hearts, e: likely at the
+        #                         reset, r: reset (epoch s), w: "5h" or "wk", u: ok / old / none}]
         self.pending = None     # the most telling activity not played yet
         self.pending_t = 0
         self.seen_ms = None     # ticks_ms when data last came, or None: none since boot (see lost_stage)
@@ -138,6 +141,19 @@ class Status:
         he = d.get("hearts_end")
         self.hearts_end = None if he is None or self.hearts is None or self.mode != "week" \
             else max(0, min(self.hearts, int(he)))
+        self.label = str(d.get("label") or "")[:8]
+        rows = []
+        for a in d.get("accounts") or []:
+            try:
+                h, e = a.get("h"), a.get("e")
+                h = None if h is None else max(0, min(20, int(h)))
+                rows.append({"l": str(a.get("l") or "?")[:8], "h": h,
+                             "e": None if e is None or h is None else max(0, min(h, int(e))),
+                             "r": None if a.get("r") is None else int(a["r"]),
+                             "w": "5h" if a.get("w") == "5h" else "wk", "u": str(a.get("u") or "")})
+            except (AttributeError, TypeError, ValueError):
+                pass
+        self.accounts = rows[:ACCOUNT_ROWS]
         self.busy = int(d.get("busy") or 0)
         self.waiting = int(d.get("waiting") or 0)
         wl = []
@@ -259,6 +275,11 @@ class Status:
         self.left5 = None if (now is None or not self.reset5) else int(self.reset5) * 1000000 - now
         self.left7 = None if (now is None or not self.reset7) else int(self.reset7) * 1000000 - now
 
+    def left_of(self, reset):
+        """Microseconds until an epoch-seconds reset, or None."""
+        now = self._now_us()
+        return None if (now is None or not reset) else int(reset) * 1000000 - now
+
 
 class Layer:
     """A horizontally tiling strip (width W) scrolled at a parallax factor."""
@@ -332,7 +353,7 @@ class Theme:
         self.advance(st, t)
         self.render(st, t)
         if st.tier:
-            fx.draw(st.tier, t, FX_TOP, FX_BOTTOM)
+            fx.draw(st.tier, t, FX_TOP + ACCOUNT_ROW_H * len(st.accounts), FX_BOTTOM)   # below any account rows
 
     def render(self, st, t):
         pass
@@ -386,6 +407,61 @@ def icon_units(st, units, t):
     if units is None or e is None or e >= units or not st.online:
         return units
     return e if t % BURN_MS >= BURN_MS - BURN_OFF_MS else units
+
+
+# More than one Claude account: the theme's own HUD is the main account, and each other account
+# the bridge knows gets a row under it, the same in every theme: its label and countdown on the
+# left, ten hearts in its own colour on the right. A row's hearts follow whichever of that
+# account's limits has less left; the ones likely spent by the weekly reset go dark now and then
+# (as in "week" mode), and a low row blinks. Grey while the data is lost or the account's numbers
+# are 30 minutes old or more.
+ACCOUNT_ROWS = 4
+ACCOUNT_ROW_H = 9
+ACCOUNT_INKS = ((72, 150, 245), (70, 200, 110), (235, 190, 60), (170, 110, 240))  # blue, green, gold, purple
+_acct_hearts = {}
+
+
+def account_hearts(k):
+    """Heart images for row k's colour (k = -1: grey), made once."""
+    if k not in _acct_hearts:
+        if k < 0:
+            _acct_hearts[k] = gfx.heart_set((120, 120, 120), (60, 60, 60), (0, 0, 0))
+        else:
+            c = ACCOUNT_INKS[k % len(ACCOUNT_INKS)]
+            _acct_hearts[k] = gfx.heart_set(c, (c[0] // 3, c[1] // 3, c[2] // 3), (0, 0, 0))
+    return _acct_hearts[k]
+
+
+def short_cd(us):
+    """A row's countdown, short enough for its corner: 2D03H, 4H05M, 12M, NOW."""
+    if us is None:
+        return "--"
+    s = us // 1000000
+    if s <= 0:
+        return "NOW"
+    if s >= 86400:
+        return "%dD%02dH" % (s // 86400, s % 86400 // 3600)
+    if s >= 3600:
+        return "%dH%02dM" % (s // 3600, s % 3600 // 60)
+    return "%dM" % max(1, s // 60)
+
+
+def draw_accounts(st, t, stale=False, y0=22):
+    """The other accounts' rows, under the theme's HUD (see ACCOUNT_ROWS)."""
+    for k, a in enumerate(st.accounts):
+        y = y0 + k * ACCOUNT_ROW_H
+        gfx.box(0, y, 160, ACCOUNT_ROW_H, (0, 0, 0))
+        grey = stale or a["u"] in ("old", "none")
+        ink = (130, 130, 130) if grey else ACCOUNT_INKS[k % len(ACCOUNT_INKS)]
+        gfx.text(a["l"][:6], 3, y - 2, ink, font.sins)
+        cd = short_cd(st.left_of(a["r"]))
+        gfx.text(cd, 72 - gfx.width(cd, font.sins), y - 2, (130, 130, 130) if grey else (230, 230, 230), font.sins)
+        units = a["h"]
+        if not grey and units is not None and a["e"] is not None and a["e"] < units and t % BURN_MS >= BURN_MS - BURN_OFF_MS:
+            units = a["e"]
+        hs = account_hearts(-1 if grey else k)
+        gfx.draw_hearts(hs, units, 76, y, blink=not grey and a["h"] is not None and a["h"] <= 4 and blink(t, 300),
+                        unknown=hs[2])
 
 
 def week_stage(st):
