@@ -54,6 +54,7 @@ STUCK = "never accepted the badge"
 NOT_SEEN = "not visible (5 GHz only / out of range?)"
 NO_IP = "joined but no IP address (DHCP)"
 FAILED = "connect failed"
+NEEDS_KEY = "needs its key"      # the bridge turned the poll down: plug the badge into it once
 
 
 def ticks():
@@ -67,7 +68,7 @@ def since(t0):
 class HttpGet:
     """One HTTP/1.0 GET, advanced a little on every step() call."""
 
-    def __init__(self, host, port, path):
+    def __init__(self, host, port, path, key=None):
         self.done = False
         self.ok = False
         self.body = None
@@ -75,7 +76,8 @@ class HttpGet:
         self.t0 = ticks()
         self.buf = b""
         self.sent = False
-        self.req = ("GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n" % (path, host)).encode()
+        auth = "X-Burn-Helper-Token: %s\r\n" % key if key else ""
+        self.req = ("GET %s HTTP/1.0\r\nHost: %s\r\n%sConnection: close\r\n\r\n" % (path, host, auth)).encode()
         self.sock = None
         try:
             addr = socket.getaddrinfo(host, port)[0][-1]
@@ -143,6 +145,9 @@ class HttpGet:
         self.done = True
         head, _, body = self.buf.partition(b"\r\n\r\n")
         line = head.split(b"\r\n", 1)[0]
+        if b" 403" in line:
+            self.err = NEEDS_KEY
+            return
         if b" 200 " not in line + b" ":
             self.err = "HTTP " + line.decode()[:24]
             return
@@ -157,7 +162,7 @@ class Net:
     """Wi-Fi + bridge link with a diagnosis of every failure (see debug screen)."""
 
     def __init__(self, networks, bridge=None, hostname="burn-helper", relay=None, last=None, on_join=None,
-                 paired=None):
+                 paired=None, key=None):
         self.cands = []
         for n in networks:
             if not n or not n[0]:
@@ -182,6 +187,7 @@ class Net:
         self.others = {}                       # other bridges heard on this network: host -> id
         self.fixed_bridge = bridge             # (host, port) or None
         self.bridge = bridge
+        self.key = key                         # the bridge's key, learned over USB, sent with every poll
         self.relay = relay                     # {"url", "key"} of the Mac's internet relay, or None
         self.rclient = None                    # relay.Client while the relay is in use
         self.rpoll_t0 = None
@@ -309,6 +315,9 @@ class Net:
                     and since(self.up_t) > NO_BEACON_MS:
                 return ("On Wi-Fi but no bridge beacon: is the Mac on this same network? "
                         "Plug the badge into the Mac once to set up the internet relay.")
+            if self.bridge is not None and not self.fresh() and self.http_err == NEEDS_KEY:
+                return ("The bridge at %s wants its key: plug the badge into that computer's USB once."
+                        % self.bridge[0])
             if self.bridge is not None and not self.fresh() and self.http_err:
                 return "Bridge %s:%d not answering (%s)" % (self.bridge[0], self.bridge[1], self.http_err)
             if self.fresh():
@@ -354,6 +363,8 @@ class Net:
             return "REACHING THE RELAY..."
         if self.bridge is None:
             return "SEARCHING FOR BRIDGE..."
+        if self.http_err == NEEDS_KEY:
+            return "PLUG INTO BRIDGE FOR KEY"
         if not self.fresh():
             return "BRIDGE NOT ANSWERING"
         return ""
@@ -362,7 +373,9 @@ class Net:
         """What label() is about, in a word, for the connection-lost screens' advice: wifi, relay or bridge."""
         if self.state != "up":
             return "wifi"
-        return "relay" if self._use_relay() else "bridge"
+        if self._use_relay():
+            return "relay"
+        return "key" if self.http_err == NEEDS_KEY else "bridge"
 
     def stop(self):
         self._close_udp()
@@ -756,7 +769,7 @@ class Net:
         if self.poll_t0 is not None and since(self.poll_t0) < POLL_MS:
             return
         self.poll_t0 = ticks()
-        self.http = HttpGet(self.bridge[0], self.bridge[1], "/status" + self.extra_query)
+        self.http = HttpGet(self.bridge[0], self.bridge[1], "/status" + self.extra_query, self.key)
 
     def _poll_relay(self):
         """Away from home: the same status, over HTTPS through the Mac's Tailscale Funnel."""

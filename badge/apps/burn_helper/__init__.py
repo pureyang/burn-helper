@@ -72,7 +72,7 @@ def new_link():
     """The Wi-Fi link, from the networks saved right now (the last one that worked tried first)."""
     return net.Net(config.networks(), config.bridge(), relay=config.load_relay(),
                    last=config.last_network(), on_join=config.save_last_network,
-                   paired=config.paired_bridge())
+                   paired=config.paired_bridge(), key=config.load_key())
 
 
 link = new_link()
@@ -187,6 +187,13 @@ def apply_bridge():
             config.save_relay(r)
             link.set_relay(r)
             show_toast("INTERNET RELAY READY")
+    k = d.get("key")
+    if source == "usb" and isinstance(k, str) and k and k != link.key:
+        # the bridge's key comes over the cable only; every Wi-Fi poll carries it from now on
+        config.save_key(k)
+        link.key = k
+        link.http_err = ""
+        show_toast("BRIDGE KEY SAVED")
     bid = d.get("bridge")
     if source == "usb" and isinstance(bid, str) and bid and bid != link.paired:
         # the bridge on the other end of the cable is this badge's bridge: from now on its beacon

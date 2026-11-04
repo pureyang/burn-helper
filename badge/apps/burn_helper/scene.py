@@ -440,7 +440,8 @@ BACK_MS = 2500
 LOST_CAPTION_MS = 2000        # the blip's caption: how long, then why, this long each
 LOST = (245, 160, 90)         # Okabe-Ito orange (light, for the dark screen), always with the word LOST
 BACK = (86, 180, 233)         # Okabe-Ito sky blue: the data is back, always with words
-ADVICE = {"wifi": "B x2: THE WI-FI PAGE", "relay": "IS THE BRIDGE ONLINE?", "bridge": "IS THE BRIDGE AWAKE?"}
+ADVICE = {"wifi": "B x2: THE WI-FI PAGE", "relay": "IS THE BRIDGE ONLINE?", "bridge": "IS THE BRIDGE AWAKE?",
+          "key": "PLUG INTO THE BRIDGE"}
 
 
 def lost_ms(st, t):

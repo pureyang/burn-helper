@@ -70,6 +70,28 @@ def save_relay(r):
         return False
 
 
+KEY_FILE = "/state/burn_helper_key.txt"
+
+
+def load_key():
+    """The bridge's key, learned over USB from the bridge, or None. Every Wi-Fi poll sends it."""
+    try:
+        with open(KEY_FILE) as f:
+            k = f.read().strip()
+        return k or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def save_key(k):
+    try:
+        with open(KEY_FILE, "w") as f:
+            f.write(k)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def load_portal():
     try:
         with open(NET_FILE) as f:
