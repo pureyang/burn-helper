@@ -448,17 +448,18 @@ def check_bridge(url, key=None):
                 "its firewall rule. The hooks are installed either way." % (url, e.__class__.__name__))
     if not ok:
         return "Something answered at %s, but it isn't a Burn Helper bridge." % url
+    import seal
     try:
-        req = urllib.request.Request(url + "/status", headers={"X-Burn-Helper-Token": key or ""})
-        with urllib.request.urlopen(req, timeout=5):
-            pass
+        with urllib.request.urlopen(url + "/status", timeout=5) as r:
+            raw = r.read()
     except urllib.error.HTTPError as e:
-        if e.code == 403:
-            return ("The bridge at %s answers, but %s. On the bridge computer, run install.py --join-help "
-                    "and use the join line it prints: it carries the key." % (
-                        url, "turned this key down" if key else "it needs its key"))
+        raw = b"" if e.code == 403 else None
     except Exception:  # noqa: BLE001
-        pass
+        raw = None
+    if raw is not None and (raw == b"" or seal.is_sealed(raw)) and seal.reply(key, raw) is None:
+        return ("The bridge at %s answers, but %s. On the bridge computer, run install.py --join-help "
+                "and use the join line it prints: it carries the key." % (
+                    url, "this key isn't the bridge's" if key else "it needs its key"))
     return "The bridge at %s answers." % url
 
 

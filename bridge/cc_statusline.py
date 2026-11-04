@@ -92,14 +92,19 @@ def report(d):
         return None
     body = {"session_id": d.get("session_id"), "host": socket.gethostname(), "rate_limits": rl}
     url = (env("BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/usage"
-    headers = {"Content-Type": "application/json"}
     token = env("TOKEN")
-    if token:
-        headers["X-Burn-Helper-Token"] = token
     try:
-        req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
+        if token:
+            # sealed with the bridge's key, both ways (seal.py)
+            import seal
+            data, ctype = seal.envelope(token, body), "application/x-burn-helper-sealed"
+        else:
+            seal = None
+            data, ctype = json.dumps(body).encode(), "application/json"
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": ctype}, method="POST")
         with urllib.request.urlopen(req, timeout=0.3) as r:
-            got = json.loads(r.read(8192).decode("utf-8") or "{}")
+            raw = r.read(8192)
+        got = seal.reply(token, raw) if seal else json.loads(raw.decode("utf-8") or "{}")
     except Exception:  # noqa: BLE001
         return None
     return got if isinstance(got, dict) else None

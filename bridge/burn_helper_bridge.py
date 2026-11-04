@@ -13,10 +13,11 @@ Outputs:
   * POST /theme                 pick the badge theme from a phone
   * GET /health                 "is a bridge here", for the installer; nothing about your sessions
 
-Every request but GET / and /health needs the bridge's key (X-Burn-Helper-Token), except from
-this computer itself. The key is made on first start (portable.bridge_key) and reaches the
-badge over the USB cable only, other computers through their join line, and a phone through
-the link `install.py --join-help` prints.
+From anywhere but this computer itself, every message both ways is sealed with the bridge's key
+(seal.py: encrypted and signed), and one that isn't is turned down; only GET / and /health are
+open, and they say nothing about your sessions. The key itself never crosses the network: it is
+made on first start (portable.bridge_key) and reaches the badge over the USB cable only, other
+computers through their join line, and a phone through the link `install.py --join-help` prints.
   * UDP beacon                  "TUFTYBRIDGE 1 <port> <bridge id>" broadcast to port 47800 every 2 s
                                 (the TUFTY wire markers predate the Burn Helper name; kept so
                                 badges and bridges of either age still talk)
@@ -40,6 +41,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pace  # noqa: E402
+import seal  # noqa: E402
 import portable  # noqa: E402
 import tracking  # noqa: E402
 
@@ -622,24 +624,53 @@ class Bridge:
 
 BRIDGE = None
 TOKEN = None          # the bridge's key, set in main()
-TOKEN_HEADERS = ("X-Burn-Helper-Token", "X-Hearts-Left-Token", "X-Tufty-Token")
 LOOPBACK = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+SEALED = "application/x-burn-helper-sealed"
+REPLAY_S = 120        # a sealed message older (or newer) than this is turned down
+_seen = {}            # nonce -> when it may be forgotten: each sealed message is taken once
+_seen_lock = threading.Lock()
 START = time.time()
 
 
+def fresh_nonce(nonce, t, now=None):
+    """True the first time a sealed message's nonce comes by within REPLAY_S of its time t."""
+    now = time.time() if now is None else now
+    try:
+        if abs(now - float(t)) > REPLAY_S:
+            return False
+    except (TypeError, ValueError):
+        return False
+    with _seen_lock:
+        for k in [k for k, until in _seen.items() if until < now]:
+            del _seen[k]
+        if nonce in _seen:
+            return False
+        _seen[nonce] = now + 2 * REPLAY_S
+    return True
+
+
 class Handler(BaseHTTPRequestHandler):
+    """On this computer (loopback), plain JSON as ever. From anywhere else every message both ways
+    is sealed with the bridge's key (seal.py): what you work on and the key never cross the network
+    in the clear, and a message that isn't sealed with the key, or comes by twice, is turned down."""
     server_version = "BurnHelperBridge/1"
     protocol_version = "HTTP/1.0"     # badge client reads until close
+    sealed = False                    # this request came sealed, so the answer goes back sealed
 
     def log_message(self, fmt, *args):
         if VERBOSE:
             log("%s %s" % (self.client_address[0], fmt % args))
+
+    def _local(self):
+        return self.client_address[0] in LOOPBACK
 
     def _send(self, code, body, ctype="application/json"):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, separators=(",", ":"))
         if isinstance(body, str):
             body = body.encode("utf-8")
+        if self.sealed and code == 200 and ctype == "application/json":
+            body, ctype = seal.seal(TOKEN, body), SEALED
         try:
             self.send_response(code)
             self.send_header("Content-Type", ctype)
@@ -660,38 +691,49 @@ class Handler(BaseHTTPRequestHandler):
             self._send(413, {"error": "body too large"})
             return None
         raw = self.rfile.read(n) if n else b""
-        try:
-            d = json.loads(raw.decode("utf-8") or "{}")
-        except (ValueError, UnicodeDecodeError):
-            self._send(400, {"error": "bad json"})
+        if seal.is_sealed(raw):
+            # {"t": when it was sealed, "d": the message}: the time and the nonce stop a replay
+            inner = seal.unseal(TOKEN, raw) if TOKEN else None
+            try:
+                env_ = json.loads(inner.decode("utf-8")) if inner is not None else None
+            except (ValueError, UnicodeDecodeError):
+                env_ = None
+            if not isinstance(env_, dict) or not fresh_nonce(raw[len(seal.MAGIC):len(seal.MAGIC) + seal.NONCE],
+                                                             env_.get("t")):
+                self._send(403, {"error": "key needed"})
+                return None
+            self.sealed = True
+            d = env_.get("d")
+        elif not self._local():
+            self._send(403, {"error": "key needed"})
             return None
+        else:
+            try:
+                d = json.loads(raw.decode("utf-8") or "{}")
+            except (ValueError, UnicodeDecodeError):
+                self._send(400, {"error": "bad json"})
+                return None
         if not isinstance(d, dict):
             self._send(400, {"error": "expected object"})
             return None
         return d
 
-    def _authorized(self):
-        """This computer's own hooks and status line need no key; anyone else needs it. No key at
-        all (it couldn't be saved) lets only this computer in."""
-        if self.client_address[0] in LOOPBACK:
-            return True
-        if not TOKEN:
-            return False
-        want = TOKEN.encode()
-        return any(hmac.compare_digest(str(self.headers.get(h) or "").encode(), want) for h in TOKEN_HEADERS)
-
     def do_GET(self):
         try:
             path = self.path.split("?", 1)[0]
             if path == "/status":
-                if self._authorized():
+                if self._local():
+                    self._send(200, BRIDGE.status())
+                elif TOKEN:
+                    self.sealed = True
                     self._send(200, BRIDGE.status())
                 else:
                     self._send(403, {"error": "key needed"})
             elif path in ("/", "/index.html"):
                 self._send(200, PAGE, "text/html; charset=utf-8")
             elif path == "/health":
-                self._send(200, {"ok": True, "uptime": int(time.time() - START), "join": JOIN_URL})
+                self._send(200, {"ok": True, "uptime": int(time.time() - START), "join": JOIN_URL,
+                                 "sealed": 1})
             else:
                 self._send(404, {"error": "not found"})
         except Exception as e:  # noqa: BLE001 - never let a request kill the server
@@ -701,9 +743,6 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             path = self.path.split("?", 1)[0]
-            if not self._authorized():
-                self._send(403, {"error": "key needed"})
-                return
             d = self._read_json()
             if d is None:
                 return
@@ -1154,19 +1193,56 @@ function frame(){const now=Date.now()+off+(performance.now()%1);const l5=r5?r5*1
 const e=document.getElementById("cd5");e.textContent=fmt(l5);e.className="cd"+(l5!==null&&l5>-60000&&l5<=600000?(l5<=60000?" now":" soon"):"");
 document.getElementById("cd7").textContent=fmt(l7);requestAnimationFrame(frame);}
 requestAnimationFrame(frame);
-// the key comes in the link's #k=... (never sent to the bridge as part of the address), is kept
-// on this phone, and goes in a header; the address bar is cleared of it
+// SEAL-JS: seal.py in JavaScript. Phone browsers keep crypto.subtle from plain-http pages, so
+// SHA-256 is written out here; crypto.getRandomValues is allowed and makes the nonces.
+const K256=new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,
+0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,
+0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+function sha256(m){const l=m.length,n=((l+72)>>6)<<6,b=new Uint8Array(n);b.set(m);b[l]=0x80;const v=new DataView(b.buffer);
+v.setUint32(n-8,Math.floor(l/0x20000000));v.setUint32(n-4,(l*8)>>>0);
+const h=new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]),w=new Uint32Array(64);
+for(let o=0;o<n;o+=64){for(let i=0;i<16;i++)w[i]=v.getUint32(o+i*4);
+for(let i=16;i<64;i++){const x=w[i-15],y=w[i-2];w[i]=((x>>>7|x<<25)^(x>>>18|x<<14)^(x>>>3))+w[i-7]+((y>>>17|y<<15)^(y>>>19|y<<13)^(y>>>10))+w[i-16];}
+let [a,c,d,e,f,g,k,p]=h;
+for(let i=0;i<64;i++){const t1=(p+((f>>>6|f<<26)^(f>>>11|f<<21)^(f>>>25|f<<7))+((f&g)^(~f&k))+K256[i]+w[i])|0,
+t2=(((a>>>2|a<<30)^(a>>>13|a<<19)^(a>>>22|a<<10))+((a&c)^(a&d)^(c&d)))|0;p=k;k=g;g=f;f=(e+t1)|0;e=d;d=c;c=a;a=(t1+t2)|0;}
+h[0]+=a;h[1]+=c;h[2]+=d;h[3]+=e;h[4]+=f;h[5]+=g;h[6]+=k;h[7]+=p;}
+const out=new Uint8Array(32),ov=new DataView(out.buffer);for(let i=0;i<8;i++)ov.setUint32(i*4,h[i]);return out;}
+function cat(...xs){const o=new Uint8Array(xs.reduce((s,x)=>s+x.length,0));let i=0;for(const x of xs){o.set(x,i);i+=x.length;}return o;}
+function hmac(key,msg){const k=new Uint8Array(64);k.set(key);return sha256(cat(k.map(x=>x^0x5c),sha256(cat(k.map(x=>x^0x36),msg))));}
+const TE=new TextEncoder(),MAGIC=TE.encode("BHS1");
+function sealKeys(key){const raw=/^([0-9a-fA-F]{2})+$/.test(key)?new Uint8Array(key.match(/../g).map(x=>parseInt(x,16))):TE.encode(key);
+return [hmac(raw,TE.encode("burn-helper seal enc")),hmac(raw,TE.encode("burn-helper seal mac"))];}
+function stream(enc,nonce,data){const o=new Uint8Array(data.length);for(let i=0,n=0;i<data.length;i+=32,n++){
+const c=new Uint8Array(4);new DataView(c.buffer).setUint32(0,n);const blk=hmac(enc,cat(nonce,c));
+for(let j=0;j<32&&i+j<data.length;j++)o[i+j]=data[i+j]^blk[j];}return o;}
+function seal(key,data,nonce){const [enc,mac]=sealKeys(key);nonce=nonce||crypto.getRandomValues(new Uint8Array(16));
+const body=cat(MAGIC,nonce,stream(enc,nonce,data));return cat(body,hmac(mac,body));}
+function isSealed(b){return b.length>=4&&MAGIC.every((x,i)=>b[i]===x);}
+function unseal(key,box){if(!key||!isSealed(box)||box.length<52)return null;const [enc,mac]=sealKeys(key);
+const body=box.subarray(0,box.length-32),tag=box.subarray(box.length-32),want=hmac(mac,body);let d=0;
+for(let i=0;i<32;i++)d|=want[i]^tag[i];return d?null:stream(enc,body.subarray(4,20),body.subarray(20));}
+// /SEAL-JS
+// the key comes in the link's #k=... (a part of the address the browser never sends), is kept on
+// this phone, and opens the bridge's sealed answers; it never leaves the phone. The address bar
+// is cleared of it.
 const KEY=(()=>{let k=(location.hash.match(/k=([0-9a-fA-F]+)/)||[])[1];
 try{if(k)localStorage.setItem("bh_key",k);else k=localStorage.getItem("bh_key");}catch(e){}
 if(location.hash)history.replaceState(null,"",location.pathname);return k||"";})();
-const AUTH={"X-Burn-Helper-Token":KEY};
+function needKey(){const f=document.getElementById("foot");f.className="foot err";
+f.textContent="This page needs the bridge's key. On the bridge computer run install.py --join-help and open the phone link it prints.";}
+async function readReply(r){const b=new Uint8Array(await r.arrayBuffer());
+if(!isSealed(b))return JSON.parse(new TextDecoder().decode(b));const p=unseal(KEY,b);
+return p?JSON.parse(new TextDecoder().decode(p)):null;}
 let theme=null;
 async function tick(){
   try{
-    const r=await fetch("/status",{cache:"no-store",headers:AUTH});
-    if(r.status===403){const f=document.getElementById("foot");f.className="foot err";
-      f.textContent="This page needs the bridge's key. On the bridge computer run install.py --join-help and open the phone link it prints.";return;}
-    const s=await r.json();
+    const r=await fetch("/status",{cache:"no-store"});
+    const s=r.status===403?null:await readReply(r);
+    if(!s){needKey();return;}
     document.getElementById("hearts").textContent=hearts(s.hearts);
     const u=[pct(s.five_hour,"5h"),pct(s.seven_day,"7d")].filter(Boolean).join(" · ");
     document.getElementById("usage").textContent=u||"waiting for status line data";
@@ -1179,7 +1255,9 @@ async function tick(){
   }catch(e){const f=document.getElementById("foot");f.textContent="Bridge unreachable";f.className="foot err";}
 }
 document.querySelectorAll("button").forEach(b=>b.addEventListener("click",async()=>{
-  await fetch("/theme",{method:"POST",headers:Object.assign({"Content-Type":"application/json"},AUTH),body:JSON.stringify({theme:b.dataset.t})});tick();
+  const d={theme:b.dataset.t};
+  const body=KEY?seal(KEY,TE.encode(JSON.stringify({t:Math.floor(Date.now()/1000),d:d}))):JSON.stringify(d);
+  await fetch("/theme",{method:"POST",headers:{"Content-Type":KEY?"application/x-burn-helper-sealed":"application/json"},body:body});tick();
 }));
 tick();setInterval(tick,3000);
 </script></body></html>
