@@ -115,6 +115,9 @@ class FakeBridge:
     def on_usage(self, d):
         return True
 
+    def answer(self, d):
+        return {"pace": None, "mode": "5h"}
+
     def set_theme(self, t):
         self.themes.append(t)
         return True

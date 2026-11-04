@@ -145,8 +145,14 @@ with open(os.path.join(I.HOME, ".zshrc")) as f:
 out = install("--add-account", "lexco", "--uninstall")
 with open(os.path.join(ihome, ".claude-lexco", "settings.json")) as f:
     assert json.load(f) == {}, "uninstall takes ours out of that folder"
+key = "00112233445566778899aabbccddeeff"
+install("--add-account", "other", "--bridge", "http://my-mac:8787/#k=" + key)
+with open(os.path.join(ihome, ".claude-other", "settings.json")) as f:
+    senv = json.load(f)["env"]
+assert senv == {"BURN_HELPER_BRIDGE_URL": "http://my-mac:8787", "BURN_HELPER_TOKEN": key,
+                "BURN_HELPER_LABEL": "OTHER"}, senv     # on a joined computer it needs the key too
 r = subprocess.run([sys.executable, os.path.join(BRIDGE_DIR, "install.py"), "--add-account", "../x"],
                    env=dict(os.environ, BURN_HELPER_HOME=ihome), capture_output=True, text=True)
 assert r.returncode != 0, "a name that isn't a plain word is refused"
 print("PASS install --add-account: its own folder, hooks, status line and label, the alias once, "
-      "clean uninstall")
+      "clean uninstall, the key on a joined computer")

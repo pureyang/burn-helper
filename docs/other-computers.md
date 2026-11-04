@@ -108,9 +108,10 @@ To run another Claude account side by side with the first, set it up in a config
 
     python3 bridge/install.py --add-account lexco
 
-On a joined computer, add the bridge's address:
+On a joined computer, add the bridge's address and key, as they are in its join line (without the
+key the bridge turns that account's reports away):
 
-    python3 bridge/install.py --add-account lexco --bridge http://<bridge-computer>:8787
+    python3 bridge/install.py --add-account lexco --bridge 'http://<bridge-computer>:8787/#k=<key>'
 
 Then run `claude-lexco` and `/login` once with that account. On Windows the installer prints a
 `claude-lexco` function to add to your PowerShell profile instead of a shell alias.
