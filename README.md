@@ -33,7 +33,7 @@ There are two one-line installers, one for each role a computer can have:
 | Which line | Mac | Windows (PowerShell) | Linux |
 |---|---|---|---|
 | **Bridge line**: one computer, first | `install.sh \| bash` | `install.ps1 \| iex` | not supported |
-| **Join line**: each other computer | `install.sh \| bash -s -- --join http://<bridge>:8787` | `$env:BURN_HELPER_JOIN='http://<bridge>:8787'; install.ps1 \| iex` | same as Mac |
+| **Join line**: each other computer | `install.sh \| bash -s -- --join 'http://<bridge>:8787/#k=<key>'` | `$env:BURN_HELPER_JOIN='http://<bridge>:8787/#k=<key>'; install.ps1 \| iex` | same as Mac |
 
 The full lines are below. There are three setups, from simplest to most involved. Everyone
 starts with the first; the other two add to it, on their own or together:
@@ -113,21 +113,21 @@ troubleshooting: [away from home](docs/relay.md).
 ### 3. More computers
 
 On each other computer, run the **join line**, not the bridge line. The bridge's install showed
-it to you with `<bridge>` filled in; it looks like this.
+it to you with `<bridge>` and the bridge's key filled in; it looks like this.
 
 **Join line** on a Mac or Linux, in Terminal:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join http://<bridge>:8787
+curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join 'http://<bridge>:8787/#k=<key>'
 ```
 
 **Join line** on Windows, in PowerShell:
 
 ```
-$env:BURN_HELPER_JOIN='http://<bridge>:8787'; irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
+$env:BURN_HELPER_JOIN='http://<bridge>:8787/#k=<key>'; irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
 ```
 
-It adds only the hooks and status line (no badge, no login item) and checks that the bridge
+The part after `#k=` is the bridge's key: keep these lines to yourself. It adds only the hooks and status line (no badge, no login item) and checks that the bridge
 answers. Then restart Claude Code on that computer. For `<bridge>`, the bridge's Tailscale
 address (`100.x.y.z`, from `tailscale ip -4`) works from anywhere for computers on your tailnet;
 its IP address works on your home network. Avoid its `ts.net` name: with the relay on, that name

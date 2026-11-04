@@ -91,11 +91,14 @@ def main():
             event["name"] = session_name(d.get("session_id"))
             event["folder"] = os.path.basename(str(d.get("cwd") or "").rstrip("/\\"))[:60] or None
         url = (env("BRIDGE_URL") or "http://127.0.0.1:8787").rstrip("/") + "/hook"
-        headers = {"Content-Type": "application/json"}
         token = env("TOKEN")
         if token:
-            headers["X-Burn-Helper-Token"] = token
-        req = urllib.request.Request(url, data=json.dumps(event).encode(), headers=headers, method="POST")
+            # sealed with the bridge's key: the session's name and folder don't cross the network in the clear
+            import seal
+            data, ctype = seal.envelope(token, event), "application/x-burn-helper-sealed"
+        else:
+            data, ctype = json.dumps(event).encode(), "application/json"
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": ctype}, method="POST")
         urllib.request.urlopen(req, timeout=0.5).close()
     except Exception:  # noqa: BLE001 - a hook must never fail the session
         pass

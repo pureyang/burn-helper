@@ -4,12 +4,21 @@
 Sources:
   * ~/.claude/sessions/*.json   live session registry written by Claude Code
   * POST /hook                  events from bridge/cc_hook.py (tool calls, subagents, remote hosts)
-  * POST /usage                 rate limits from bridge/cc_statusline.py (it answers with the weekly pace)
+  * POST /usage                 rate limits from bridge/cc_statusline.py (it answers with the weekly pace),
+                                tagged with the Claude account it comes from (a short hash and a label)
 
 Outputs:
-  * GET /status                 compact JSON for the badge (counts only, no names or paths)
-  * GET /                       phone control panel
+  * GET /status                 JSON for the badge: counts, usage, and the names and folders of
+                                sessions waiting on you
+  * GET /                       phone control panel (the page only; its data comes from /status)
   * POST /theme                 pick the badge theme from a phone
+  * GET /health                 "is a bridge here", for the installer; nothing about your sessions
+
+From anywhere but this computer itself, every message both ways is sealed with the bridge's key
+(seal.py: encrypted and signed), and one that isn't is turned down; only GET / and /health are
+open, and they say nothing about your sessions. The key itself never crosses the network: it is
+made on first start (portable.bridge_key) and reaches the badge over the USB cable only, other
+computers through their join line, and a phone through the link `install.py --join-help` prints.
   * UDP beacon                  "TUFTYBRIDGE 1 <port> <bridge id>" broadcast to port 47800 every 2 s
                                 (the TUFTY wire markers predate the Burn Helper name; kept so
                                 badges and bridges of either age still talk)
@@ -33,6 +42,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pace  # noqa: E402
+import seal  # noqa: E402
 import portable  # noqa: E402
 import tracking  # noqa: E402
 
@@ -80,9 +90,15 @@ EVENT_ACTIVITY = {"PostToolUseFailure": "fail", "Stop": "done", "UserPromptSubmi
                   "SubagentStart": "spawn", "SubagentStop": "back", "SessionStart": "arrive"}
 ACTIVITY_KEPT = 6              # the latest few go out in /status
 ACTIVITY_MAX_AGE_S = 10
+# More than one Claude account: the main one (signed in to ~/.claude) drives the hearts as always;
+# each other account gets a row of its own under the HUD, up to ACCOUNTS_MAX of them.
+ACCOUNTS_MAX = 4
+ACCOUNT_FORGET_S = 14 * 86400  # an account with no report for this long leaves the badge
 
 HOME = os.path.expanduser(env("HOME") or "~")
 SESSIONS_DIR = os.path.join(HOME, ".claude", "sessions")
+# other accounts' config folders (CLAUDE_CONFIG_DIR=~/.claude-<name>, set up by install.py
+# --add-account) keep their own sessions beside it, in ~/.claude-<name>/sessions (session_dirs)
 STATE_DIR = os.path.expanduser(env("STATE_DIR") or os.path.join(HOME, ".claude", "burn-helper"))
 OLD_STATE_DIRS = (os.path.join(HOME, ".claude", "hearts-left"), os.path.join(HOME, ".claude", "tufty-bridge"))
 STATE_FILE = os.path.join(STATE_DIR, "state.json")
@@ -170,6 +186,44 @@ def _badge_name(d):
     clean = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in str(raw))
     return " ".join(clean.split())[:40] or "session"
 
+def session_dirs():
+    """Every folder of session files to scan: ~/.claude's and each ~/.claude-<name>'s."""
+    import glob
+    home = os.path.dirname(os.path.dirname(SESSIONS_DIR))
+    return [SESSIONS_DIR] + sorted(glob.glob(os.path.join(home, ".claude-*", "sessions")))
+
+
+def merge_window(old, w, now):
+    """One window of a status line's report ({"used_percentage", "resets_at"}) taken in over what
+    was known: the new {"used", "resets_at", "rx"}, or None to keep the old one."""
+    used = _num(w.get("used_percentage"))
+    if used is None:
+        return None
+    resets = int(_num(w.get("resets_at"), 0) or 0)
+    if old and resets and old.get("resets_at"):
+        if resets < old["resets_at"]:
+            return None             # an idle session still reporting a window that has ended
+        if resets == old["resets_at"]:
+            used = max(used, old["used"])   # same window: usage only goes up
+    return {"used": round(used, 1), "resets_at": resets, "rx": now}
+
+
+def account_id(v):
+    """The status line's account tag: a short hex hash of the account id, or None."""
+    v = str(v or "")[:16].lower()
+    return v if len(v) >= 8 and all(c in "0123456789abcdef" for c in v) else None
+
+
+def account_label(v):
+    return _plain(v or "", 8).upper() or None
+
+
+def load_window(w):
+    if isinstance(w, dict) and _num(w.get("used")) is not None:
+        return {"used": _num(w["used"]), "resets_at": int(_num(w.get("resets_at"), 0)), "rx": _num(w.get("rx"), 0)}
+    return None
+
+
 class Bridge:
     def __init__(self):
         self.lock = threading.RLock()
@@ -194,6 +248,12 @@ class Bridge:
         self.seven_day = None
         self.has5 = None               # the last status line report had a 5-hour window (None: no report yet)
         self.pace = pace.Pace(PACE_FILE)    # the weekly pace: its history, ladder and latest verdict
+        # accounts: the main one (the fields above) is claimed by the first tagged report from
+        # ~/.claude (see is_main); others {hash: {"label", "five_hour", "seven_day", "has5", "seen",
+        # "pace"}}, first seen first
+        self.main_acct = None
+        self.main_label = None
+        self.others = {}
         # theme
         self.theme = None
         self.theme_seq = 0
@@ -218,10 +278,17 @@ class Bridge:
         if d.get("tools_date") == self._today():
             self.tools_today = int(_num(d.get("tools_today"), 0))
         for key in ("five_hour", "seven_day"):
-            w = d.get(key)
-            if isinstance(w, dict) and _num(w.get("used")) is not None:
-                setattr(self, key, {"used": _num(w["used"]), "resets_at": int(_num(w.get("resets_at"), 0)),
-                                    "rx": _num(w.get("rx"), 0)})
+            setattr(self, key, load_window(d.get(key)))
+        self.main_acct = account_id(d.get("main_acct"))
+        self.main_label = account_label(d.get("main_label"))
+        for a in d.get("accounts") or []:
+            acct = account_id(a.get("acct")) if isinstance(a, dict) else None
+            if acct and acct != self.main_acct:
+                self.others[acct] = {"label": account_label(a.get("label")) or "ACCT",
+                                     "five_hour": load_window(a.get("five_hour")),
+                                     "seven_day": load_window(a.get("seven_day")),
+                                     "has5": a.get("has5") if isinstance(a.get("has5"), bool) else None,
+                                     "seen": _num(a.get("seen"), 0), "pace": pace.Pace(self._pace_file(acct))}
         t = LEGACY_THEMES.get(d.get("theme"), d.get("theme"))
         self.theme = t if t in THEMES else None
         self.theme_seq = int(_num(d.get("theme_seq"), 0))
@@ -229,17 +296,26 @@ class Bridge:
         self.est_start = _num(d.get("est_start"), None)
         self.has5 = d.get("has5") if isinstance(d.get("has5"), bool) else None
 
+    @staticmethod
+    def _pace_file(acct):
+        return os.path.join(STATE_DIR, "pace-%s.json" % acct)
+
     def persist(self, force=False):
         now = time.time()
         with self.lock:
             self.pace.save(force)          # its own file, written at most once a minute
+            for a in self.others.values():
+                a["pace"].save(force)
             if not (self._dirty or force):
                 return
             if not force and now - self._last_persist < PERSIST_INTERVAL:
                 return
             d = {"tools_today": self.tools_today, "tools_date": self.tools_date,
                  "five_hour": self.five_hour, "seven_day": self.seven_day, "est_start": self.est_start,
-                 "has5": self.has5, "theme": self.theme, "theme_seq": self.theme_seq, "last_active": self.last_active}
+                 "has5": self.has5, "theme": self.theme, "theme_seq": self.theme_seq, "last_active": self.last_active,
+                 "main_acct": self.main_acct, "main_label": self.main_label,
+                 "accounts": [{"acct": k, "label": a["label"], "five_hour": a["five_hour"], "seven_day": a["seven_day"],
+                               "has5": a["has5"], "seen": a["seen"]} for k, a in self.others.items()]}
             self._dirty = False
             self._last_persist = now
         try:
@@ -272,15 +348,17 @@ class Bridge:
         now = time.time()
         waiting_list = []      # (display name, epoch seconds it started waiting)
         live_keys = set()
-        try:
-            names = os.listdir(SESSIONS_DIR)
-        except OSError:
-            names = []
-        for name in names:
-            if not name.endswith(".json"):
+        paths = []
+        for folder in session_dirs():
+            try:
+                paths += [os.path.join(folder, n) for n in os.listdir(folder)]
+            except OSError:
+                pass
+        for path in paths:
+            if not path.endswith(".json"):
                 continue          # never touch the .key files
             try:
-                with open(os.path.join(SESSIONS_DIR, name)) as f:
+                with open(path) as f:
                     d = json.load(f)
             except (OSError, ValueError):
                 continue
@@ -429,13 +507,32 @@ class Bridge:
         w5, w7 = self._window(five, now, self.last_active, self.est_start, 5 * 3600), self._window(seven, now, self.last_active)
         self.tracker.usage(w5["used"] if w5 else None, w7["used"] if w7 else None)    # None: unknown, skipped
 
+    def is_main(self, acct, default):
+        """Whether a report tagged acct is the main account's (the lock is held). An untagged one,
+        from an older status line, is. The main account is claimed by the first tagged report from
+        a default config folder (~/.claude), or by any tagged report while nothing is known yet."""
+        if acct is None or acct == self.main_acct:
+            return True
+        if self.main_acct is None and acct not in self.others and (
+                default or (self.five_hour is None and self.seven_day is None)):
+            self.main_acct = acct
+            self._dirty = True
+            return True
+        return False
+
     def on_usage(self, d):
         rl = d.get("rate_limits")
         if not isinstance(rl, dict):
             return False
         now = time.time()
         changed = False
+        acct, label = account_id(d.get("acct")), account_label(d.get("label"))
         with self.lock:
+            if not self.is_main(acct, bool(d.get("default"))):
+                return self._on_other(acct, label, rl, now)
+            if label and label != self.main_label:
+                self.main_label = label
+                self._dirty = True
             if isinstance(rl.get("seven_day"), dict):
                 # a plan without a 5-hour limit reports only the weekly window (the "auto" limit mode)
                 has5 = isinstance(rl.get("five_hour"), dict) and _num(rl["five_hour"].get("used_percentage")) is not None
@@ -444,19 +541,10 @@ class Bridge:
                     changed = True
             for key in ("five_hour", "seven_day"):
                 w = rl.get(key)
-                if not isinstance(w, dict):
+                new = merge_window(getattr(self, key), w, now) if isinstance(w, dict) else None
+                if new is None:
                     continue
-                used = _num(w.get("used_percentage"))
-                if used is None:
-                    continue
-                resets = int(_num(w.get("resets_at"), 0) or 0)
-                old = getattr(self, key)
-                if old and resets and old.get("resets_at"):
-                    if resets < old["resets_at"]:
-                        continue        # an idle session still reporting a window that has ended
-                    if resets == old["resets_at"]:
-                        used = max(used, old["used"])   # same window: usage only goes up
-                setattr(self, key, {"used": round(used, 1), "resets_at": resets, "rx": now})
+                setattr(self, key, new)
                 if key == "five_hour":
                     self.est_start = None        # the new window is known now: no estimate needed
                 changed = True
@@ -465,19 +553,84 @@ class Bridge:
             self.pace.report(now, self.five_hour, self.seven_day)
         return changed
 
+    def _on_other(self, acct, label, rl, now):
+        """A report from an account other than the main one (the lock is held)."""
+        a = self.others.get(acct)
+        if a is None:
+            for k in [k for k, o in self.others.items() if now - o["seen"] > ACCOUNT_FORGET_S]:
+                del self.others[k]
+            if len(self.others) >= ACCOUNTS_MAX:      # full: the one quiet longest makes room
+                del self.others[min(self.others, key=lambda k: self.others[k]["seen"])]
+            a = self.others[acct] = {"label": label or "ACCT", "five_hour": None, "seven_day": None,
+                                     "has5": None, "seen": now, "pace": pace.Pace(self._pace_file(acct))}
+        a["seen"] = now
+        if label:
+            a["label"] = label
+        if isinstance(rl.get("seven_day"), dict):
+            a["has5"] = isinstance(rl.get("five_hour"), dict) and _num(rl["five_hour"].get("used_percentage")) is not None
+        for key in ("five_hour", "seven_day"):
+            w = rl.get(key)
+            new = merge_window(a[key], w, now) if isinstance(w, dict) else None
+            if new is not None:
+                a[key] = new
+        a["pace"].report(now, a["five_hour"], a["seven_day"])
+        self._dirty = True
+        return True
+
+    def answer(self, d):
+        """What /usage answers a status line with: its own account's weekly pace and limit mode."""
+        with self.lock:
+            a = self.others.get(account_id(d.get("acct")))
+            if a is not None:
+                return {"pace": a["pace"].out, "mode": self.acct_mode(a["has5"])}
+            return {"pace": self.pace.out, "mode": self.limit_mode()}
+
     def pace_step(self):
         """Once a scan: the weekly pace takes in whether agents work and steps its ladder."""
         s = self.status()
         room = pace.room_enabled(STATE_DIR)
+        now = time.time()
         with self.lock:
-            self.pace.step(time.time(), s["seven_day"], s["level"] >= 2, room)
+            self.pace.step(now, s["seven_day"], s["level"] >= 2, room)
+            for k in [k for k, a in self.others.items() if now - a["seen"] > ACCOUNT_FORGET_S]:
+                del self.others[k]
+                self._dirty = True
+            for a in self.others.values():
+                a["pace"].step(now, self._window(a["seven_day"], now), s["level"] >= 2, room)
 
     def limit_mode(self):
         """What the hearts show: "5h", or "week" for a plan with only a weekly limit (pace.LIMIT_MODES)."""
+        return self.acct_mode(self.has5)
+
+    @staticmethod
+    def acct_mode(has5):
+        """The limit mode for an account whose last report had a 5-hour window (has5) or didn't."""
         mode = pace.limit_setting(STATE_DIR)
         if mode == "auto":
-            mode = "week" if self.has5 is False else "5h"
+            mode = "week" if has5 is False else "5h"
         return mode
+
+    def account_row(self, a, now):
+        """Another account's row on the badge. Its hearts follow whichever of its limits has less
+        left, and count down to that limit's reset: l label, h half hearts left (None: unknown), e
+        half hearts likely left at the weekly reset (None: no forecast), r the reset (epoch s), w
+        which limit ("5h" or "wk"), u how fresh its numbers are (ok, old or none)."""
+        mode = self.acct_mode(a["has5"])
+        five = self._window(a["five_hour"], now) if mode == "5h" else None
+        seven = self._window(a["seven_day"], now)
+        b = None
+        for w in (five, seven):
+            if w and w["used"] is not None and (b is None or w["used"] > b["used"]):
+                b = w
+        hearts = end = None
+        if b is not None:
+            hearts = max(0, min(20, int(round((100.0 - b["used"]) / 5.0))))
+            pc = a["pace"].out
+            if b is seven and pc and pc.get("f") is not None:
+                end = max(0, min(hearts, int(round((100.0 - pc["f"]) / 5.0))))
+        state = usage_state(a["five_hour"] if mode == "5h" else None, a["seven_day"], five, now)["state"]
+        return {"l": a["label"], "h": hearts, "e": end, "r": b["resets_at"] if b else None,
+                "w": "5h" if b is not None and b is five else "wk", "u": state}
 
     def set_theme(self, theme):
         theme = LEGACY_THEMES.get(theme, theme)
@@ -541,6 +694,8 @@ class Bridge:
             seven = self._window(self.seven_day, now, self.last_active)
             theme, theme_seq, last_active = self.theme, self.theme_seq, self.last_active
             pc = self.pace.out
+            accounts = [self.account_row(a, now) for a in self.others.values()]
+            label = self.main_label
             live = {w[3] for w in loc.get("waiting_list", [])}
             for sid in [s for s in self.why if s not in live and s not in self.remote]:
                 del self.why[sid]
@@ -606,6 +761,10 @@ class Bridge:
             "mode": mode,
             "hearts": hearts,
             "hearts_end": hearts_end,
+            # more than one Claude account: the main one's label (it drives everything above) and a
+            # row for each other one (see account_row), first seen first
+            "label": label,
+            "accounts": accounts,
             "theme": theme,
             "theme_seq": theme_seq,
             "last_active": int(last_active or 0),
@@ -614,23 +773,54 @@ class Bridge:
 
 
 BRIDGE = None
-TOKEN = env("TOKEN") or None
+TOKEN = None          # the bridge's key, set in main()
+LOOPBACK = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+SEALED = "application/x-burn-helper-sealed"
+REPLAY_S = 120        # a sealed message older (or newer) than this is turned down
+_seen = {}            # nonce -> when it may be forgotten: each sealed message is taken once
+_seen_lock = threading.Lock()
 START = time.time()
 
 
+def fresh_nonce(nonce, t, now=None):
+    """True the first time a sealed message's nonce comes by within REPLAY_S of its time t."""
+    now = time.time() if now is None else now
+    try:
+        if abs(now - float(t)) > REPLAY_S:
+            return False
+    except (TypeError, ValueError):
+        return False
+    with _seen_lock:
+        for k in [k for k, until in _seen.items() if until < now]:
+            del _seen[k]
+        if nonce in _seen:
+            return False
+        _seen[nonce] = now + 2 * REPLAY_S
+    return True
+
+
 class Handler(BaseHTTPRequestHandler):
+    """On this computer (loopback), plain JSON as ever. From anywhere else every message both ways
+    is sealed with the bridge's key (seal.py): what you work on and the key never cross the network
+    in the clear, and a message that isn't sealed with the key, or comes by twice, is turned down."""
     server_version = "BurnHelperBridge/1"
     protocol_version = "HTTP/1.0"     # badge client reads until close
+    sealed = False                    # this request came sealed, so the answer goes back sealed
 
     def log_message(self, fmt, *args):
         if VERBOSE:
             log("%s %s" % (self.client_address[0], fmt % args))
+
+    def _local(self):
+        return self.client_address[0] in LOOPBACK
 
     def _send(self, code, body, ctype="application/json"):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, separators=(",", ":"))
         if isinstance(body, str):
             body = body.encode("utf-8")
+        if self.sealed and code == 200 and ctype == "application/json":
+            body, ctype = seal.seal(TOKEN, body), SEALED
         try:
             self.send_response(code)
             self.send_header("Content-Type", ctype)
@@ -651,33 +841,49 @@ class Handler(BaseHTTPRequestHandler):
             self._send(413, {"error": "body too large"})
             return None
         raw = self.rfile.read(n) if n else b""
-        try:
-            d = json.loads(raw.decode("utf-8") or "{}")
-        except (ValueError, UnicodeDecodeError):
-            self._send(400, {"error": "bad json"})
+        if seal.is_sealed(raw):
+            # {"t": when it was sealed, "d": the message}: the time and the nonce stop a replay
+            inner = seal.unseal(TOKEN, raw) if TOKEN else None
+            try:
+                env_ = json.loads(inner.decode("utf-8")) if inner is not None else None
+            except (ValueError, UnicodeDecodeError):
+                env_ = None
+            if not isinstance(env_, dict) or not fresh_nonce(raw[len(seal.MAGIC):len(seal.MAGIC) + seal.NONCE],
+                                                             env_.get("t")):
+                self._send(403, {"error": "key needed"})
+                return None
+            self.sealed = True
+            d = env_.get("d")
+        elif not self._local():
+            self._send(403, {"error": "key needed"})
             return None
+        else:
+            try:
+                d = json.loads(raw.decode("utf-8") or "{}")
+            except (ValueError, UnicodeDecodeError):
+                self._send(400, {"error": "bad json"})
+                return None
         if not isinstance(d, dict):
             self._send(400, {"error": "expected object"})
             return None
         return d
 
-    def _authorized(self):
-        if not TOKEN:
-            return True
-        if self.client_address[0] in ("127.0.0.1", "::1"):
-            return True
-        return TOKEN in (self.headers.get("X-Burn-Helper-Token"), self.headers.get("X-Hearts-Left-Token"),
-                         self.headers.get("X-Tufty-Token"))
-
     def do_GET(self):
         try:
             path = self.path.split("?", 1)[0]
             if path == "/status":
-                self._send(200, BRIDGE.status())
+                if self._local():
+                    self._send(200, BRIDGE.status())
+                elif TOKEN:
+                    self.sealed = True
+                    self._send(200, BRIDGE.status())
+                else:
+                    self._send(403, {"error": "key needed"})
             elif path in ("/", "/index.html"):
                 self._send(200, PAGE, "text/html; charset=utf-8")
             elif path == "/health":
-                self._send(200, {"ok": True, "uptime": int(time.time() - START)})
+                self._send(200, {"ok": True, "uptime": int(time.time() - START), "join": JOIN_URL,
+                                 "sealed": 1})
             else:
                 self._send(404, {"error": "not found"})
         except Exception as e:  # noqa: BLE001 - never let a request kill the server
@@ -687,9 +893,6 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             path = self.path.split("?", 1)[0]
-            if path in ("/hook", "/usage") and not self._authorized():
-                self._send(403, {"error": "bad token"})
-                return
             d = self._read_json()
             if d is None:
                 return
@@ -698,8 +901,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": True})
             elif path == "/usage":
                 ok = BRIDGE.on_usage(d)
-                # the status line shows the pace, and in weekly-only mode where the week likely ends
-                self._send(200, {"ok": ok, "pace": BRIDGE.pace.out, "mode": BRIDGE.limit_mode()})
+                # the status line shows its account's pace, and in weekly-only mode where the week likely ends
+                self._send(200, dict(BRIDGE.answer(d), ok=ok))
             elif path == "/theme":
                 ok = BRIDGE.set_theme(d.get("theme"))
                 if ok:
@@ -965,10 +1168,11 @@ def usb_loop():
                     fd = portable.Port(port, write_only=True)
                     log("usb: tethered to badge on %s" % port)
             if fd is not None:
-                s = BRIDGE.status()
+                # the bridge's key, and the relay's address and key, go to the badge over the cable
+                # only, never over Wi-Fi
+                s = dict(BRIDGE.status(), key=TOKEN)
                 if RELAY is not None:
-                    # the relay address and key go to the badge over the cable only, never over Wi-Fi
-                    s = dict(s, relay=RELAY)
+                    s["relay"] = RELAY
                 line = "@TUFTY " + json.dumps(s, separators=(",", ":")) + "\n"
                 fd.write(line.encode(), wait=False)   # never stall the bridge on a busy port
         except OSError as e:
@@ -991,7 +1195,7 @@ def lan_ip():
 
 
 def main():
-    global BRIDGE, VERBOSE, RELAY, BRIDGE_ID
+    global BRIDGE, VERBOSE, RELAY, BRIDGE_ID, TOKEN
     ap = argparse.ArgumentParser(description="Burn Helper: Claude Code activity bridge for the badge")
     ap.add_argument("--port", type=int, default=int(env("PORT") or DEFAULT_PORT))
     ap.add_argument("--bind", default=env("BIND") or "0.0.0.0")
@@ -1029,6 +1233,11 @@ def main():
         args.no_beacon = args.no_usb = True
         log("this computer is joined to the bridge at %s: no beacon or USB link here, so the badge "
             "stays with that one (--here to be the badge's bridge anyway)" % joined)
+    TOKEN = portable.bridge_key(STATE_DIR)
+    if TOKEN:
+        log("key: other computers, the badge and the phone panel need it (install.py --join-help)")
+    else:
+        log("key: could not be saved in %s, so only this computer can reach the bridge" % STATE_DIR)
     tracker = None
     if tracking.is_enabled(STATE_DIR):
         try:
@@ -1134,10 +1343,56 @@ function frame(){const now=Date.now()+off+(performance.now()%1);const l5=r5?r5*1
 const e=document.getElementById("cd5");e.textContent=fmt(l5);e.className="cd"+(l5!==null&&l5>-60000&&l5<=600000?(l5<=60000?" now":" soon"):"");
 document.getElementById("cd7").textContent=fmt(l7);requestAnimationFrame(frame);}
 requestAnimationFrame(frame);
+// SEAL-JS: seal.py in JavaScript. Phone browsers keep crypto.subtle from plain-http pages, so
+// SHA-256 is written out here; crypto.getRandomValues is allowed and makes the nonces.
+const K256=new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,
+0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,
+0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+function sha256(m){const l=m.length,n=((l+72)>>6)<<6,b=new Uint8Array(n);b.set(m);b[l]=0x80;const v=new DataView(b.buffer);
+v.setUint32(n-8,Math.floor(l/0x20000000));v.setUint32(n-4,(l*8)>>>0);
+const h=new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]),w=new Uint32Array(64);
+for(let o=0;o<n;o+=64){for(let i=0;i<16;i++)w[i]=v.getUint32(o+i*4);
+for(let i=16;i<64;i++){const x=w[i-15],y=w[i-2];w[i]=((x>>>7|x<<25)^(x>>>18|x<<14)^(x>>>3))+w[i-7]+((y>>>17|y<<15)^(y>>>19|y<<13)^(y>>>10))+w[i-16];}
+let [a,c,d,e,f,g,k,p]=h;
+for(let i=0;i<64;i++){const t1=(p+((f>>>6|f<<26)^(f>>>11|f<<21)^(f>>>25|f<<7))+((f&g)^(~f&k))+K256[i]+w[i])|0,
+t2=(((a>>>2|a<<30)^(a>>>13|a<<19)^(a>>>22|a<<10))+((a&c)^(a&d)^(c&d)))|0;p=k;k=g;g=f;f=(e+t1)|0;e=d;d=c;c=a;a=(t1+t2)|0;}
+h[0]+=a;h[1]+=c;h[2]+=d;h[3]+=e;h[4]+=f;h[5]+=g;h[6]+=k;h[7]+=p;}
+const out=new Uint8Array(32),ov=new DataView(out.buffer);for(let i=0;i<8;i++)ov.setUint32(i*4,h[i]);return out;}
+function cat(...xs){const o=new Uint8Array(xs.reduce((s,x)=>s+x.length,0));let i=0;for(const x of xs){o.set(x,i);i+=x.length;}return o;}
+function hmac(key,msg){const k=new Uint8Array(64);k.set(key);return sha256(cat(k.map(x=>x^0x5c),sha256(cat(k.map(x=>x^0x36),msg))));}
+const TE=new TextEncoder(),MAGIC=TE.encode("BHS1");
+function sealKeys(key){const raw=/^([0-9a-fA-F]{2})+$/.test(key)?new Uint8Array(key.match(/../g).map(x=>parseInt(x,16))):TE.encode(key);
+return [hmac(raw,TE.encode("burn-helper seal enc")),hmac(raw,TE.encode("burn-helper seal mac"))];}
+function stream(enc,nonce,data){const o=new Uint8Array(data.length);for(let i=0,n=0;i<data.length;i+=32,n++){
+const c=new Uint8Array(4);new DataView(c.buffer).setUint32(0,n);const blk=hmac(enc,cat(nonce,c));
+for(let j=0;j<32&&i+j<data.length;j++)o[i+j]=data[i+j]^blk[j];}return o;}
+function seal(key,data,nonce){const [enc,mac]=sealKeys(key);nonce=nonce||crypto.getRandomValues(new Uint8Array(16));
+const body=cat(MAGIC,nonce,stream(enc,nonce,data));return cat(body,hmac(mac,body));}
+function isSealed(b){return b.length>=4&&MAGIC.every((x,i)=>b[i]===x);}
+function unseal(key,box){if(!key||!isSealed(box)||box.length<52)return null;const [enc,mac]=sealKeys(key);
+const body=box.subarray(0,box.length-32),tag=box.subarray(box.length-32),want=hmac(mac,body);let d=0;
+for(let i=0;i<32;i++)d|=want[i]^tag[i];return d?null:stream(enc,body.subarray(4,20),body.subarray(20));}
+// /SEAL-JS
+// the key comes in the link's #k=... (a part of the address the browser never sends), is kept on
+// this phone, and opens the bridge's sealed answers; it never leaves the phone. The address bar
+// is cleared of it.
+const KEY=(()=>{let k=(location.hash.match(/k=([0-9a-fA-F]+)/)||[])[1];
+try{if(k)localStorage.setItem("bh_key",k);else k=localStorage.getItem("bh_key");}catch(e){}
+if(location.hash)history.replaceState(null,"",location.pathname);return k||"";})();
+function needKey(){const f=document.getElementById("foot");f.className="foot err";
+f.textContent="This page needs the bridge's key. On the bridge computer run install.py --join-help and open the phone link it prints.";}
+async function readReply(r){const b=new Uint8Array(await r.arrayBuffer());
+if(!isSealed(b))return JSON.parse(new TextDecoder().decode(b));const p=unseal(KEY,b);
+return p?JSON.parse(new TextDecoder().decode(p)):null;}
 let theme=null;
 async function tick(){
   try{
-    const r=await fetch("/status",{cache:"no-store"});const s=await r.json();
+    const r=await fetch("/status",{cache:"no-store"});
+    const s=r.status===403?null:await readReply(r);
+    if(!s){needKey();return;}
     document.getElementById("hearts").textContent=hearts(s.hearts);
     const u=[pct(s.five_hour,"5h"),pct(s.seven_day,"7d")].filter(Boolean).join(" · ");
     document.getElementById("usage").textContent=u||"waiting for status line data";
@@ -1150,7 +1405,9 @@ async function tick(){
   }catch(e){const f=document.getElementById("foot");f.textContent="Bridge unreachable";f.className="foot err";}
 }
 document.querySelectorAll("button").forEach(b=>b.addEventListener("click",async()=>{
-  await fetch("/theme",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({theme:b.dataset.t})});tick();
+  const d={theme:b.dataset.t};
+  const body=KEY?seal(KEY,TE.encode(JSON.stringify({t:Math.floor(Date.now()/1000),d:d}))):JSON.stringify(d);
+  await fetch("/theme",{method:"POST",headers:{"Content-Type":KEY?"application/x-burn-helper-sealed":"application/json"},body:body});tick();
 }));
 tick();setInterval(tick,3000);
 </script></body></html>

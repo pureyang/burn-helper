@@ -574,6 +574,7 @@ class Theme(S.Theme):
             S.pace_tick(st, 69, 13, 88, 6, INK, edge=INK)      # where an even pace would be on the road
         if not st.online and S.blink(t, 600):
             gfx.text("?", 62, -2, RED, font.sins)
+        S.draw_accounts(st, t, stale)     # a row for each other Claude account
         if self.wk is not None:
             self.week_hud(st, t)
 

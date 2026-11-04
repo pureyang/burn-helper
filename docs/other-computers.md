@@ -18,16 +18,17 @@ bridge's address filled in. To see it again, on the bridge run
 On a Mac or Linux, in Terminal:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join http://<bridge>:8787
+curl -fsSL https://raw.githubusercontent.com/pureyang/burn-helper/main/install.sh | bash -s -- --join 'http://<bridge>:8787/#k=<key>'
 ```
 
 On Windows, in PowerShell (Python 3 is needed: `winget install -e --id Python.Python.3.12`):
 
 ```
-$env:BURN_HELPER_JOIN='http://<bridge>:8787'; irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
+$env:BURN_HELPER_JOIN='http://<bridge>:8787/#k=<key>'; irm https://raw.githubusercontent.com/pureyang/burn-helper/main/install.ps1 | iex
 ```
 
-It gets the code into `~/burn-helper`, adds the hooks and the hearts status line, and checks
+The part after `#k=` is the bridge's key: without it the bridge turns the computer away. Keep
+these lines to yourself. It gets the code into `~/burn-helper`, adds the hooks and the hearts status line, and checks
 that the bridge answers. Then restart Claude Code on that computer.
 
 ## Which address
@@ -78,14 +79,42 @@ Linux, shows when the connection gets through.
   instead; run the join line there again to update it. Never prompts, file
   names, commands or tool output.
 - If you already have a status line there, it is left alone, and that computer's usage won't
-  feed the hearts. That is also the way to go if it signs into a different Claude account, so
+  reach the bridge: the hearts then lag whatever you spend there until another computer's status
+  line reports. To report it, have your status line command also pipe its input to
+  `cc_statusline.py` and discard what that prints. In PowerShell, for example, at the top of your
+  script:
+
+  ```powershell
+  $raw = $input | Out-String
+  try { $raw | & "<python.exe>" "<burn-helper>/bridge/cc_statusline.py" | Out-Null } catch {}
+  $json = $raw | ConvertFrom-Json
+  ```
+
+  Leaving it out is the way to go if that computer signs into a different Claude account, so
   the hearts don't mix two accounts.
-- Anyone who can reach port 8787 could post made-up activity. To stop that, set a shared secret:
-  run `bridge/install.py --bridge <url> --token <secret>` on the joined computer, and set the same
-  `BURN_HELPER_TOKEN` for the bridge (see the [bridge](../bridge/README.md)).
+- The bridge's key goes in `BURN_HELPER_TOKEN` in the same `env` section. What the hooks and status
+  line send is sealed with it (encrypted and signed), so nothing about your sessions crosses the
+  network in the clear, and without it the bridge turns a computer away (see the
+  [bridge](../bridge/README.md)). A computer joined before the key was added stops reporting until
+  you run its join line again.
 
 To leave the bridge, run the same line with `--uninstall` instead of `--join ...` (on Windows,
 `$env:BURN_HELPER_UNINSTALL=1` before the line instead of `BURN_HELPER_JOIN`).
+
+## A second Claude account
+
+To run another Claude account side by side with the first, set it up in a config folder of its own
+(see [More than one Claude account](how-it-works.md#usage-meters)). On the bridge computer:
+
+    python3 bridge/install.py --add-account lexco
+
+On a joined computer, add the bridge's address and key, as they are in its join line (without the
+key the bridge turns that account's reports away):
+
+    python3 bridge/install.py --add-account lexco --bridge 'http://<bridge-computer>:8787/#k=<key>'
+
+Then run `claude-lexco` and `/login` once with that account. On Windows the installer prints a
+`claude-lexco` function to add to your PowerShell profile instead of a shell alias.
 
 ## Limits
 

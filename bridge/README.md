@@ -109,12 +109,12 @@ Install the same hooks and status line on another computer (Windows, Linux or a 
 point them at this Mac:
 
 ```sh
-python3 bridge/install.py --bridge http://<mac>:8787 [--token <shared secret>]
+python3 bridge/install.py --bridge 'http://<mac>:8787/#k=<key>'
 ```
 
-That writes `BURN_HELPER_BRIDGE_URL` (and `BURN_HELPER_TOKEN`) into that computer's
-`~/.claude/settings.json` `env`; if you use a token, set the same `BURN_HELPER_TOKEN` for the
-bridge. Step by step, including PowerShell: [docs/other-computers.md](../docs/other-computers.md).
+That writes `BURN_HELPER_BRIDGE_URL` and `BURN_HELPER_TOKEN` (the key) into that computer's
+`~/.claude/settings.json` `env`. `python3 bridge/install.py --join-help` on the bridge prints the
+address with its key. Step by step, including PowerShell: [docs/other-computers.md](../docs/other-computers.md).
 
 Events from another host count as remote sessions: busy for 90 seconds after
 their last event. Cloud sessions on claude.ai/code cannot reach a home LAN, so
@@ -172,9 +172,25 @@ in the state folder, which the bridge checks as it goes, with no restart).
   leave the machine.
 - `/status` is mostly counts, plus the categories of recent activity (`ev`). For sessions
   waiting for you it also has their title or folder name, the folder's name and what they
-  need (see `waiting_list`); never full paths, prompts or tool inputs. Anyone on your LAN
-  can read it and change the theme. Set `BURN_HELPER_TOKEN` to stop other LAN devices from
-  posting fake activity.
+  need (see `waiting_list`); never full paths, prompts or tool inputs.
+- Everything the bridge exchanges with another device is sealed with the bridge's key
+  (`seal.py`): encrypted, so someone watching the network (an open Wi-Fi, or anyone with a shared
+  Wi-Fi password) sees neither what your sessions are doing nor the key; and signed, so they can't
+  change a message, make one up or replay one they saw (each is taken once, within two minutes
+  of being sent). Only the page at `/` and `/health` are open, and they say nothing about your
+  sessions. The bridge computer's own hooks and status line talk to it in plain JSON over
+  loopback, which never leaves the computer.
+- The key is 128 random bits, made on first start in `<state dir>/key` (readable by you only), or
+  `BURN_HELPER_TOKEN` when set. It never crosses the network: the badge gets it over the USB cable,
+  other computers in their join line, and a phone in the link `--join-help` prints
+  (`http://<bridge>:8787/#k=<key>`: browsers never send the part after `#`, so the phone keeps it
+  and uses it to open what the bridge sends). Keep those lines and the link to yourself. To change
+  the key, delete the file and restart the bridge, then plug the badge in once and run the new
+  join line on each computer.
+- The seal is HMAC-SHA256 in counter mode with an HMAC-SHA256 tag (encrypt-then-MAC), because
+  SHA-256 is all the badge's MicroPython and Python's standard library share. The phone panel
+  does the same in JavaScript, since phone browsers keep their built-in crypto from plain-http
+  pages. `tools/sim/test_key.py` checks the three against each other.
 - `.key` files in `~/.claude/sessions` are never opened.
 
 ## Internet relay

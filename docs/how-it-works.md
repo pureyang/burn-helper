@@ -138,7 +138,9 @@ of the week agents usually work, and how much of the week one full 5-hour window
 meters' rises between the same reports; about 27% on the bridge where this was built). It reads
 this week's use so far against the usual shape of a week, and puts odds on it from how wrong that
 reading was on past weeks. With under two weeks recorded it is still learning: the shape comes
-from the hours agents work, and the odds are wider. Forecasts always say "at this pace" and carry
+from the hours agents work, and the odds are wider. Since that shape is a guess, and one that
+expects a quiet weekend would hide a run-out in a busy one, the week is also read at an even pace
+(how Claude Code projects it), and the reading with more still to come wins. Forecasts always say "at this pace" and carry
 a `~`. The thresholds come from a study of thousands of simulated weeks of different kinds of
 users; `python3 tools/sim/test_pace.py` replays it against the bridge's code (about 80% of
 run-outs flagged 12 hours or more ahead, under 3% missed, under 2% false alarms).
@@ -204,6 +206,23 @@ last ten seconds microseconds (`9.173248`). It turns yellow under 10 minutes and
 After the reset it shows `RESET!` for a minute, then `FULL`. The badge redraws 25 times a
 second, so the last digits blur by design. The countdown runs on the badge's own clock,
 synced to the bridge, so it ticks smoothly between updates.
+
+**More than one Claude account.** Each status line tags its report with the account it runs
+under: a short hash of the account id and a label, read from its config folder's `.claude.json`.
+The email itself never leaves the computer. The account signed in to `~/.claude` drives the
+theme's own icons as before. Each other account gets a row under the top bar, the same in every
+theme: its label, a countdown, and ten hearts in its own colour (blue, green, gold, purple). A
+row's hearts follow whichever of that account's limits has less left, and the countdown is that
+limit's reset. On a weekly limit, the hearts likely spent by the reset go dark now and then, as in
+`week` mode. A row goes grey when its numbers are 30 minutes old or more. There is room for four
+rows; an account with no report for two weeks drops off. To run a second account side by side with
+the first, run `python3 bridge/install.py --add-account lexco`. It makes the config folder
+`~/.claude-lexco` with the hooks, the status line and the label LEXCO, and the alias `claude-lexco`
+that runs Claude Code with that folder. Run `claude-lexco`, then `/login` once. Its own label: set
+`BURN_HELPER_LABEL` in that folder's `settings.json`. To see the rows, run
+`python3 tools/sim/preview_accounts.py`.
+
+![More than one account](img/accounts_hero.png)
 
 **How often the numbers update:** the usage percentages come from Claude Code's status line.
 The status line reruns after every Claude response and at least every 60 seconds in each

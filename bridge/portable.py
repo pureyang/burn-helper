@@ -92,6 +92,40 @@ def tailscale_ip():
     return None
 
 
+# ---------------------------------------------------------------- the bridge's key
+KEY_HEX = 32            # 128 random bits, as hex: safe in a header, a URL fragment and a shell line
+
+
+def bridge_key(state_dir, make=True):
+    """The key every request to the bridge needs, except from the bridge computer itself:
+    BURN_HELPER_TOKEN when set, else one made once and kept in <state_dir>/key (readable by this
+    user only). None when there is none and make is False, or it can't be saved."""
+    key = (os.environ.get("BURN_HELPER_TOKEN") or os.environ.get("HEARTS_LEFT_TOKEN")
+           or os.environ.get("TUFTY_TOKEN") or "").strip()
+    if key:
+        return key
+    path = os.path.join(state_dir, "key")
+    try:
+        with open(path) as f:
+            key = f.read().strip()
+        if len(key) >= KEY_HEX:
+            return key
+    except OSError:
+        pass
+    if not make:
+        return None
+    import secrets
+    key = secrets.token_hex(KEY_HEX // 2)
+    try:
+        os.makedirs(state_dir, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(key + "\n")
+    except OSError:
+        return None
+    return key
+
+
 # ---------------------------------------------------------------- USB serial
 def serial_missing():
     """Why USB serial can't work here, or None when it can."""
