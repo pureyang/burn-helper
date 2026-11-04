@@ -7,9 +7,16 @@ Sources:
   * POST /usage                 rate limits from bridge/cc_statusline.py (it answers with the weekly pace)
 
 Outputs:
-  * GET /status                 compact JSON for the badge (counts only, no names or paths)
-  * GET /                       phone control panel
+  * GET /status                 JSON for the badge: counts, usage, and the names and folders of
+                                sessions waiting on you
+  * GET /                       phone control panel (the page only; its data comes from /status)
   * POST /theme                 pick the badge theme from a phone
+  * GET /health                 "is a bridge here", for the installer; nothing about your sessions
+
+Every request but GET / and /health needs the bridge's key (X-Burn-Helper-Token), except from
+this computer itself. The key is made on first start (portable.bridge_key) and reaches the
+badge over the USB cable only, other computers through their join line, and a phone through
+the link `install.py --join-help` prints.
   * UDP beacon                  "TUFTYBRIDGE 1 <port> <bridge id>" broadcast to port 47800 every 2 s
                                 (the TUFTY wire markers predate the Burn Helper name; kept so
                                 badges and bridges of either age still talk)
@@ -614,7 +621,9 @@ class Bridge:
 
 
 BRIDGE = None
-TOKEN = env("TOKEN") or None
+TOKEN = None          # the bridge's key, set in main()
+TOKEN_HEADERS = ("X-Burn-Helper-Token", "X-Hearts-Left-Token", "X-Tufty-Token")
+LOOPBACK = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
 START = time.time()
 
 
@@ -662,22 +671,27 @@ class Handler(BaseHTTPRequestHandler):
         return d
 
     def _authorized(self):
+        """This computer's own hooks and status line need no key; anyone else needs it. No key at
+        all (it couldn't be saved) lets only this computer in."""
+        if self.client_address[0] in LOOPBACK:
+            return True
         if not TOKEN:
-            return True
-        if self.client_address[0] in ("127.0.0.1", "::1"):
-            return True
-        return TOKEN in (self.headers.get("X-Burn-Helper-Token"), self.headers.get("X-Hearts-Left-Token"),
-                         self.headers.get("X-Tufty-Token"))
+            return False
+        want = TOKEN.encode()
+        return any(hmac.compare_digest(str(self.headers.get(h) or "").encode(), want) for h in TOKEN_HEADERS)
 
     def do_GET(self):
         try:
             path = self.path.split("?", 1)[0]
             if path == "/status":
-                self._send(200, BRIDGE.status())
+                if self._authorized():
+                    self._send(200, BRIDGE.status())
+                else:
+                    self._send(403, {"error": "key needed"})
             elif path in ("/", "/index.html"):
                 self._send(200, PAGE, "text/html; charset=utf-8")
             elif path == "/health":
-                self._send(200, {"ok": True, "uptime": int(time.time() - START)})
+                self._send(200, {"ok": True, "uptime": int(time.time() - START), "join": JOIN_URL})
             else:
                 self._send(404, {"error": "not found"})
         except Exception as e:  # noqa: BLE001 - never let a request kill the server
@@ -687,8 +701,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             path = self.path.split("?", 1)[0]
-            if path in ("/hook", "/usage") and not self._authorized():
-                self._send(403, {"error": "bad token"})
+            if not self._authorized():
+                self._send(403, {"error": "key needed"})
                 return
             d = self._read_json()
             if d is None:
@@ -965,10 +979,11 @@ def usb_loop():
                     fd = portable.Port(port, write_only=True)
                     log("usb: tethered to badge on %s" % port)
             if fd is not None:
-                s = BRIDGE.status()
+                # the bridge's key, and the relay's address and key, go to the badge over the cable
+                # only, never over Wi-Fi
+                s = dict(BRIDGE.status(), key=TOKEN)
                 if RELAY is not None:
-                    # the relay address and key go to the badge over the cable only, never over Wi-Fi
-                    s = dict(s, relay=RELAY)
+                    s["relay"] = RELAY
                 line = "@TUFTY " + json.dumps(s, separators=(",", ":")) + "\n"
                 fd.write(line.encode(), wait=False)   # never stall the bridge on a busy port
         except OSError as e:
@@ -991,7 +1006,7 @@ def lan_ip():
 
 
 def main():
-    global BRIDGE, VERBOSE, RELAY, BRIDGE_ID
+    global BRIDGE, VERBOSE, RELAY, BRIDGE_ID, TOKEN
     ap = argparse.ArgumentParser(description="Burn Helper: Claude Code activity bridge for the badge")
     ap.add_argument("--port", type=int, default=int(env("PORT") or DEFAULT_PORT))
     ap.add_argument("--bind", default=env("BIND") or "0.0.0.0")
@@ -1029,6 +1044,11 @@ def main():
         args.no_beacon = args.no_usb = True
         log("this computer is joined to the bridge at %s: no beacon or USB link here, so the badge "
             "stays with that one (--here to be the badge's bridge anyway)" % joined)
+    TOKEN = portable.bridge_key(STATE_DIR)
+    if TOKEN:
+        log("key: other computers, the badge and the phone panel need it (install.py --join-help)")
+    else:
+        log("key: could not be saved in %s, so only this computer can reach the bridge" % STATE_DIR)
     tracker = None
     if tracking.is_enabled(STATE_DIR):
         try:
@@ -1134,10 +1154,19 @@ function frame(){const now=Date.now()+off+(performance.now()%1);const l5=r5?r5*1
 const e=document.getElementById("cd5");e.textContent=fmt(l5);e.className="cd"+(l5!==null&&l5>-60000&&l5<=600000?(l5<=60000?" now":" soon"):"");
 document.getElementById("cd7").textContent=fmt(l7);requestAnimationFrame(frame);}
 requestAnimationFrame(frame);
+// the key comes in the link's #k=... (never sent to the bridge as part of the address), is kept
+// on this phone, and goes in a header; the address bar is cleared of it
+const KEY=(()=>{let k=(location.hash.match(/k=([0-9a-fA-F]+)/)||[])[1];
+try{if(k)localStorage.setItem("bh_key",k);else k=localStorage.getItem("bh_key");}catch(e){}
+if(location.hash)history.replaceState(null,"",location.pathname);return k||"";})();
+const AUTH={"X-Burn-Helper-Token":KEY};
 let theme=null;
 async function tick(){
   try{
-    const r=await fetch("/status",{cache:"no-store"});const s=await r.json();
+    const r=await fetch("/status",{cache:"no-store",headers:AUTH});
+    if(r.status===403){const f=document.getElementById("foot");f.className="foot err";
+      f.textContent="This page needs the bridge's key. On the bridge computer run install.py --join-help and open the phone link it prints.";return;}
+    const s=await r.json();
     document.getElementById("hearts").textContent=hearts(s.hearts);
     const u=[pct(s.five_hour,"5h"),pct(s.seven_day,"7d")].filter(Boolean).join(" · ");
     document.getElementById("usage").textContent=u||"waiting for status line data";
@@ -1150,7 +1179,7 @@ async function tick(){
   }catch(e){const f=document.getElementById("foot");f.textContent="Bridge unreachable";f.className="foot err";}
 }
 document.querySelectorAll("button").forEach(b=>b.addEventListener("click",async()=>{
-  await fetch("/theme",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({theme:b.dataset.t})});tick();
+  await fetch("/theme",{method:"POST",headers:Object.assign({"Content-Type":"application/json"},AUTH),body:JSON.stringify({theme:b.dataset.t})});tick();
 }));
 tick();setInterval(tick,3000);
 </script></body></html>
