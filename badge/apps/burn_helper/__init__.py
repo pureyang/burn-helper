@@ -189,7 +189,7 @@ def apply_bridge():
             show_toast("INTERNET RELAY READY")
     k = d.get("key")
     if source == "usb" and isinstance(k, str) and k and k != link.key:
-        # the bridge's key comes over the cable only; every Wi-Fi poll carries it from now on
+        # the bridge's key comes over the cable only, and opens its sealed answers on Wi-Fi
         config.save_key(k)
         link.key = k
         link.http_err = ""

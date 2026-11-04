@@ -74,7 +74,7 @@ KEY_FILE = "/state/burn_helper_key.txt"
 
 
 def load_key():
-    """The bridge's key, learned over USB from the bridge, or None. Every Wi-Fi poll sends it."""
+    """The bridge's key, learned over USB from the bridge, or None. It opens the bridge's sealed answers; it is never sent."""
     try:
         with open(KEY_FILE) as f:
             k = f.read().strip()

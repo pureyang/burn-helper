@@ -4,6 +4,7 @@
 # drop the badge into the firmware's fatal-error screen.
 
 import json
+import seal
 import socket
 import select
 import time
@@ -54,7 +55,7 @@ STUCK = "never accepted the badge"
 NOT_SEEN = "not visible (5 GHz only / out of range?)"
 NO_IP = "joined but no IP address (DHCP)"
 FAILED = "connect failed"
-NEEDS_KEY = "needs its key"      # the bridge turned the poll down: plug the badge into it once
+NEEDS_KEY = "needs its key"      # the bridge seals its answers with a key this badge lacks: plug it into the bridge once
 
 
 def ticks():
@@ -76,8 +77,8 @@ class HttpGet:
         self.t0 = ticks()
         self.buf = b""
         self.sent = False
-        auth = "X-Burn-Helper-Token: %s\r\n" % key if key else ""
-        self.req = ("GET %s HTTP/1.0\r\nHost: %s\r\n%sConnection: close\r\n\r\n" % (path, host, auth)).encode()
+        self.key = key            # the bridge's key: its answer comes sealed with it (seal.py)
+        self.req = ("GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n" % (path, host)).encode()
         self.sock = None
         try:
             addr = socket.getaddrinfo(host, port)[0][-1]
@@ -151,6 +152,11 @@ class HttpGet:
         if b" 200 " not in line + b" ":
             self.err = "HTTP " + line.decode()[:24]
             return
+        if seal.is_sealed(body):
+            body = seal.unseal(self.key, body)
+            if body is None:              # no key yet, or not this bridge's
+                self.err = NEEDS_KEY
+                return
         try:
             self.body = json.loads(body)
             self.ok = True
@@ -187,7 +193,7 @@ class Net:
         self.others = {}                       # other bridges heard on this network: host -> id
         self.fixed_bridge = bridge             # (host, port) or None
         self.bridge = bridge
-        self.key = key                         # the bridge's key, learned over USB, sent with every poll
+        self.key = key                         # the bridge's key, learned over USB, opens its sealed answers
         self.relay = relay                     # {"url", "key"} of the Mac's internet relay, or None
         self.rclient = None                    # relay.Client while the relay is in use
         self.rpoll_t0 = None
