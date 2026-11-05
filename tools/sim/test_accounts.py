@@ -31,21 +31,21 @@ home = tempfile.mkdtemp()
 with open(os.path.join(home, ".claude.json"), "w") as f:
     json.dump({"projects": {"x": {"a": {}}}, "oauthAccount": {
         "accountUuid": "uuid-gmail", "ccOnboardingFlags": {"x": 1}, "emailAddress": "me@gmail.com"}}, f)
-lexco = os.path.join(home, ".claude-lexco")
-os.makedirs(lexco)
-with open(os.path.join(lexco, ".claude.json"), "w") as f:
-    json.dump({"oauthAccount": {"emailAddress": "me@lexco.io", "accountUuid": "uuid-lexco"}}, f)
+acme = os.path.join(home, ".claude-acme")
+os.makedirs(acme)
+with open(os.path.join(acme, ".claude.json"), "w") as f:
+    json.dump({"oauthAccount": {"emailAddress": "me@acme.io", "accountUuid": "uuid-acme"}}, f)
 os.environ.pop("BURN_HELPER_LABEL", None)
 g_tag, g_label, g_default = SL.account(config_dir=None, home=home)
-l_tag, l_label, l_default = SL.account(config_dir=lexco, home=home)
-assert (g_label, g_default, l_label, l_default) == ("GMAIL", True, "LEXCO", False), (g_label, l_label)
+l_tag, l_label, l_default = SL.account(config_dir=acme, home=home)
+assert (g_label, g_default, l_label, l_default) == ("GMAIL", True, "ACME", False), (g_label, l_label)
 assert g_tag and l_tag and g_tag != l_tag and len(g_tag) == 12, (g_tag, l_tag)
 assert "uuid" not in g_tag and "gmail" not in g_tag, "only a hash leaves the computer"
 assert SL.account(config_dir=None, home=os.path.join(home, "nope"))[0] is None, "~/.claude signed out: untagged"
 other = SL.account(config_dir=os.path.join(home, "nope"), home=home)[0]
 assert other and other not in (g_tag, l_tag), "another folder without the file is still its own account, never the main"
 os.environ["BURN_HELPER_LABEL"] = "work"
-assert SL.account(config_dir=lexco, home=home)[1] == "WORK", "the installer's label wins"
+assert SL.account(config_dir=acme, home=home)[1] == "WORK", "the installer's label wins"
 del os.environ["BURN_HELPER_LABEL"]
 print("PASS status line: tags each config folder's account with a hash and a label, never the email")
 
@@ -65,18 +65,18 @@ def rl(u7, u5=None):
 b = B.Bridge()
 b.on_usage({"rate_limits": rl(40)})                        # an older, untagged status line: the main account
 assert b.status()["hearts"] == 12 and b.status()["accounts"] == []
-b.on_usage({"rate_limits": rl(30, 70), "acct": l_tag, "label": "LEXCO", "default": False})
+b.on_usage({"rate_limits": rl(30, 70), "acct": l_tag, "label": "ACME", "default": False})
 b.on_usage({"rate_limits": rl(44), "acct": g_tag, "label": "GMAIL", "default": True})
 s = b.status()
 assert b.main_acct == g_tag and s["label"] == "GMAIL", "the ~/.claude account claims the main hearts"
 assert s["hearts"] == 11 and s["mode"] == "week", s                            # GMAIL: weekly only, 56% left
 assert len(s["accounts"]) == 1, s["accounts"]
 row = s["accounts"][0]
-assert row["l"] == "LEXCO" and row["h"] == 6 and row["w"] == "5h" and row["u"] == "ok", row   # its 5-hour binds
+assert row["l"] == "ACME" and row["h"] == 6 and row["w"] == "5h" and row["u"] == "ok", row   # its 5-hour binds
 assert abs(row["r"] - (now + 2 * 3600)) <= 1, row
 b.on_usage({"rate_limits": rl(30), "acct": g_tag})       # a lagging session: usage only goes up
 assert b.status()["hearts"] == 11 and b.status()["accounts"][0]["h"] == 6, "each report goes to its own account"
-b.on_usage({"rate_limits": rl(90, 10), "acct": l_tag, "label": "LEXCO"})
+b.on_usage({"rate_limits": rl(90, 10), "acct": l_tag, "label": "ACME"})
 assert b.status()["accounts"][0]["h"] == 2 and b.status()["accounts"][0]["w"] == "wk", "now its week binds"
 ans = b.answer({"acct": l_tag})
 assert ans["mode"] == "5h" and b.answer({"acct": g_tag})["mode"] == "week", "each status line hears its own mode"
@@ -84,11 +84,11 @@ assert ans["mode"] == "5h" and b.answer({"acct": g_tag})["mode"] == "week", "eac
 # the rows survive a restart; the oldest account makes room past ACCOUNTS_MAX
 b.persist(force=True)
 b2 = B.Bridge()
-assert b2.main_acct == g_tag and b2.status()["accounts"][0]["l"] == "LEXCO", b2.status()["accounts"]
+assert b2.main_acct == g_tag and b2.status()["accounts"][0]["l"] == "ACME", b2.status()["accounts"]
 for i in range(B.ACCOUNTS_MAX):
     b2.on_usage({"rate_limits": rl(10), "acct": "%012x" % (i + 1), "label": "X%d" % i})
 labels = [r["l"] for r in b2.status()["accounts"]]
-assert len(labels) == B.ACCOUNTS_MAX and "LEXCO" not in labels, labels
+assert len(labels) == B.ACCOUNTS_MAX and "ACME" not in labels, labels
 b2.others[next(iter(b2.others))]["seen"] = now - B.ACCOUNT_FORGET_S - 1
 b2.pace_step()
 assert len(b2.status()["accounts"]) == B.ACCOUNTS_MAX - 1, "two weeks without a report: forgotten"
@@ -120,30 +120,30 @@ def install(*args):
     return r.stdout
 
 
-out = install("--add-account", "lexco", "--dry-run")
-assert not os.path.exists(os.path.join(ihome, ".claude-lexco")), "a dry run changes nothing"
-out = install("--add-account", "lexco")
-with open(os.path.join(ihome, ".claude-lexco", "settings.json")) as f:
+out = install("--add-account", "acme", "--dry-run")
+assert not os.path.exists(os.path.join(ihome, ".claude-acme")), "a dry run changes nothing"
+out = install("--add-account", "acme")
+with open(os.path.join(ihome, ".claude-acme", "settings.json")) as f:
     s = json.load(f)
-assert s["env"] == {"BURN_HELPER_LABEL": "LEXCO"} and "cc_statusline.py" in s["statusLine"]["command"], s
+assert s["env"] == {"BURN_HELPER_LABEL": "ACME"} and "cc_statusline.py" in s["statusLine"]["command"], s
 assert all(e in s["hooks"] for e in ("Stop", "PostToolUse")), s["hooks"].keys()
 assert not os.path.exists(os.path.join(ihome, ".claude", "settings.json")), "~/.claude is left alone"
 assert "LaunchAgents" not in out and "launchctl" not in out, "no second bridge"
 rc = [p for p in (".zshrc", ".bashrc") if os.path.exists(os.path.join(ihome, p))]
 if rc:      # a Mac or Linux: the alias went into the shell's start-up file, once
-    install("--add-account", "lexco")
+    install("--add-account", "acme")
     with open(os.path.join(ihome, rc[0])) as f:
         text = f.read()
-    assert text.count("alias claude-lexco=") == 1 and "CLAUDE_CONFIG_DIR=" in text, text
+    assert text.count("alias claude-acme=") == 1 and "CLAUDE_CONFIG_DIR=" in text, text
 else:       # Windows: the line for the PowerShell profile is printed
-    assert "function claude-lexco" in out and "$PROFILE" in out, out
+    assert "function claude-acme" in out and "$PROFILE" in out, out
 import install as I  # noqa: E402
 I.WINDOWS, I.MAC, I.HOME = False, True, tempfile.mkdtemp()     # the Mac's way, from any computer
-assert "Added the alias claude-lexco" in I.add_alias("lexco") and "already" in I.add_alias("lexco")
+assert "Added the alias claude-acme" in I.add_alias("acme") and "already" in I.add_alias("acme")
 with open(os.path.join(I.HOME, ".zshrc")) as f:
-    assert f.read().count("""alias claude-lexco='CLAUDE_CONFIG_DIR="$HOME/.claude-lexco" claude'""") == 1
-out = install("--add-account", "lexco", "--uninstall")
-with open(os.path.join(ihome, ".claude-lexco", "settings.json")) as f:
+    assert f.read().count("""alias claude-acme='CLAUDE_CONFIG_DIR="$HOME/.claude-acme" claude'""") == 1
+out = install("--add-account", "acme", "--uninstall")
+with open(os.path.join(ihome, ".claude-acme", "settings.json")) as f:
     assert json.load(f) == {}, "uninstall takes ours out of that folder"
 key = "00112233445566778899aabbccddeeff"
 install("--add-account", "other", "--bridge", "http://my-mac:8787/#k=" + key)

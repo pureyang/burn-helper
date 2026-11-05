@@ -77,7 +77,7 @@ class FakeSta:
     def connect(self, ssid, psk, **kw): self.calls.append((ssid, psk, kw))
     def isconnected(self): return self.connected
     def status(self): return {"ok": 3, "stuck": 1, "gone": -2}[self.behaviour] if not self.connected else 3
-    def ifconfig(self): return ("192.168.4.48", "255.255.252.0", "192.168.4.1", "8.8.8.8")
+    def ifconfig(self): return ("192.168.1.48", "255.255.255.0", "192.168.1.1", "8.8.8.8")
     def disconnect(self): self.connected = False
 
 
@@ -105,7 +105,7 @@ def run_join(behaviour, bssids=None):
 
 
 q, sta, now = run_join("ok", {"home-wifi": b"\x02\x00\x00\x00\x00\x01"})
-assert q.outcome == "ok" and q.phase == "result" and "SUCCESS!" in q.lines and "IP 192.168.4.48" in q.lines, (q.phase, q.lines)
+assert q.outcome == "ok" and q.phase == "result" and "SUCCESS!" in q.lines and "IP 192.168.1.48" in q.lines, (q.phase, q.lines)
 assert sta.calls[0][2].get("bssid") == b"\x02\x00\x00\x00\x00\x01", "should pin to the strongest access point"
 assert not any("secret-pw" in l for l in q.lines), "password must never be shown"
 now[0] += 4000; q.tick(); assert q.phase == "done", "should hand back to the main screen by itself"

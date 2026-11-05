@@ -26,9 +26,9 @@ THEMES = ("hero", "gameshow", "chocolates")
 NOW = 1800000000
 LIT, DARK = 400100, 401500          # frame times with the likely-spent hearts lit, and gone dark
 
-LEXCO = {"l": "LEXCO", "h": 14, "e": None, "r": NOW + 2 * 3600 + 14 * 60, "w": "5h", "u": "ok"}
+ACME = {"l": "ACME", "h": 14, "e": None, "r": NOW + 2 * 3600 + 14 * 60, "w": "5h", "u": "ok"}
 MORE = [
-    {"l": "LEXCO", "h": 2, "e": None, "r": NOW + 65 * 60, "w": "5h", "u": "ok"},         # 5-hour nearly out
+    {"l": "ACME", "h": 2, "e": None, "r": NOW + 65 * 60, "w": "5h", "u": "ok"},         # 5-hour nearly out
     {"l": "WORK", "h": 9, "e": 0, "r": NOW + 44 * 3600, "w": "wk", "u": "ok"},           # runs out before the reset
     {"l": "SIDE", "h": 17, "e": 12, "r": NOW + 5 * 86400 + 3 * 3600, "w": "wk", "u": "ok"},
     {"l": "TEAM", "h": 12, "e": None, "r": NOW + 3 * 86400, "w": "wk", "u": "old"},      # no report for a while
@@ -50,7 +50,7 @@ def status(accounts):
 def shots():
     out = []
     for name in THEMES:
-        out.append(("%s_two" % name, "%s: 2 accounts" % name, PL.theme_shot(name, status([LEXCO]), LIT)))
+        out.append(("%s_two" % name, "%s: 2 accounts" % name, PL.theme_shot(name, status([ACME]), LIT)))
         out.append(("%s_five_lit" % name, "%s: 5 accounts" % name, PL.theme_shot(name, status(MORE), LIT)))
         out.append(("%s_five_dark" % name, "%s: 5, likely spent dark" % name, PL.theme_shot(name, status(MORE), DARK)))
     st = status(MORE)
