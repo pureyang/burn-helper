@@ -112,12 +112,11 @@ def envelope(key, d):
 
 
 def reply(key, raw):
-    """The bridge's answer as a dict, sealed or not; None when it can't be read."""
+    """The bridge's answer as a dict; None unless it is sealed with this key."""
     import json
-    if is_sealed(raw):
-        raw = unseal(key, raw)
-        if raw is None:
-            return None
+    raw = unseal(key, raw)
+    if raw is None:
+        return None
     try:
         d = json.loads(raw.decode("utf-8") or "{}")
     except (ValueError, UnicodeDecodeError, AttributeError):

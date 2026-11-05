@@ -69,6 +69,12 @@ def session_name(sid, sessions_dir=None):
     return None
 
 
+def on_this_computer(url):
+    """Whether url is a bridge on this computer: the only place a message may go unsealed."""
+    host = url.split("//")[-1].split("/")[0].rsplit(":", 1)[0].strip("[]")
+    return host in ("127.0.0.1", "localhost", "::1")
+
+
 def main():
     try:
         raw = read_input(1024 * 1024)
@@ -96,8 +102,10 @@ def main():
             # sealed with the bridge's key: the session's name and folder don't cross the network in the clear
             import seal
             data, ctype = seal.envelope(token, event), "application/x-burn-helper-sealed"
-        else:
+        elif on_this_computer(url):
             data, ctype = json.dumps(event).encode(), "application/json"
+        else:
+            return      # no key: nothing about this session crosses the network in the clear
         req = urllib.request.Request(url, data=data, headers={"Content-Type": ctype}, method="POST")
         urllib.request.urlopen(req, timeout=0.5).close()
     except Exception:  # noqa: BLE001 - a hook must never fail the session

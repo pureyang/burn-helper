@@ -41,8 +41,10 @@ assert portable.bridge_key(state) == key, "made once, then kept"
 if os.name != "nt":
     assert stat.S_IMODE(os.stat(os.path.join(state, "key")).st_mode) == 0o600, "readable by this user only"
 assert portable.bridge_key(tempfile.mkdtemp(), make=False) is None
-os.environ["BURN_HELPER_TOKEN"] = "set-by-hand"
-assert portable.bridge_key(state) == "set-by-hand", "BURN_HELPER_TOKEN wins"
+os.environ["BURN_HELPER_TOKEN"] = "set-by-hand-" + "x" * 20
+assert portable.bridge_key(state) == os.environ["BURN_HELPER_TOKEN"], "BURN_HELPER_TOKEN wins"
+os.environ["BURN_HELPER_TOKEN"] = "short"
+assert portable.bridge_key(state) == key, "too short to be a key: ignored, so it can't weaken the seal"
 del os.environ["BURN_HELPER_TOKEN"]
 print("PASS key: 128 random bits as hex, made once in the state folder (owner only), BURN_HELPER_TOKEN wins")
 
@@ -62,7 +64,8 @@ for i in (5, len(box) // 2, len(box) - 1):
     bad[i] ^= 1
     assert seal.unseal(key, bytes(bad)) is None, "any changed byte is caught (at %d)" % i
 assert seal.unseal(key, box[:-1]) is None and seal.unseal(key, b"{}") is None and seal.unseal(None, box) is None
-assert seal.reply(key, b'{"ok": true}') == {"ok": True} and seal.reply(key, seal.seal(key, b'{"a": 1}')) == {"a": 1}
+assert seal.reply(key, b'{"ok": true}') is None, "an answer that isn't sealed counts for nothing"
+assert seal.reply(key, seal.seal(key, b'{"a": 1}')) == {"a": 1}
 assert seal.reply("0" * 32, seal.seal(key, b'{"a": 1}')) is None
 print("PASS seal: encrypt-then-MAC with SHA-256 only; tampering, truncation and other keys are caught; "
       "the bridge's and the badge's copies match")
@@ -211,6 +214,66 @@ srv.shutdown()
 print("PASS install: join lines and the phone link carry the key after #k=; --bridge splits it into "
       "settings.json; the check says when the key is missing or wrong")
 
+# ---------------------------------------------------------------- there is no way around the seal
+import importlib  # noqa: E402
+import io  # noqa: E402
+import re  # noqa: E402
+import urllib.request as _ur  # noqa: E402
+
+_hook = importlib.import_module("cc_hook")
+_line = importlib.import_module("cc_statusline")
+_sent = []
+
+
+def _urlopen(req, timeout=None):
+    _sent.append(req)
+    raise OSError("stop here")
+
+
+def _attempts(url, token=None):
+    """What a hook and a status line try to send to url, with or without the key."""
+    del _sent[:]
+    os.environ["BURN_HELPER_BRIDGE_URL"] = url
+    os.environ.pop("BURN_HELPER_TOKEN", None)
+    if token:
+        os.environ["BURN_HELPER_TOKEN"] = token
+    stdin, sys.stdin = sys.stdin, io.TextIOWrapper(io.BytesIO(json.dumps(
+        {"hook_event_name": "Stop", "session_id": "s1", "cwd": "/tmp/secret-project"}).encode()))
+    try:
+        _hook.main()
+    except SystemExit:
+        pass
+    finally:
+        sys.stdin = stdin
+    _line.report({"session_id": "s1", "rate_limits": {"seven_day": {"used_percentage": 1, "resets_at": 2}}})
+    del os.environ["BURN_HELPER_BRIDGE_URL"]
+    os.environ.pop("BURN_HELPER_TOKEN", None)
+    return list(_sent)
+
+
+_real_urlopen, _ur.urlopen = _ur.urlopen, _urlopen
+try:
+    assert _attempts("http://100.64.1.2:8787") == [], "no key: nothing crosses the network, not even once"
+    assert _attempts("http://my-mac.example:8787") == [], "whatever the address"
+    local = _attempts("http://127.0.0.1:8787")
+    assert len(local) == 2 and not any(seal.is_sealed(r.data) for r in local), "this computer's own bridge: plain"
+    far = _attempts("http://100.64.1.2:8787", key)
+    assert len(far) == 2 and all(seal.is_sealed(r.data) for r in far), "with the key: sealed"
+    assert not any(b"secret-project" in r.data for r in far), "and nothing readable in it"
+finally:
+    _ur.urlopen = _real_urlopen
+
+for _f in ("burn_helper_bridge.py", "install.py", "cc_hook.py", "cc_statusline.py", "portable.py"):
+    with open(os.path.join(BRIDGE_DIR, _f), encoding="utf-8") as f:
+        _src = f.read()
+    _names = re.findall(r'add_argument\(\s*"(--[a-z-]+)"', _src) + re.findall(r'\benv\("([A-Z_]+)"', _src)
+    _off = [n for n in _names if re.search(r"(?i)seal|plain|insecure|encrypt|no.?key|unsafe", n)]
+    assert not _off, "a switch that could turn the seal off: %s in %s" % (_off, _f)
+assert "LOCAL?JSON.parse" in B.PAGE and "if(!KEY&&!LOCAL){needKey();return;}" in B.PAGE, \
+    "the phone panel takes and sends plain only on the bridge computer itself"
+print("PASS no way around the seal: without a key nothing leaves this computer, no option or setting turns it "
+      "off, and a short key is refused")
+
 # ---------------------------------------------------------------- the badge
 sys.path.insert(0, BADGE_DIR)
 _t0 = time.monotonic()
@@ -233,9 +296,17 @@ assert not g.ok and g.err == net.NEEDS_KEY, "no key yet: it says so"
 g = net.HttpGet("127.0.0.1", 9, "/status", key)
 g.buf = b'HTTP/1.0 200 OK\r\n\r\n{"level": 1}'
 g.finish()
-assert g.ok and g.body["level"] == 1, "an older bridge's plain answer still works"
+assert not g.ok and g.body is None and g.err == net.UNSEALED, "a plain answer is ignored, even with the key"
+g = net.HttpGet("127.0.0.1", 9, "/status")
+g.buf = b'HTTP/1.0 200 OK\r\n\r\n{"level": 1}'
+g.finish()
+assert not g.ok and g.err == net.UNSEALED, "and without one"
 n = net.Net([("fake", "x")], key=key)
-n.state, n.bridge, n.http_err = "up", ("192.168.4.49", 8787), net.NEEDS_KEY
+n.state, n.bridge, n.http_err = "up", ("192.168.1.20", 8787), net.UNSEALED
+assert n.label() == "BRIDGE ANSWER NOT SEALED" and len(n.label()) <= 26, n.label()
+assert "without sealing" in n.hint(), n.hint()
+n = net.Net([("fake", "x")], key=key)
+n.state, n.bridge, n.http_err = "up", ("192.168.1.20", 8787), net.NEEDS_KEY
 assert n.label() == "PLUG INTO BRIDGE FOR KEY" and len(n.label()) <= 26
 assert "plug the badge" in n.hint() and n.trouble() == "key", (n.hint(), n.trouble())
 print("PASS badge: it opens the bridge's sealed answers with the key from USB, never sends the key, "

@@ -55,6 +55,7 @@ STUCK = "never accepted the badge"
 NOT_SEEN = "not visible (5 GHz only / out of range?)"
 NO_IP = "joined but no IP address (DHCP)"
 FAILED = "connect failed"
+UNSEALED = "answer not sealed"    # taken for no bridge: an old bridge, or something else on the network
 NEEDS_KEY = "needs its key"      # the bridge seals its answers with a key this badge lacks: plug it into the bridge once
 
 
@@ -152,11 +153,13 @@ class HttpGet:
         if b" 200 " not in line + b" ":
             self.err = "HTTP " + line.decode()[:24]
             return
-        if seal.is_sealed(body):
-            body = seal.unseal(self.key, body)
-            if body is None:              # no key yet, or not this bridge's
-                self.err = NEEDS_KEY
-                return
+        if not seal.is_sealed(body):
+            self.err = UNSEALED
+            return
+        body = seal.unseal(self.key, body)
+        if body is None:                  # no key yet, or not this bridge's
+            self.err = NEEDS_KEY
+            return
         try:
             self.body = json.loads(body)
             self.ok = True
@@ -324,6 +327,9 @@ class Net:
             if self.bridge is not None and not self.fresh() and self.http_err == NEEDS_KEY:
                 return ("The bridge at %s wants its key: plug the badge into that computer's USB once."
                         % self.bridge[0])
+            if self.bridge is not None and not self.fresh() and self.http_err == UNSEALED:
+                return ("%s answered without sealing, so the badge ignores it. Update the bridge, or check "
+                        "that this is your bridge." % self.bridge[0])
             if self.bridge is not None and not self.fresh() and self.http_err:
                 return "Bridge %s:%d not answering (%s)" % (self.bridge[0], self.bridge[1], self.http_err)
             if self.fresh():
@@ -371,6 +377,8 @@ class Net:
             return "SEARCHING FOR BRIDGE..."
         if self.http_err == NEEDS_KEY:
             return "PLUG INTO BRIDGE FOR KEY"
+        if self.http_err == UNSEALED:
+            return "BRIDGE ANSWER NOT SEALED"
         if not self.fresh():
             return "BRIDGE NOT ANSWERING"
         return ""
