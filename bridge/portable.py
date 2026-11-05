@@ -99,10 +99,11 @@ KEY_HEX = 32            # 128 random bits, as hex: safe in a header, a URL fragm
 def bridge_key(state_dir, make=True):
     """The key every request to the bridge needs, except from the bridge computer itself:
     BURN_HELPER_TOKEN when set, else one made once and kept in <state_dir>/key (readable by this
-    user only). None when there is none and make is False, or it can't be saved."""
+    user only). A shorter one than ours is no key at all, so it is ignored. None when there is none
+    and make is False, or it can't be saved."""
     key = (os.environ.get("BURN_HELPER_TOKEN") or os.environ.get("HEARTS_LEFT_TOKEN")
            or os.environ.get("TUFTY_TOKEN") or "").strip()
-    if key:
+    if len(key) >= KEY_HEX:
         return key
     path = os.path.join(state_dir, "key")
     try:

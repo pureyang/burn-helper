@@ -115,7 +115,9 @@ python3 bridge/install.py --bridge 'http://<mac>:8787/#k=<key>'
 
 That writes `BURN_HELPER_BRIDGE_URL` and `BURN_HELPER_TOKEN` (the key) into that computer's
 `~/.claude/settings.json` `env`. `python3 bridge/install.py --join-help` on the bridge prints the
-address with its key. Step by step, including PowerShell: [docs/other-computers.md](../docs/other-computers.md).
+address with its key. To reach the bridge from any network, every computer needs Tailscale under the
+same Tailscale account, whichever Claude account it uses. Step by step, including PowerShell and a
+computer on another Tailscale account: [docs/other-computers.md](../docs/other-computers.md).
 
 Events from another host count as remote sessions: busy for 90 seconds after
 their last event. Cloud sessions on claude.ai/code cannot reach a home LAN, so
@@ -181,8 +183,11 @@ in the state folder, which the bridge checks as it goes, with no restart).
   of being sent). Only the page at `/` and `/health` are open, and they say nothing about your
   sessions. The bridge computer's own hooks and status line talk to it in plain JSON over
   loopback, which never leaves the computer.
+- There is no setting that turns this off. The badge ignores an answer that isn't sealed, a computer
+  without the key sends nothing at all, and the installer refuses a key that is too short. A bridge
+  from before sealing has to be updated first.
 - The key is 128 random bits, made on first start in `<state dir>/key` (readable by you only), or
-  `BURN_HELPER_TOKEN` when set. It never crosses the network: the badge gets it over the USB cable,
+  `BURN_HELPER_TOKEN` when set to 32 characters or more (a shorter one is ignored). It never crosses the network: the badge gets it over the USB cable,
   other computers in their join line, and a phone in the link `--join-help` prints
   (`http://<bridge>:8787/#k=<key>`: browsers never send the part after `#`, so the phone keeps it
   and uses it to open what the bridge sends). Keep those lines and the link to yourself. To change

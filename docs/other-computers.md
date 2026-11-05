@@ -31,11 +31,70 @@ The part after `#k=` is the bridge's key: without it the bridge turns the comput
 these lines to yourself. It gets the code into `~/burn-helper`, adds the hooks and the hearts status line, and checks
 that the bridge answers. Then restart Claude Code on that computer.
 
+## Tailscale on each computer
+
+Tailscale lets your computers reach the bridge from any network. It belongs to the computer, and a
+Tailscale account has nothing to do with a Claude account: put every computer on the same tailnet
+(the private network your Tailscale account makes), whichever Claude accounts they use. The free
+plan works. The badge isn't on Tailscale for this, so there is nothing to do on the badge.
+
+Do the bridge first, then each other computer, before you run its join line:
+
+1. Install Tailscale from [tailscale.com/download](https://tailscale.com/download). On Linux:
+   `curl -fsSL https://tailscale.com/install.sh | sh`, then `sudo tailscale up`.
+2. Open it and sign in with the **same Tailscale account** on every computer.
+3. On the joining computer, check that it can see the bridge. `tailscale status` should list the
+   bridge computer. With the Mac app the command is
+   `/Applications/Tailscale.app/Contents/MacOS/Tailscale status`, and on Windows
+   `& "C:\Program Files\Tailscale\tailscale.exe" status`. Then check the port itself:
+   `nc -vz <bridge> 8787` on a Mac or Linux, `Test-NetConnection <bridge> -Port 8787` on Windows.
+
+On the bridge, run `install.py --join-help` once Tailscale is on, so the join lines carry its
+Tailscale address.
+
+| Your setup | Tailscale | Burn Helper |
+|---|---|---|
+| Several computers, one Claude account | The same Tailscale account on all of them | The join line on each |
+| Several computers, on different Claude accounts | The same Tailscale account on all of them | The join line on each. Each other Claude account gets its own row on the badge |
+| The same Claude account on several computers | The same Tailscale account on all of them | The join line on each. That account counts once, however many computers report it |
+| Two Claude accounts on one computer | Nothing more: the computer is already on | [`--add-account`](#a-second-claude-account) |
+| Several user accounts on one computer | Sign in while logged in as the user who runs Claude Code | The join line as that user |
+| A computer on another Tailscale account, such as a work one | See below | The join line as usual |
+
+Tailscale's Mac and Windows apps run in your login session, which is why the user matters. If
+`tailscale status` doesn't list the bridge for that user, Tailscale is off or on another account
+there.
+
+### A computer on another Tailscale account
+
+A computer signed in to another tailnet can't see the bridge's `100.x` address, so the installer
+says it can't reach the bridge. There are two ways to fix that.
+
+- **Sign in to your account as well.** Tailscale can stay signed in to both: `tailscale login` adds
+  an account and `tailscale switch <account>` changes to it. Only one is active at a time, though,
+  so nothing reaches the bridge while the other one is.
+- **Share the bridge computer with that tailnet.** This leaves that computer on its own tailnet. In
+  the [admin console](https://login.tailscale.com/admin/machines) of the bridge's tailnet, open
+  **Share** on the bridge's row, and accept the invite from the other tailnet. Whoever accepts has to be an Owner, Admin or IT
+  admin there. Connections go only from that tailnet to the bridge, which is all a joined computer
+  needs: it sends to the bridge, and the bridge never calls it back. The bridge usually keeps its
+  `100.x` address there. If that address is taken it gets another, so use the one `tailscale status`
+  shows on that computer.
+
+Either way the join line still carries the key, and the bridge turns away anything without it.
+
+### Keep the bridge reachable
+
+Tailscale's sign-ins expire, after 180 days by default. When the bridge's does, every joined
+computer loses it at once. For a computer that is always on, turn that off: in the
+[admin console](https://login.tailscale.com/admin/machines), open the menu on the bridge's row, then
+**Disable Key Expiry**.
+
 ## Which address
 
 - **The bridge's Tailscale address** (`100.x.y.z`; `tailscale ip -4` on the bridge shows it), with
-  both computers on your tailnet: works at home and away. This is what the bridge's install
-  suggests when Tailscale runs there.
+  both computers on [your tailnet](#tailscale-on-each-computer): works at home and away. This is
+  what the bridge's install suggests when Tailscale runs there.
 - **The bridge's IP address**, when both are on the same home network. It can change, though.
 - Not the bridge's Tailscale name (`<name>.<tailnet>.ts.net`). With the relay from
   [away from home](relay.md) on, public DNS answers that name with the relay's address, which is
@@ -52,7 +111,9 @@ play the animations for its tool calls. On the bridge, `/status` shows it in `se
 `busy`: `curl -s localhost:8787/status` on a Mac, `Invoke-RestMethod localhost:8787/status` on
 Windows.
 
-If the installer says it can't reach the bridge, check that the bridge is on, that the computer
+If the installer says it can't reach the bridge at a `100.x` address, start with Tailscale on that
+computer: it has to be installed, running and on [the bridge's tailnet](#tailscale-on-each-computer),
+so `tailscale status` lists the bridge. Otherwise, check that the bridge is on, that the computer
 can reach it (same network, or both on your tailnet) and, for a Windows bridge, that Windows
 Firewall lets port 8787 in on that network. The installer's rule covers Private networks; if
 your tailnet shows up as Public on the bridge, allow it there too.
@@ -101,9 +162,9 @@ Linux, shows when the connection gets through.
   and doesn't mix with the first account's hearts.
 - The bridge's key goes in `BURN_HELPER_TOKEN` in the same `env` section. What the hooks and status
   line send is sealed with it (encrypted and signed), so nothing about your sessions crosses the
-  network in the clear, and without it the bridge turns a computer away (see the
-  [bridge](../bridge/README.md)). A computer joined before the key was added stops reporting until
-  you run its join line again.
+  network in the clear. Without it the computer sends nothing at all, so it doesn't count on the
+  badge (see the [bridge](../bridge/README.md)). There is no setting that turns the seal off. A
+  computer joined before the key was added stops reporting until you run its join line again.
 
 To leave the bridge, run the same line with `--uninstall` instead of `--join ...` (on Windows,
 `$env:BURN_HELPER_UNINSTALL=1` before the line instead of `BURN_HELPER_JOIN`).
@@ -113,15 +174,22 @@ To leave the bridge, run the same line with `--uninstall` instead of `--join ...
 To run another Claude account side by side with the first, set it up in a config folder of its own
 (see [More than one Claude account](how-it-works.md#usage-meters)). On the bridge computer:
 
-    python3 bridge/install.py --add-account lexco
+    python3 bridge/install.py --add-account work
 
 On a joined computer, add the bridge's address and key, as they are in its join line (without the
 key the bridge turns that account's reports away):
 
-    python3 bridge/install.py --add-account lexco --bridge 'http://<bridge-computer>:8787/#k=<key>'
+    python3 bridge/install.py --add-account work --bridge 'http://<bridge-computer>:8787/#k=<key>'
 
-Then run `claude-lexco` and `/login` once with that account. On Windows the installer prints a
-`claude-lexco` function to add to your PowerShell profile instead of a shell alias.
+Then run `claude-work` and `/login` once with that account. On Windows the installer prints a
+`claude-work` function to add to your PowerShell profile instead of a shell alias.
+
+This needs nothing more from Tailscale. `/login` signs in to Claude only, and the second account
+uses the connection the computer already has. If that computer isn't on Tailscale yet, see
+[Tailscale on each computer](#tailscale-on-each-computer).
+
+A Claude account counts once however many computers it runs on, whether it runs there with
+`--add-account` or is the one signed in to that computer's `~/.claude`.
 
 ## Limits
 

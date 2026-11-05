@@ -35,8 +35,12 @@ assert any(h["command"] == "say done" for g in s["hooks"]["Stop"] for h in g["ho
 assert "launchctl" not in out and "LaunchAgents" not in out, "no login item when the bridge runs elsewhere"
 s2, out = run("--bridge", "http://my-mac:8787")
 assert s2 == s and "already up to date" in out, "running it again changes nothing"
-s, _ = run("--bridge", "http://my-mac:8787", "--token", "abc")
-assert s["env"]["BURN_HELPER_TOKEN"] == "abc"
+s, _ = run("--bridge", "http://my-mac:8787", "--token", "ab" * 16)
+assert s["env"]["BURN_HELPER_TOKEN"] == "ab" * 16
+for short in (("--bridge", "http://my-mac:8787", "--token", "abc"), ("--bridge", "http://my-mac:8787/#k=abc")):
+    r = subprocess.run([sys.executable, os.path.join(BRIDGE, "install.py")] + list(short),
+                       env=dict(os.environ, BURN_HELPER_HOME=home), capture_output=True, text=True)
+    assert r.returncode != 0 and "too short" in r.stderr, "a short key is no key: " + r.stdout + r.stderr
 # the user's own status line stays, and the note says how to report usage from it
 _, notes = install.add_ours({"statusLine": {"type": "command", "command": "my-line"}})
 assert notes and install.STATUS_CMD in notes[0] and "never reaches the bridge" in notes[0], notes
@@ -131,6 +135,14 @@ url = "http://127.0.0.1:%d" % srv.server_address[1]
 assert "answers" in install.check_bridge(url), install.check_bridge(url)
 srv.shutdown()
 assert "Can't reach" in install.check_bridge("http://127.0.0.1:9"), "nothing listening"
+ts_msg = install.unreachable("http://100.64.1.2:8787", "URLError")
+assert "same Tailscale account" in ts_msg and "tailscale.com/download" in ts_msg and "Claude account" in ts_msg, ts_msg
+for other in ("http://192.168.1.20:8787", "http://my-mac:8787", "http://100.128.0.1:8787", "http://[::1]:8787", ""):
+    assert not install.is_tailscale_address(other), other
+    assert "Tailscale account" not in install.unreachable(other, "URLError"), "not a Tailscale address: " + other
+assert install.is_tailscale_address("http://100.64.0.1:8787") and install.is_tailscale_address("100.127.255.254:8787")
+ts_lines = "\n".join(install.join_lines("192.168.1.20", "100.64.1.2", windows=False))
+assert "same Tailscale account" in ts_lines and "tailscale.com/download" in ts_lines and "Claude account" in ts_lines, ts_lines
 print("PASS join: the lines to run on other computers, Tailscale address first; the bridge check")
 
 # ---------------------------------------------------------------- finding a bridge already on the network

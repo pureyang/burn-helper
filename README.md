@@ -42,7 +42,7 @@ starts with the first; the other two add to it, on their own or together:
 |---|---|---|
 | [1. One computer, at home](#1-one-computer-at-home) | The badge shows the agents on that computer, over the USB cable or your home Wi-Fi | The **bridge line**, on that computer |
 | [2. Away from home](#2-away-from-home) | The badge works on any Wi-Fi with internet, such as a phone hotspot or a conference network, while the bridge stays home | A free Tailscale account and one command, on the bridge |
-| [3. More computers](#3-more-computers) | The agents on your other computers, Mac, Windows or Linux, count too | The **join line**, on each other computer |
+| [3. More computers](#3-more-computers) | The agents on your other computers, Mac, Windows or Linux, count too | Tailscale on each computer, under one Tailscale account, then the **join line** on each other computer |
 
 ### 1. One computer, at home
 
@@ -112,8 +112,17 @@ troubleshooting: [away from home](docs/relay.md).
 
 ### 3. More computers
 
+To reach the bridge from any network, first install [Tailscale](https://tailscale.com/download)
+on the bridge and on each other computer, and sign in with the **same Tailscale account** on all of
+them. That account is separate from Claude: computers on different Claude accounts still share one
+Tailscale account, and a second Claude account on one computer needs nothing more. Computers that
+stay on the bridge's home network can skip it. See
+[Tailscale on each computer](docs/other-computers.md#tailscale-on-each-computer), including a
+computer that is already on another Tailscale account.
+
 On each other computer, run the **join line**, not the bridge line. The bridge's install showed
-it to you with `<bridge>` and the bridge's key filled in; it looks like this.
+it to you with `<bridge>` and the bridge's key filled in (run `install.py --join-help` there to see
+it again once Tailscale is on); it looks like this.
 
 **Join line** on a Mac or Linux, in Terminal:
 

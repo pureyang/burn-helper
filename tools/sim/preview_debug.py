@@ -37,7 +37,7 @@ def make(state):
     elif state == "nobeacon":
         n.state = "up"
         n.ssid = "home-wifi"
-        n.ip = "192.168.4.77"
+        n.ip = "192.168.1.77"
         n.up_t = -60000
         n.cur = 0
         n.cands[0].update(result=net.OK, tries=1)

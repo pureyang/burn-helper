@@ -118,6 +118,12 @@ def account(config_dir=None, home=None):
     return hashlib.sha256(uuid.group(1).encode()).hexdigest()[:12], label, default
 
 
+def on_this_computer(url):
+    """Whether url is a bridge on this computer: the only place a message may go unsealed."""
+    host = url.split("//")[-1].split("/")[0].rsplit(":", 1)[0].strip("[]")
+    return host in ("127.0.0.1", "localhost", "::1")
+
+
 def report(d):
     """Send the rate limits to the bridge; returns its answer ({"pace", "mode"}), or None."""
     rl = d.get("rate_limits")
@@ -137,9 +143,11 @@ def report(d):
             # sealed with the bridge's key, both ways (seal.py)
             import seal
             data, ctype = seal.envelope(token, body), "application/x-burn-helper-sealed"
-        else:
+        elif on_this_computer(url):
             seal = None
             data, ctype = json.dumps(body).encode(), "application/json"
+        else:
+            return None     # no key: nothing about this session crosses the network in the clear
         req = urllib.request.Request(url, data=data, headers={"Content-Type": ctype}, method="POST")
         with urllib.request.urlopen(req, timeout=0.3) as r:
             raw = r.read(8192)

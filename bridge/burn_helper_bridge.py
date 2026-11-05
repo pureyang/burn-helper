@@ -1382,10 +1382,11 @@ for(let i=0;i<32;i++)d|=want[i]^tag[i];return d?null:stream(enc,body.subarray(4,
 const KEY=(()=>{let k=(location.hash.match(/k=([0-9a-fA-F]+)/)||[])[1];
 try{if(k)localStorage.setItem("bh_key",k);else k=localStorage.getItem("bh_key");}catch(e){}
 if(location.hash)history.replaceState(null,"",location.pathname);return k||"";})();
+const LOCAL=["localhost","127.0.0.1","[::1]"].includes(location.hostname);
 function needKey(){const f=document.getElementById("foot");f.className="foot err";
 f.textContent="This page needs the bridge's key. On the bridge computer run install.py --join-help and open the phone link it prints.";}
 async function readReply(r){const b=new Uint8Array(await r.arrayBuffer());
-if(!isSealed(b))return JSON.parse(new TextDecoder().decode(b));const p=unseal(KEY,b);
+if(!isSealed(b))return LOCAL?JSON.parse(new TextDecoder().decode(b)):null;const p=unseal(KEY,b);
 return p?JSON.parse(new TextDecoder().decode(p)):null;}
 let theme=null;
 async function tick(){
@@ -1406,6 +1407,7 @@ async function tick(){
 }
 document.querySelectorAll("button").forEach(b=>b.addEventListener("click",async()=>{
   const d={theme:b.dataset.t};
+  if(!KEY&&!LOCAL){needKey();return;}
   const body=KEY?seal(KEY,TE.encode(JSON.stringify({t:Math.floor(Date.now()/1000),d:d}))):JSON.stringify(d);
   await fetch("/theme",{method:"POST",headers:{"Content-Type":KEY?"application/x-burn-helper-sealed":"application/json"},body:body});tick();
 }));
