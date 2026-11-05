@@ -216,9 +216,11 @@ row's hearts follow whichever of that account's limits has less left, and the co
 limit's reset. On a weekly limit, the hearts likely spent by the reset go dark now and then, as in
 `week` mode. A row goes grey when its numbers are 30 minutes old or more. There is room for four
 rows; an account with no report for two weeks drops off. To run a second account side by side with
-the first, run `python3 bridge/install.py --add-account lexco`. It makes the config folder
-`~/.claude-lexco` with the hooks, the status line and the label LEXCO, and the alias `claude-lexco`
-that runs Claude Code with that folder. Run `claude-lexco`, then `/login` once. Its own label: set
+the first, run `python3 bridge/install.py --add-account work`. It makes the config folder
+`~/.claude-work` with the hooks, the status line and the label WORK, and the alias `claude-work`
+that runs Claude Code with that folder. Run `claude-work`, then `/login` once. That signs in to
+Claude only: [Tailscale](other-computers.md#tailscale-on-each-computer) belongs to the computer, and
+needs nothing more for a second account. Its own label: set
 `BURN_HELPER_LABEL` in that folder's `settings.json`. To see the rows, run
 `python3 tools/sim/preview_accounts.py`.
 

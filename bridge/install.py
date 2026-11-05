@@ -18,9 +18,9 @@ settings.json's "env", where every Claude Code session (and so every hook) picks
 docs/other-computers.md.
 
 A second Claude account, run side by side with the first (on either kind of computer):
-    python3 bridge/install.py --add-account lexco [--bridge URL]
-This makes the config folder ~/.claude-lexco with the hooks and status line, labelled LEXCO,
-and the shell alias claude-lexco that runs Claude Code with it (CLAUDE_CONFIG_DIR). Sign in
+    python3 bridge/install.py --add-account work [--bridge URL]
+This makes the config folder ~/.claude-work with the hooks and status line, labelled WORK,
+and the shell alias claude-work that runs Claude Code with it (CLAUDE_CONFIG_DIR). Sign in
 once with /login; from then on that account's usage has its own row on the badge.
 
 A status line you already have is left alone. To replace it with the hearts one:
@@ -374,13 +374,20 @@ def this_computer():
     return lan, name
 
 
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def url_host(url):
+    """The host in a bridge address: "100.64.1.2" from "http://100.64.1.2:8787"."""
+    return str(url or "").split("//")[-1].split("/")[0].rsplit(":", 1)[0].strip("[]")
+
+
 def joined_url(settings):
     """The bridge on another computer that these settings report to, or None. As the bridge's
     joined_to: an address on this computer isn't joining anything."""
     env = settings.get("env")
     url = env.get("BURN_HELPER_BRIDGE_URL") if isinstance(env, dict) else None
-    host = str(url or "").split("//")[-1].split("/")[0].rsplit(":", 1)[0].strip("[]")
-    return None if host in ("", "127.0.0.1", "localhost", "::1") else url
+    return None if url_host(url) in ("",) + LOCAL_HOSTS else url
 
 
 def split_key(url):
@@ -412,7 +419,9 @@ def join_lines(lan, name, port=8787, windows=WINDOWS, key=None):
              ""]
     if name and lan:
         lines += ["%s is this computer's Tailscale address, so this works from anywhere for computers on" % name,
-                  "your tailnet. One that isn't on it can use http://%s:%d while on this network." % (lan, port)]
+                  "your tailnet. Each of them needs Tailscale (https://tailscale.com/download), signed in to",
+                  "this same Tailscale account, whichever Claude account it uses. One that isn't on it can use",
+                  "http://%s:%d while on this network." % (lan, port)]
     elif lan:
         lines += ["%s is this computer's address on this network, and it can change. With Tailscale on" % lan,
                   "both computers, use this computer's Tailscale address instead (tailscale ip -4): it works",
@@ -466,6 +475,28 @@ def find_bridge(wait=4.0, port=47800):
     return None
 
 
+def is_tailscale_address(url):
+    """Whether url's host is in the range Tailscale gives out, 100.64.0.0/10."""
+    import ipaddress
+    try:
+        return ipaddress.ip_address(url_host(url)) in ipaddress.ip_network("100.64.0.0/10")
+    except ValueError:
+        return False
+
+
+def unreachable(url, why):
+    """What to say when the bridge at url doesn't answer. why: the error's name."""
+    if is_tailscale_address(url):
+        return ("Can't reach the bridge at %s yet (%s). That is a Tailscale address, so this computer needs "
+                "Tailscale (https://tailscale.com/download), running and signed in to the same Tailscale account "
+                "as the bridge, whichever Claude account it uses: `tailscale status` here should list the bridge. "
+                "Also check that the bridge computer is on and, for a Windows bridge, its firewall rule. See "
+                "docs/other-computers.md. The hooks are installed either way." % (url, why))
+    return ("Can't reach the bridge at %s yet (%s). Check that the bridge computer is on, that this "
+            "computer can reach it (same network, or both on your tailnet) and, for a Windows bridge, "
+            "its firewall rule. The hooks are installed either way." % (url, why))
+
+
 def check_bridge(url, key=None):
     """Ask the bridge at url whether it is there and takes this key. Returns a line to print."""
     import urllib.error
@@ -475,9 +506,7 @@ def check_bridge(url, key=None):
         with urllib.request.urlopen(url + "/health", timeout=5) as r:
             ok = json.load(r).get("ok")
     except Exception as e:  # noqa: BLE001
-        return ("Can't reach the bridge at %s yet (%s). Check that the bridge computer is on, that this "
-                "computer can reach it (same network, or both on your tailnet) and, for a Windows bridge, "
-                "its firewall rule. The hooks are installed either way." % (url, e.__class__.__name__))
+        return unreachable(url, e.__class__.__name__)
     if not ok:
         return "Something answered at %s, but it isn't a Burn Helper bridge." % url
     import seal
@@ -488,6 +517,9 @@ def check_bridge(url, key=None):
         raw = b"" if e.code == 403 else None
     except Exception:  # noqa: BLE001
         raw = None
+    if raw and not seal.is_sealed(raw) and url_host(url) not in LOCAL_HOSTS:
+        return ("Something answered at %s without sealing, so this computer won't talk to it. If that is your "
+                "bridge, update it (run its install again); otherwise check the address." % url)
     if raw is not None and (raw == b"" or seal.is_sealed(raw)) and seal.reply(key, raw) is None:
         return ("The bridge at %s answers, but %s. On the bridge computer, run install.py --join-help "
                 "and use the join line it prints: it carries the key." % (
@@ -499,7 +531,7 @@ def account_name(name):
     """--add-account's name, checked: letters, digits and dashes (it becomes a folder and an alias)."""
     name = (name or "").strip().lower()
     if not name or len(name) > 20 or not all(c.isalnum() or c == "-" for c in name):
-        sys.exit("--add-account takes a short name of letters, digits and dashes, like: --add-account lexco")
+        sys.exit("--add-account takes a short name of letters, digits and dashes, like: --add-account work")
     return name
 
 
@@ -602,6 +634,9 @@ def main():
     if args.bridge:
         args.bridge, key = split_key(args.bridge)
         args.token = args.token or key
+        if args.token and len(args.token) < portable.KEY_HEX:
+            sys.exit("That key is too short to be the bridge's (it has %d characters). On the bridge computer, "
+                     "run install.py --join-help and use the join line it prints." % portable.KEY_HEX)
         if not args.bridge.startswith(("http://", "https://")):
             args.bridge = "http://" + args.bridge
         if args.bridge.rstrip("/").count(":") < 2:
