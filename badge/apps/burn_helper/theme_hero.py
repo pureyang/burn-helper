@@ -36,6 +36,7 @@ import scene as S
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (216, 40, 0)
+GREY_TEXT = (130, 130, 130)   # an account whose numbers are old, or all of them while the data is lost
 DARK_RED = (90, 20, 20)
 GREEN = (60, 176, 40)
 DGREEN = (24, 112, 24)
@@ -451,16 +452,18 @@ class Theme(S.Theme):
         if w is None:
             return
         beat = 1100 if w == "six" else (750 if w == "hour" else (500 if w == "ten" else 0))
+        x0 = 92 if st.accounts else 74       # (with more than one account the counters reach further)
         if w == "zero" or w == "minute" or w == "ten_s" or (beat and (t // beat) % 2 == 1):
             cd = gfx.countdown(st.left7)
             wd = gfx.width(cd, font.sins)
-            gfx.box(74, 0, 86, 9, BLACK)
-            if 158 - wd - 10 >= 76 + gfx.width("-MAGIC-", font.sins):
-                gfx.text("-MAGIC-", 76, -2, JAR_BLUE, font.sins)
+            gfx.box(x0, 0, 160 - x0, 9, BLACK)
+            if 158 - wd - 10 >= x0 + 2 + gfx.width("-MAGIC-", font.sins):
+                gfx.text("-MAGIC-", x0 + 2, -2, JAR_BLUE, font.sins)
             hot = (w == "ten" or w == "minute" or w == "ten_s") and (t // 250) % 2 == 0
             gfx.text(cd, 158 - wd, -2, WHITE if hot else JAR_BLUE, font.sins)
             screen.blit(self.jar, vec2(int(158 - wd - 9), 1))
-        if w != "zero" and st.mode != "week":     # the magic meter calls attention (none in "week" mode)
+        if w != "zero" and st.mode != "week" and not st.accounts:   # the magic meter calls attention
+            # (none in "week" mode, and none on the thin one in the accounts panel)
             a = int(110 + 120 * (0.5 + 0.5 * math.sin(t / (260.0 if (w == "six" or w == "hour") else 130.0))))
             screen.pen = color.rgb(GOLD[0], GOLD[1], GOLD[2], a)
             screen.rectangle(76, 18, 81, 1)
@@ -473,6 +476,9 @@ class Theme(S.Theme):
 
     def hud(self, st, t):
         stale = self.lost is not None         # the connection is lost: the counts are unknown, the meters grey
+        if st.accounts:
+            self.hud_accounts(st, t, stale)
+            return
         gfx.box(0, 0, 160, 22, BLACK)
         screen.blit(self.rupee, vec2(3, 2))
         gfx.text("x%d" % min(st.tools, 9999), 10, -1, WHITE, font.sins)
@@ -506,7 +512,37 @@ class Theme(S.Theme):
                 S.pace_tick(st, 77, 19, 79, 2)
         if not st.online and S.blink(t, 600):
             gfx.text("?", 62, 4, RED, font.sins)
-        S.draw_accounts(st, t, stale)     # a row for each other Claude account
+
+    def hud_accounts(self, st, t, stale):
+        """More than one Claude account (scene.account_meters): the counters along the top and
+        -LIFE- over the hearts, then a row for each account, main first: its name and countdown,
+        then its hearts, in red for the main account and in each other one's own colour."""
+        gfx.box(0, 0, 160, S.hud_h(st), BLACK)
+        x = 3
+        for img, dx, s in ((self.rupee, 7, "x%d" % min(st.tools, 9999)),
+                           (self.boomerang, 9, "x?" if stale else "x%d" % st.agents),
+                           (self.ocarina, 10, "x?" if stale else "x%d" % st.waiting)):
+            screen.blit(img, vec2(x, 1))
+            gfx.text(s, x + dx, -2, WHITE, font.sins)
+            x += dx + gfx.width(s, font.sins) + 4
+        gfx.text("-LIFE-", 116 - gfx.width("-LIFE-", font.sins) // 2, -2, RED, font.sins)
+        if not st.online and S.blink(t, 600):
+            gfx.text("?", 138, -2, RED, font.sins)
+        y = 11
+        for m in S.account_meters(st, t, stale):
+            main = m["k"] < 0
+            ink = GREY_TEXT if m["grey"] else (RED if main else S.ACCOUNT_INKS[m["k"] % len(S.ACCOUNT_INKS)])
+            S.name_and_clock(m, y - 1, 3, 73, ink, GREY_TEXT if m["grey"] else gfx.countdown_color(m["us"], WHITE),
+                             font.winds)
+            if main:
+                hs = self.hearts_stale if m["grey"] else self.hearts
+            else:
+                hs = S.account_hearts(-1 if m["grey"] else m["k"])
+            gfx.draw_hearts(hs, m["units"], 76, y, blink=m["low"] and S.blink(t, 300), unknown=self.hearts_grey)
+            if main and st.mode != "week":
+                # the weekly budget as a thin magic line under the main account's hearts
+                gfx.meter(77, y + 8, 79, 1, st.week, (130, 130, 130) if m["grey"] else (48, 200, 64), (36, 52, 36))
+            y += S.ACCOUNT_ROW_H
 
     def draw_caption(self, st, t):
         if st.online and st.waiting:

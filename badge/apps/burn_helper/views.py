@@ -58,6 +58,37 @@ def end_pct(st):
     return None if pc is None else max(0, min(100, 100 - pc["f"]))
 
 
+def week_end(st):
+    """end_pct, for the weekly meter's stripes: None once the limit is reached or the week unknown."""
+    pc = st.pace
+    return None if pc is None or pc["s"] == S.PACE_OUT or st.week is None or not st.online else end_pct(st)
+
+
+def pace_turns(st, striped):
+    """The weekly pace's lines for a WEEK line to take turns with. Where its meter is striped, the
+    calm one (PACE: ~84% LEFT AT RESET) goes: the stripes already show it."""
+    return [x for x in S.pace_lines(st) if not (striped and x[0].startswith("PACE: "))]
+
+
+def forecast_meter(x, y, w, h, p, end, colour):
+    """A meter of p percent left. With end, the percent likely left at the reset at this pace, the
+    part this pace likely uses before then is striped: solid is what is likely still there at the
+    reset, stripes what goes before it, grey what is used. Pattern as well as colour."""
+    gfx.box(x, y, w, h, MUTED)
+    if p is None:
+        return
+    nw = (w * max(0, min(100, p)) + 50) // 100
+    ew = nw if end is None else min(nw, (w * max(0, min(100, end)) + 50) // 100)
+    if ew:
+        gfx.box(x, y, ew, h, colour)
+    for r in range(h):
+        # 2 pixels on, 2 off, one further along on each row down: diagonal stripes
+        for c in range(ew - (ew + r) % 4, nw, 4):
+            a, b = max(c, ew), min(c + 2, nw)
+            if b > a:
+                gfx.box(x + a, y + r, b - a, 1, colour)
+
+
 def pct_colour(p):
     if p is None:
         return DIM
@@ -163,8 +194,23 @@ def desktop(c, t):
         return
     # the battery on the right: its charge, and the time left once learnt from a real run unplugged
     header("DESKTOP MODE", power.text(short=True))
-    working = "%d WORKING" % st.agents
     lost = None if c.demo else S.lost_ms(st, t)
+    if st.accounts:
+        # more than one Claude account: each one's usage, named (see the accounts section below)
+        usage = [_main_usage(st, lost)] + [_other_usage(st, a, lost) for a in st.accounts]
+        if len(usage) == 2:
+            for u, y in zip(usage, (10, 34)):
+                _usage_block(st, u, y, t, lost)
+            y = 59
+        else:
+            y = 11
+            for u in usage:
+                _usage_line(u, y, lost)
+                y += ACCOUNT_LINE_H
+            y += 1
+        gfx.box(4, y, 152, 1, MUTED)
+        _waiting(c, st, lost, y)
+        return
     # usage left; while the connection is lost, dimmed and as of the last data. In "week" mode (a
     # plan with only a weekly limit) the week, then where it likely ends at this pace
     week = st.mode == "week"
@@ -178,12 +224,11 @@ def desktop(c, t):
             big += " " + (S.as_of(st) if lost is not None and st.seen_clock else "LEFT")
         gfx.text(label, 4, y, FG, font.sins)
         gfx.text(big, 156 - gfx.width(big, font.sins), y, colour, font.sins)
-        gfx.meter(4, y + 12, 152, 3, None if p is None else p / 100.0, colour, MUTED)
+        forecast_meter(4, y + 12, 152, 3, p, week_end(st) if label == "WEEK" and lost is None else None, colour)
         line, ink = resets(left, est) or no_report(st), gfx.countdown_color(left, DIM)
         if label == "WEEK" and lost is None:
-            # the weekly pace: its tick on the meter, and its lines in turn with the reset
-            S.pace_tick(st, 4, y + 12, 152, 3, FG)
-            turns = S.pace_lines(st) if left is not None and not week else []
+            # the weekly pace's lines in turn with the reset (but what the stripes show)
+            turns = pace_turns(st, week_end(st) is not None) if left is not None and not week else []
             k = (t // S.PACE_LINE_MS) % (len(turns) + 1)
             if k:
                 line, ink = turns[k - 1]
@@ -198,37 +243,145 @@ def desktop(c, t):
             line, ink = "LAST REPORT %s AGO" % ("%dH%02dM" % (a // 3600, a % 3600 // 60) if a >= 3600 else "%dM" % (a // 60)), WARN
         gfx.text(gfx.fit(line, 152, font.sins), 4, y + 13, ink, font.sins)
     gfx.box(4, 59, 152, 1, MUTED)
-    # waiting for you
+    _waiting(c, st, lost, 59)
+
+
+def _waiting(c, st, lost, y):
+    """Desktop mode's lower part, from y down to the footer: who is waiting for you, or why there
+    is no data. It lists as many waiting sessions as there is room for."""
+    room = max(0, (105 - (y + 11)) // 11)       # lines under the title before the footer
+    working = "%d WORKING" % st.agents
     if lost is not None:
         # had data, and it stopped: say how long ago and why; nothing is claimed as waiting
-        gfx.text(gfx.fit("CONNECTION LOST %s AGO" % duration(lost // 1000), 152, font.sins), 4, 59, S.LOST, font.sins)
-        gfx.text(gfx.fit(S.lost_reason(st), 152, font.sins), 4, 70, FG, font.sins)
-        gfx.text(gfx.fit(S.lost_advice(st), 152, font.sins), 4, 81, DIM, font.sins)
+        lines = (("CONNECTION LOST %s AGO" % duration(lost // 1000), S.LOST), (S.lost_reason(st), FG),
+                 (S.lost_advice(st), DIM))
+        for k, (s, ink) in enumerate(lines[:room + 1]):
+            gfx.text(gfx.fit(s, 152, font.sins), 4, y + 11 * k, ink, font.sins)
         footer("B: DEBUG   HOLD B: SETUP")
     elif not st.online and not c.demo:
-        gfx.text("NO DATA YET", 4, 59, BAD, font.sins)
-        gfx.text(gfx.fit(st.net or "WAITING FOR THE BRIDGE", 152, font.sins), 4, 70, DIM, font.sins)
+        gfx.text("NO DATA YET", 4, y, BAD, font.sins)
+        if room:
+            gfx.text(gfx.fit(st.net or "WAITING FOR THE BRIDGE", 152, font.sins), 4, y + 11, DIM, font.sins)
         footer("B: DEBUG   HOLD B: SETUP")
     elif st.waiting > 0:
-        gfx.text("%d WAITING FOR YOU" % st.waiting, 4, 59, WARN, font.sins)
-        gfx.text(working, 156 - gfx.width(working, font.sins), 59, DIM, font.sins)
-        y = 70
-        shown = wl[:2] if len(wl) > 3 else wl
+        wl = st.waiting_list
+        gfx.text("%d WAITING FOR YOU" % st.waiting, 4, y, WARN, font.sins)
+        gfx.text(working, 156 - gfx.width(working, font.sins), y, DIM, font.sins)
+        y += 11
+        shown = wl if len(wl) <= room else wl[:max(0, room - 1)]
         for w in shown:
             a = duration(w["s"])
             gfx.text(gfx.fit(S.session_label(w), 146 - gfx.width(a, font.sins), font.sins), 4, y,
                      DIM if w.get("u") else FG, font.sins)
             gfx.text(a, 156 - gfx.width(a, font.sins), y, WARN, font.sins)
             y += 11
-        if len(wl) > len(shown):
+        if len(wl) > len(shown) and shown:
             gfx.text("+%d MORE" % (len(wl) - len(shown)), 4, y, DIM, font.sins)
-        elif not wl:
+        elif not wl and room:
             gfx.text("ANSWER IN CLAUDE CODE", 4, y, DIM, font.sins)
         footer("A/C: SESSION DETAILS" if wl else "B: DEBUG")
     else:
-        gfx.text("NOTHING WAITING", 4, 59, GOOD, font.sins)
-        gfx.text(working, 156 - gfx.width(working, font.sins), 59, DIM, font.sins)
+        gfx.text("NOTHING WAITING", 4, y, GOOD, font.sins)
+        gfx.text(working, 156 - gfx.width(working, font.sins), y, DIM, font.sins)
         footer("B: DEBUG   HOLD B: SETUP")
+
+
+# More than one Claude account: Desktop mode names each one. With two, each gets the block one
+# limit has on its own (its label and limit, the percent left, a meter, a line under it); with
+# three to five, one line each (label, limit, percent, countdown) over a thin meter. Every account
+# shows whichever of its limits has less left, as its row on the animation does; the main account
+# (the one the theme's hearts follow) is first, and its line also takes turns with its other
+# limit and the weekly pace. On a weekly limit, the part of the meter likely used before the
+# reset is striped (forecast_meter). Grey while the data is lost or an account's numbers are old.
+ACCOUNT_LINE_H = 15
+LIMIT_NAMES = {"5h": ("5 HOURS", "5H"), "wk": ("WEEK", "WK")}
+
+
+def _main_usage(st, lost):
+    """The main account's usage, as _usage_block and _usage_line draw it."""
+    p5 = None if st.mode == "week" else left5(st)
+    p7 = left7(st)
+    use5 = p5 is not None and (p7 is None or p5 < p7)
+    p, left, est = (p5, st.left5, st.est5) if use5 else (p7, st.left7, False)
+    turns = [(resets(left, est) or no_report(st), gfx.countdown_color(left, DIM))]
+    if lost is None:
+        other = p7 if use5 else p5
+        if other is not None:
+            turns.append(("%s %d%% LEFT" % ("WEEK" if use5 else "5 HOURS", other), pct_colour(other)))
+        if st.left7 is not None:
+            turns += pace_turns(st, not use5 and week_end(st) is not None)
+        if st.usage_state == "old" and st.usage_age:
+            a = st.usage_age
+            turns.append(("LAST REPORT %s AGO" % ("%dH%02dM" % (a // 3600, a % 3600 // 60) if a >= 3600
+                                                  else "%dM" % (a // 60)), WARN))
+    return {"label": st.label or "MAIN", "w": "5h" if use5 else "wk", "p": p, "est": est, "left": left,
+            "turns": turns, "end": None if use5 else week_end(st), "grey": False}
+
+
+def _other_usage(st, a, lost):
+    """Another account's usage, from its row (an older bridge sends no percent: its hearts give one)."""
+    p, est = a.get("p"), False
+    if p is None and a["h"] is not None:
+        p, est = a["h"] * 5, True
+    # where its week likely ends (an older bridge sends it in half hearts only)
+    end = None if a["w"] != "wk" else (a.get("q") if a.get("q") is not None else
+                                       (None if a["e"] is None else a["e"] * 5))
+    left = st.left_of(a["r"])
+    none = "NO USAGE REPORT YET" if a["u"] == "none" else "NO RESET TIME YET"
+    turns = [(resets(left) or none, gfx.countdown_color(left, DIM))]
+    if lost is None:
+        if a["u"] == "old":
+            turns.append(("LAST REPORT OVER 30M AGO", WARN))
+        elif end == 0:
+            # the stripes show where it likely ends; a run-out is also said in words
+            turns.append(("AT THIS PACE IT RUNS OUT", S.PACE_INK[2]))
+    return {"label": a["l"], "w": a["w"], "p": p, "est": est, "left": left, "turns": turns, "end": end,
+            "grey": a["u"] in ("old", "none")}
+
+
+def _end(u, lost):
+    """The account's stripes: none while the data is lost or its numbers are old."""
+    return None if lost is not None or u["grey"] else u["end"]
+
+
+def _usage_colour(u, lost):
+    return DIM if lost is not None or u["grey"] else pct_colour(u["p"])
+
+
+def _name(u, y, short, right):
+    """An account's label (white) and its limit (grey) at the left of row y, clear of x = right."""
+    limit = LIMIT_NAMES[u["w"]][1 if short else 0]
+    label = gfx.fit(u["label"], right - 8 - gfx.width(" " + limit, font.sins), font.sins)
+    gfx.text(label, 4, y, DIM if u["grey"] else FG, font.sins)
+    gfx.text(limit, 4 + gfx.width(label + " ", font.sins), y, DIM, font.sins)
+
+
+def _usage_block(st, u, y, t, lost):
+    """One account in Desktop mode with two accounts: as a limit on its own, named."""
+    p, colour = u["p"], _usage_colour(u, lost)
+    big = "--" if p is None else ("~%d%%" if u["est"] else "%d%%") % p
+    if p is not None:
+        big += " " + (S.as_of(st) if lost is not None and st.seen_clock else "LEFT")
+    bx = 156 - gfx.width(big, font.sins)
+    _name(u, y, False, bx)
+    gfx.text(big, bx, y, colour, font.sins)
+    forecast_meter(4, y + 12, 152, 3, p, _end(u, lost), colour)
+    turns = u["turns"]
+    line, ink = turns[(t // S.PACE_LINE_MS) % len(turns)]
+    gfx.text(gfx.fit(line, 152, font.sins), 4, y + 13, ink, font.sins)
+
+
+def _usage_line(u, y, lost):
+    """One account in Desktop mode with three or more: one line and a thin meter."""
+    p, colour = u["p"], _usage_colour(u, lost)
+    cd = S.short_cd(u["left"])
+    pct = "--" if p is None else ("~%d%%" if u["est"] else "%d%%") % p
+    cx = 156 - gfx.width(cd, font.sins)
+    px = cx - 6 - gfx.width(pct, font.sins)
+    _name(u, y, True, px)
+    gfx.text(pct, px, y, colour, font.sins)
+    gfx.text(cd, cx, y, DIM if u["grey"] or lost is not None else gfx.countdown_color(u["left"], DIM), font.sins)
+    forecast_meter(4, y + 12, 152, 2, p, _end(u, lost), colour)
 
 
 def _session(c, i):

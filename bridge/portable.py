@@ -127,6 +127,61 @@ def bridge_key(state_dir, make=True):
     return key
 
 
+# ---------------------------------------------------------------- account names
+# More than one Claude account: each one's label comes from the status line that reports it (its
+# BURN_HELPER_LABEL, else its email's domain), so two computers on one account can send different
+# ones. A name set on the bridge (install.py --name-account) wins over all of them, in the case it
+# was typed: <state_dir>/names.json, {account tag or "main": name}. The bridge reads it as it changes.
+NAME_MAX = 8            # what the badge's rows have room for
+_names = {"at": None, "map": {}}
+
+
+def clean_name(v):
+    """A name for an account, or None: letters, digits, dashes, dots and underscores, case kept."""
+    v = str(v or "").strip()
+    return v if 0 < len(v) <= NAME_MAX and all(c.isalnum() and c.isascii() or c in "-._" for c in v) else None
+
+
+def names_file(state_dir):
+    return os.path.join(state_dir, "names.json")
+
+
+def account_names(state_dir):
+    """{account tag or "main": name}, read again only when the file changes."""
+    import json
+    path = names_file(state_dir)
+    try:
+        at = os.stat(path).st_mtime
+    except OSError:
+        _names.update(at=None, map={})
+        return {}
+    if at != _names["at"]:
+        try:
+            with open(path) as f:
+                d = json.load(f)
+            m = {str(k): clean_name(v) for k, v in d.items()} if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            m = {}
+        _names.update(at=at, map={k: v for k, v in m.items() if v})
+    return dict(_names["map"])
+
+
+def set_name(state_dir, key, name):
+    """Name an account (name None: clear it). The bridge picks it up as it goes."""
+    import json
+    names = account_names(state_dir)
+    if name:
+        names[key] = name
+    else:
+        names.pop(key, None)
+    os.makedirs(state_dir, exist_ok=True)
+    path = names_file(state_dir)
+    with open(path + ".tmp", "w") as f:
+        json.dump(names, f, indent=1, sort_keys=True)
+    os.replace(path + ".tmp", path)
+    _names["at"] = None
+
+
 # ---------------------------------------------------------------- USB serial
 def serial_missing():
     """Why USB serial can't work here, or None when it can."""

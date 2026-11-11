@@ -612,9 +612,11 @@ class Bridge:
 
     def account_row(self, a, now):
         """Another account's row on the badge. Its hearts follow whichever of its limits has less
-        left, and count down to that limit's reset: l label, h half hearts left (None: unknown), e
-        half hearts likely left at the weekly reset (None: no forecast), r the reset (epoch s), w
-        which limit ("5h" or "wk"), u how fresh its numbers are (ok, old or none)."""
+        left, and count down to that limit's reset: l label, h half hearts left (None: unknown), p
+        that limit's percent left (Desktop mode's number), e half hearts likely left at the weekly
+        reset (None: no forecast), r the reset (epoch s), w which limit ("5h" or "wk"), u how
+        fresh its numbers are (ok, old or none), q the percent likely left at the weekly reset
+        (Desktop mode's meter; None: no forecast)."""
         mode = self.acct_mode(a["has5"])
         five = self._window(a["five_hour"], now) if mode == "5h" else None
         seven = self._window(a["seven_day"], now)
@@ -622,14 +624,16 @@ class Bridge:
         for w in (five, seven):
             if w and w["used"] is not None and (b is None or w["used"] > b["used"]):
                 b = w
-        hearts = end = None
+        hearts = end = pct = q = None
         if b is not None:
             hearts = max(0, min(20, int(round((100.0 - b["used"]) / 5.0))))
+            pct = max(0, min(100, int(round(100.0 - b["used"]))))
             pc = a["pace"].out
             if b is seven and pc and pc.get("f") is not None:
                 end = max(0, min(hearts, int(round((100.0 - pc["f"]) / 5.0))))
+                q = max(0, min(pct, int(round(100.0 - pc["f"]))))
         state = usage_state(a["five_hour"] if mode == "5h" else None, a["seven_day"], five, now)["state"]
-        return {"l": a["label"], "h": hearts, "e": end, "r": b["resets_at"] if b else None,
+        return {"l": a["label"], "h": hearts, "p": pct, "e": end, "q": q, "r": b["resets_at"] if b else None,
                 "w": "5h" if b is not None and b is five else "wk", "u": state}
 
     def set_theme(self, theme):
@@ -694,8 +698,10 @@ class Bridge:
             seven = self._window(self.seven_day, now, self.last_active)
             theme, theme_seq, last_active = self.theme, self.theme_seq, self.last_active
             pc = self.pace.out
-            accounts = [self.account_row(a, now) for a in self.others.values()]
-            label = self.main_label
+            # a name set on the bridge (install.py --name-account) wins over the reported label
+            names = portable.account_names(STATE_DIR)
+            accounts = [dict(self.account_row(a, now), l=names.get(k) or a["label"]) for k, a in self.others.items()]
+            label = names.get(self.main_acct or "main") or names.get("main") or self.main_label
             live = {w[3] for w in loc.get("waiting_list", [])}
             for sid in [s for s in self.why if s not in live and s not in self.remote]:
                 del self.why[sid]

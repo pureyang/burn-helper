@@ -446,8 +446,9 @@ class Theme(S.Theme):
             screen.rectangle(x, min(y, y + dy * 5), 1, 6)
 
     def draw_hud(self, st, t):
-        gfx.box(0, 0, 160, 22, (10, 0, 18))
-        gfx.box(0, 21, 160, 1, PINK)
+        h = S.hud_h(st)
+        gfx.box(0, 0, 160, h, (10, 0, 18))
+        gfx.box(0, h - 1, 160, 1, PINK)
         gfx.text("RUNNING MAN", 2, -2, YELLOW, font.sins, shadow=RED)
         ws = self.ws
         lv = st.level
@@ -462,6 +463,9 @@ class Theme(S.Theme):
             if S.blink(t, 500):
                 screen.pen = gfx.rgb(RED)
                 screen.shape(shape.circle(x - 5, 5, 3))
+        if st.accounts:
+            self.hud_accounts(st, t)
+            return
         self.draw_collar(st, t, 2, 10)
         # the show's game clock: time until the collar recharges (5-hour reset, or the week's)
         gfx.box(94, 9, 64, 11, BLACK)
@@ -485,7 +489,46 @@ class Theme(S.Theme):
             if st.mode != "week":
                 gfx.box(6, 19, 76, 3, PINK if (t // 160) % 2 == 0 else WHITE)
                 gfx.meter(6, 20, 76, 1, st.week, CYAN, (30, 30, 60))
-        S.draw_accounts(st, t, self.lost is not None)     # a row for each other Claude account
+
+    def hud_accounts(self, st, t):
+        """More than one Claude account (scene.account_meters): the runners' board under the logo,
+        one row each, main account first: name and countdown, then a collar of 10 lights in the
+        runner's colour (cyan for the main account). Half a light is dimmer, a spent one dark, and a
+        low collar flashes orange. In "5h" mode the main account's week is a thin strip under its
+        collar. In the week's last hours the weekly clock takes the corner from LIVE."""
+        ws = self.ws
+        if ws in ("ten", "minute", "ten_s") or (ws in ("six", "hour") and (t // 2200) % 2 == 1):
+            us = st.left7
+            s = "RESET " + (week_digits(us, 2) if us is not None and 0 < us < 10000000 else gfx.countdown(us))
+            w = gfx.width(s, font.winds)
+            gfx.box(156 - w, 0, w + 4, 9, PINK)
+            gfx.text(s, 158 - w, -1, BLACK, font.winds)
+        stale = self.lost is not None
+        y = 11
+        for m in S.account_meters(st, t, stale):
+            main, grey = m["k"] < 0, m["grey"]
+            ink = (150, 150, 160) if grey else (CYAN if main else S.ACCOUNT_INKS[m["k"] % len(S.ACCOUNT_INKS)])
+            S.name_and_clock(m, y - 1, 3, 73, (150, 150, 160) if grey else (YELLOW if main else ink),
+                             (150, 150, 160) if grey else gfx.countdown_color(m["us"], WHITE), font.winds)
+            self.lights(m["units"], ink, m["low"] and S.blink(t, 250), 75, y)
+            if main and st.mode != "week":
+                gfx.meter(79, y + 8, 74, 1, st.week, (150, 150, 160) if grey else CYAN, (30, 30, 60))
+            y += S.ACCOUNT_ROW_H
+
+    @staticmethod
+    def lights(units, ink, flash, x, y):
+        """A collar of 10 lights from x: lit in ink, half a light dimmer, spent ones dark, all
+        orange while a low collar flashes."""
+        gfx.box(x, y + 1, 83, 7, (58, 62, 74))
+        gfx.box(x, y + 1, 83, 1, (110, 116, 132))
+        half = (ink[0] // 2, ink[1] // 2, ink[2] // 2)
+        for i in range(10):
+            left = -1 if units is None else units - i * 2
+            c = ((245, 160, 90) if flash else ink) if left >= 2 else (
+                ((245, 160, 90) if flash else half) if left == 1 else (34, 34, 42))
+            gfx.box(x + 2 + i * 8, y + 2, 7, 5, c)
+            if left >= 1 and not flash:
+                gfx.box(x + 3 + i * 8, y + 3, 1, 1, (255, 255, 255))
 
     def season_clock(self, st):
         """The weekly countdown in the corner clock's place, in pink."""

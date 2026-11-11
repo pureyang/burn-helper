@@ -162,6 +162,12 @@ CHOC_KEYS = {"d": (52, 26, 12), "M": (124, 68, 34), "H": (214, 156, 104), "C": (
 # the same box in grey, while the connection is lost (the last known count)
 CHOC_GREY = {"d": (70, 70, 72), "M": (140, 140, 144), "H": (200, 200, 204), "C": (170, 170, 174),
              "c": (110, 110, 114), "F": (200, 200, 204)}
+# smaller ones, for a tray of 10 in a row when more than two accounts share the box
+CHOC_MINI_FULL = ("..ddd..", ".dMMMd.", "dMHMMMd", "dMMMMMd", "CdMMMdC", ".CCCCC.")
+CHOC_MINI_HALF = ("..dd...", ".dMMd..", "dMHMd..", "dMMMMF.", "CdMMMdC", ".CCCCC.")
+CHOC_MINI_GONE = (".......", ".......", ".......", ".c...c.", "CcccccC", ".CCCCC.")
+TRIM, TRAY = (214, 172, 76), (66, 36, 22)
+TRIM_GREY, TRAY_GREY = (170, 170, 174), (70, 70, 72)
 SHOE = ("...WW..", "..WWWW.", "WWRRWWW", "WWWWRRW", "KKKKKKK")
 
 # ---------------------------------------------------------------- the weekly reset
@@ -246,6 +252,10 @@ class Theme(S.Theme):
                       gfx.sprite(CHOC_GONE, CHOC_KEYS))
         self.chocs_grey = (gfx.sprite(CHOC_FULL, CHOC_GREY), gfx.sprite(CHOC_HALF, CHOC_GREY),
                            gfx.sprite(CHOC_GONE, CHOC_GREY))
+        self.minis = (gfx.sprite(CHOC_MINI_FULL, CHOC_KEYS), gfx.sprite(CHOC_MINI_HALF, CHOC_KEYS),
+                      gfx.sprite(CHOC_MINI_GONE, CHOC_KEYS))
+        self.minis_grey = (gfx.sprite(CHOC_MINI_FULL, CHOC_GREY), gfx.sprite(CHOC_MINI_HALF, CHOC_GREY),
+                           gfx.sprite(CHOC_MINI_GONE, CHOC_GREY))
         self.shoe = gfx.sprite(SHOE, {"W": (250, 250, 250), "R": RED, "K": (90, 80, 76)})
         self.clock = gfx.clock_icon(INK, CREAM)
         self.feather = gfx.sprite(("....GWW", "..GWWW.", ".WWWG..", "WWG....", "G......"),
@@ -511,9 +521,14 @@ class Theme(S.Theme):
 
     def draw_chocolates(self, units, x, y, blink, grey=False):
         # the box: gold trim, dark tray, 2 rows of 5 (all grey while the connection is lost)
-        gfx.box(x, y, 65, 19, (170, 170, 174) if grey else (214, 172, 76))
-        gfx.box(x + 1, y + 1, 63, 17, (70, 70, 72) if grey else (66, 36, 22))
-        full, half, gone = self.chocs_grey if grey else self.chocs
+        gfx.box(x, y, 65, 19, TRIM_GREY if grey else TRIM)
+        gfx.box(x + 1, y + 1, 63, 17, TRAY_GREY if grey else TRAY)
+        self.chocolates(self.chocs_grey if grey else self.chocs, units, blink, x + 3, y + 2, 5, 12, 8)
+
+    @staticmethod
+    def chocolates(imgs, units, blink, x, y, per_row, dx, dy):
+        """Ten chocolates from (x, y), per_row to a row: units half ones left (None: unknown, all gone)."""
+        full, half, gone = imgs
         for i in range(10):
             if units is None:
                 img = gone
@@ -522,7 +537,44 @@ class Theme(S.Theme):
                 img = full if left >= 2 else (half if left == 1 else gone)
                 if blink and img is not gone:
                     img = gone
-            screen.blit(img, vec2(x + 3 + (i % 5) * 12, y + 2 + (i // 5) * 8))
+            screen.blit(img, vec2(x + (i % per_row) * dx, y + (i // per_row) * dy))
+
+    def hud_accounts(self, st, t, stale):
+        """More than one Claude account (scene.account_meters): one box of chocolates for all of
+        them. Two share it as two compartments, each with its name and countdown over its own two
+        rows of 5; three or more get a tray each, name and countdown, then a row of 10 small ones,
+        as the other themes' rows go. The miles and the weekly road give way; in "5h" mode the
+        main account's week is a thin road along the bottom of its compartment or tray."""
+        h = S.hud_h(st)
+        gfx.box(0, 0, 160, h, CREAM)
+        gfx.box(0, h - 1, 160, 1, (200, 180, 150))
+        trim = TRIM_GREY if stale else TRIM
+        gfx.box(1, 1, 158, h - 3, trim)
+        gfx.box(2, 2, 156, h - 5, TRAY_GREY if stale else TRAY)
+        ms = S.account_meters(st, t, stale)
+        two = len(ms) == 2
+        if two:
+            gfx.box(79, 1, 2, h - 3, trim)                  # the divider between the compartments
+        pitch = 0 if two else min(11, (h - 5) // len(ms))
+        y = 1 + (h - 5 - pitch * len(ms)) // 2
+        for i, m in enumerate(ms):
+            main, grey = m["k"] < 0, m["grey"]
+            x0, x1 = ((2, 77), (81, 156))[i] if two else (3, 74)
+            ink = (150, 150, 154) if grey else (GOLD if main else S.ACCOUNT_INKS[m["k"] % len(S.ACCOUNT_INKS)])
+            clock = (150, 150, 154) if grey else gfx.countdown_color(m["us"], CREAM)
+            blink = m["low"] and S.blink(t, 300)
+            if two:
+                S.name_and_clock(m, 0, x0 + 2, x1, ink, clock, font.winds)
+                self.chocolates(self.chocs_grey if grey else self.chocs, m["units"], blink, x0 + 10, 11, 5, 12, 8)
+                road = (x0 + 2, 26, 73)
+            else:
+                S.name_and_clock(m, y - 1, x0, x1, ink, clock, font.winds)
+                self.chocolates(self.minis_grey if grey else self.minis, m["units"], blink, 77, y + 1, 10, 8, 0)
+                road = (77, y + 7, 79)
+                y += pitch
+            if main and st.mode != "week":
+                gfx.meter(road[0], road[1], road[2], 1, st.week, (170, 170, 174) if grey else (255, 224, 90),
+                          (96, 92, 92))
 
     def draw_hud(self, st, t):
         p = self.playing(st, t)
@@ -549,9 +601,12 @@ class Theme(S.Theme):
         self.last_hearts = st.hearts
 
     def hud(self, st, t):
+        stale = self.lost is not None          # the connection is lost: the last known numbers, in grey
+        if st.accounts:
+            self.hud_accounts(st, t, stale)
+            return
         gfx.box(0, 0, 160, 22, CREAM)
         gfx.box(0, 21, 160, 1, (200, 180, 150))
-        stale = self.lost is not None          # the connection is lost: the last known numbers, in grey
         low = st.hearts is not None and st.hearts <= 4 and not stale
         # in "week" mode the chocolates likely eaten by the reset go now and then
         self.draw_chocolates(st.hearts if stale else S.icon_units(st, st.hearts, t), 1, 1, low and S.blink(t, 300), stale)
@@ -574,7 +629,6 @@ class Theme(S.Theme):
             S.pace_tick(st, 69, 13, 88, 6, INK, edge=INK)      # where an even pace would be on the road
         if not st.online and S.blink(t, 600):
             gfx.text("?", 62, -2, RED, font.sins)
-        S.draw_accounts(st, t, stale)     # a row for each other Claude account
         if self.wk is not None:
             self.week_hud(st, t)
 
