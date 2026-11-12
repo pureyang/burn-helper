@@ -6,7 +6,8 @@ contact sheet at 3x, tools/sim/out/accounts_sheet.png
 
 Every theme with one other account (a row under the HUD) and with four (the most there is room
 for: one 5-hour limit nearly out, one week on course to run out, one with old numbers); then one
-theme while the data is lost. Example labels and data only.
+theme while the data is lost; then Desktop mode with two accounts and with five. Example labels and
+data only.
 """
 import os
 import sys
@@ -20,18 +21,19 @@ import time  # noqa: E402
 if not hasattr(time, "ticks_us"):                 # the shim has ticks_ms only; the rows' clocks need this too
     time.ticks_us = lambda: time.ticks_ms() * 1000
 import scene as S  # noqa: E402
+import views  # noqa: E402
 
 OUT = os.path.join(HERE, "out")
 THEMES = ("hero", "gameshow", "chocolates")
 NOW = 1800000000
 LIT, DARK = 400100, 401500          # frame times with the likely-spent hearts lit, and gone dark
 
-ACME = {"l": "ACME", "h": 14, "e": None, "r": NOW + 2 * 3600 + 14 * 60, "w": "5h", "u": "ok"}
+ACME = {"l": "ACME", "h": 14, "p": 71, "e": None, "r": NOW + 2 * 3600 + 14 * 60, "w": "5h", "u": "ok"}
 MORE = [
-    {"l": "ACME", "h": 2, "e": None, "r": NOW + 65 * 60, "w": "5h", "u": "ok"},         # 5-hour nearly out
-    {"l": "WORK", "h": 9, "e": 0, "r": NOW + 44 * 3600, "w": "wk", "u": "ok"},           # runs out before the reset
-    {"l": "SIDE", "h": 17, "e": 12, "r": NOW + 5 * 86400 + 3 * 3600, "w": "wk", "u": "ok"},
-    {"l": "TEAM", "h": 12, "e": None, "r": NOW + 3 * 86400, "w": "wk", "u": "old"},      # no report for a while
+    {"l": "ACME", "h": 2, "p": 9, "e": None, "r": NOW + 65 * 60, "w": "5h", "u": "ok"},         # 5-hour nearly out
+    {"l": "WORK", "h": 9, "p": 44, "e": 0, "r": NOW + 44 * 3600, "w": "wk", "u": "ok"},          # runs out before the reset
+    {"l": "SIDE", "h": 17, "p": 86, "e": 12, "r": NOW + 5 * 86400 + 3 * 3600, "w": "wk", "u": "ok"},
+    {"l": "TEAM", "h": 12, "p": 61, "e": None, "r": NOW + 3 * 86400, "w": "wk", "u": "old"},     # no report for a while
 ]
 
 
@@ -39,7 +41,7 @@ def status(accounts):
     st = S.Status()
     st.update({"level": 3, "busy": 3, "subagents": 1, "waiting": 0, "idle": 1, "sessions": 5, "tpm": 19,
                "tools_today": 1201, "hearts": 8, "clock": "14:05", "mode": "week", "hearts_end": 4,
-               "label": "GMAIL", "accounts": accounts, "now_ms": NOW * 1000,
+               "label": "Home", "accounts": accounts, "now_ms": NOW * 1000,
                "five_hour": None, "seven_day": {"used": 60.0, "resets_at": NOW + 2 * 86400},
                "pace": {"s": 0, "p": 4, "f": 80, "even": 70}})
     st.online = True
@@ -57,6 +59,9 @@ def shots():
     st.online, st.seen_ms = False, PL.T - 20000
     S.track_lost(st, PL.T)
     out.append(("hero_lost", "hero: data lost", PL.theme_shot("hero", st)))
+    out.append(("desktop_two", "Desktop mode: 2 accounts", PL.view_shot(status([ACME]), views.DESKTOP, t=0)))
+    out.append(("desktop_two_turn", "Desktop: next line", PL.view_shot(status([ACME]), views.DESKTOP, t=S.PACE_LINE_MS)))
+    out.append(("desktop_five", "Desktop mode: 5 accounts", PL.view_shot(status(MORE), views.DESKTOP, t=0)))
     return out
 
 

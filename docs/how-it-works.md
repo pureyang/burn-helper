@@ -110,8 +110,8 @@ line only show it:
 
 | Step | When | What you see |
 |---|---|---|
-| ✓ calm | most of the time | A tick on every weekly meter where an even pace would leave it now: a bar longer than the tick is under pace. Desktop mode's WEEK line takes turns between the reset, what is likely left at the reset (`PACE: ~33% LEFT AT RESET`) and what that is in work (`~1.5 FULL 5H WINDOWS LEFT`). The status line shows `7d 60% ✓`. |
-| ≈ watch | a run-out is 60% likely and due within 3 days | The tick turns yellow, Desktop mode says `AT THIS PACE OUT ~SUN 4PM`, and the status line `7d 64% ≈ at this pace out ~Sun 4pm`. While agents work, the theme's caption says it in its own words for 30 seconds, at most every 4 hours. |
+| ✓ calm | most of the time | A tick on the theme's weekly meter where an even pace would leave it now: a bar longer than the tick is under pace. In Desktop mode the weekly meter is solid up to where the week likely ends and striped for what this pace likely uses before then. The line under it stays on the reset, and on a plan with a 5-hour limit takes turns with what is left in work (`~1.5 FULL 5H WINDOWS LEFT`). Only where a meter shows a 5-hour limit, with no stripes, does the line say `PACE: ~33% LEFT AT RESET` in turn. The status line shows `7d 60% ✓`. |
+| ≈ watch | a run-out is 60% likely and due within 3 days | The tick turns yellow, Desktop mode stripes all that is left and says `AT THIS PACE OUT ~SUN 4PM`, and the status line `7d 64% ≈ at this pace out ~Sun 4pm`. While agents work, the theme's caption says it in its own words for 30 seconds, at most every 4 hours. |
 | ! heads-up | a run-out is 85% likely and due within 36 hours, or 90% of the week is used | The same in orange, with how early: `19H BEFORE THE WEEK RESETS`. The caption comes at most every 2 hours. |
 | ✗ out | the weekly limit is reached | Desktop mode says `WEEKLY LIMIT REACHED`, and the status line `7d 100% ✗`. |
 
@@ -209,19 +209,33 @@ synced to the bridge, so it ticks smoothly between updates.
 
 **More than one Claude account.** Each status line tags its report with the account it runs
 under: a short hash of the account id and a label, read from its config folder's `.claude.json`.
-The email itself never leaves the computer. The account signed in to `~/.claude` drives the
-theme's own icons as before. Each other account gets a row under the top bar, the same in every
-theme: its label, a countdown, and ten hearts in its own colour (blue, green, gold, purple). A
-row's hearts follow whichever of that account's limits has less left, and the countdown is that
-limit's reset. On a weekly limit, the hearts likely spent by the reset go dark now and then, as in
-`week` mode. A row goes grey when its numbers are 30 minutes old or more. There is room for four
-rows; an account with no report for two weeks drops off. To run a second account side by side with
+The email itself never leaves the computer. The account signed in to `~/.claude` is the main one:
+it drives the caption and the weekly reset as before. With more than one account, each theme's top
+bar becomes one panel for all of them, main account first, with a row each in the same order: the
+name, the countdown, then ten of the theme's icons. In the hero theme that's the counters and
+`-LIFE-` over a row of hearts per account, red for the main one and each other one in its own
+colour (blue, green, gold, purple). In the game show it's a collar of lights per runner under the
+logo. In the chocolates theme it's one box: two accounts share it as two compartments, each with
+its own two rows of five, and three or more get a tray each. Each other account's icons follow
+whichever of its limits has less left, and the countdown is that limit's reset. On a weekly limit,
+the icons likely spent by the reset go dark now and then, as in `week` mode. In `5h` mode the main
+account's week is a thin line under its icons. A row goes grey when its numbers are 30 minutes old
+or more. There is room for five accounts; one with no report for two weeks drops off. Desktop mode names every account, main
+account first. With two, each gets a block: its label and limit, the percent left, a meter, and
+its reset. On a weekly limit the meter is striped for what that account's pace likely uses before
+its reset, so the solid part is where its week likely ends. Small marks cut every meter at 25%, 50% and 75%,
+to read the percent at a glance. The main account's line also takes turns with its other limit and the weekly pace. With
+three to five, each gets one line with the percent left and the countdown. To run a second account side by side with
 the first, run `python3 bridge/install.py --add-account work`. It makes the config folder
 `~/.claude-work` with the hooks, the status line and the label WORK, and the alias `claude-work`
 that runs Claude Code with that folder. Run `claude-work`, then `/login` once. That signs in to
 Claude only: [Tailscale](other-computers.md#tailscale-on-each-computer) belongs to the computer, and
-needs nothing more for a second account. Its own label: set
-`BURN_HELPER_LABEL` in that folder's `settings.json`. To see the rows, run
+needs nothing more for a second account. A name comes from the status line that reports it:
+`BURN_HELPER_LABEL` in that folder's `settings.json`, else the email's domain, in capitals. Two
+computers on one account can report different ones, so to choose what the badge calls an account,
+run `python3 bridge/install.py --name-account WORK Acme` on the bridge computer. It takes the name
+the badge shows now (or `main`), keeps the case you type, up to 8 characters, and wins over every
+computer's label. An empty name (`""`) goes back to the label. To see the panels and Desktop mode, run
 `python3 tools/sim/preview_accounts.py`.
 
 ![More than one account](img/accounts_hero.png)

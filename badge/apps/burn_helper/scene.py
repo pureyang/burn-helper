@@ -91,9 +91,10 @@ class Status:
         self.est5 = False       # the 5-hour countdown is an estimate (shown with a ~)
         self.usage_state = ""
         self.usage_age = None
-        self.label = ""         # the main account's label (GMAIL), when the bridge knows more than one
-        self.accounts = []      # the other accounts' rows: [{l: label, h: half hearts, e: likely at the
-        #                         reset, r: reset (epoch s), w: "5h" or "wk", u: ok / old / none}]
+        self.label = ""         # the main account's label, when the bridge knows more than one
+        self.accounts = []      # the other accounts' rows: [{l: label, h: half hearts, p: percent left
+        #                         (None from an older bridge), e: likely at the reset, r: reset
+        #                         (epoch s), w: "5h" or "wk", u: ok / old / none}]
         self.pending = None     # the most telling activity not played yet
         self.pending_t = 0
         self.seen_ms = None     # ticks_ms when data last came, or None: none since boot (see lost_stage)
@@ -145,10 +146,12 @@ class Status:
         rows = []
         for a in d.get("accounts") or []:
             try:
-                h, e = a.get("h"), a.get("e")
+                h, e, p, q = a.get("h"), a.get("e"), a.get("p"), a.get("q")
                 h = None if h is None else max(0, min(20, int(h)))
-                rows.append({"l": str(a.get("l") or "?")[:8], "h": h,
+                p = None if p is None or h is None else max(0, min(100, int(p)))
+                rows.append({"l": str(a.get("l") or "?")[:8], "h": h, "p": p,
                              "e": None if e is None or h is None else max(0, min(h, int(e))),
+                             "q": None if q is None or p is None else max(0, min(p, int(q))),
                              "r": None if a.get("r") is None else int(a["r"]),
                              "w": "5h" if a.get("w") == "5h" else "wk", "u": str(a.get("u") or "")})
             except (AttributeError, TypeError, ValueError):
@@ -353,7 +356,7 @@ class Theme:
         self.advance(st, t)
         self.render(st, t)
         if st.tier:
-            fx.draw(st.tier, t, FX_TOP + ACCOUNT_ROW_H * len(st.accounts), FX_BOTTOM)   # below any account rows
+            fx.draw(st.tier, t, hud_h(st), FX_BOTTOM)   # below the top panel, however many accounts it has
 
     def render(self, st, t):
         pass
@@ -409,16 +412,22 @@ def icon_units(st, units, t):
     return e if t % BURN_MS >= BURN_MS - BURN_OFF_MS else units
 
 
-# More than one Claude account: the theme's own HUD is the main account, and each other account
-# the bridge knows gets a row under it, the same in every theme: its label and countdown on the
-# left, ten hearts in its own colour on the right. A row's hearts follow whichever of that
-# account's limits has less left; the ones likely spent by the weekly reset go dark now and then
-# (as in "week" mode), and a low row blinks. Grey while the data is lost or the account's numbers
-# are 30 minutes old or more.
+# More than one Claude account: each theme draws one panel for all of them in its own style,
+# main account first, one row each: its name, its icons and its countdown, in that order, so the
+# eye reads every account the same way. A row's icons follow whichever of that account's limits
+# has less left (the main one: as the theme's icons always do); the ones likely spent by the
+# weekly reset go dark now and then, as in "week" mode, and a low row blinks. Grey while the data
+# is lost or the account's numbers are 30 minutes old or more. The panel grows by one row height
+# for each account after the first, and there is room for five.
 ACCOUNT_ROWS = 4
 ACCOUNT_ROW_H = 9
 ACCOUNT_INKS = ((72, 150, 245), (70, 200, 110), (235, 190, 60), (170, 110, 240))  # blue, green, gold, purple
 _acct_hearts = {}
+
+
+def hud_h(st):
+    """How tall the theme's top panel is: one row height more for each account after the first."""
+    return FX_TOP + ACCOUNT_ROW_H * len(st.accounts)
 
 
 def account_hearts(k):
@@ -446,22 +455,31 @@ def short_cd(us):
     return "%dM" % max(1, s // 60)
 
 
-def draw_accounts(st, t, stale=False, y0=22):
-    """The other accounts' rows, under the theme's HUD (see ACCOUNT_ROWS)."""
+def account_meters(st, t, stale=False):
+    """Every account's row for a theme's panel, the main one first: l its name, units the half
+    units to draw at t, h the half units left, low, grey, us and cd its countdown, k its colour
+    (-1: the main account, in the theme's own)."""
+    us = life_left(st)
+    out = [{"l": st.label or "MAIN", "units": st.hearts if stale else icon_units(st, st.hearts, t), "h": st.hearts,
+            "low": not stale and st.hearts is not None and st.hearts <= 4, "grey": stale, "us": us,
+            "cd": ("~" if st.est5 and st.mode != "week" and us is not None and us > 0 else "") + short_cd(us), "k": -1}]
     for k, a in enumerate(st.accounts):
-        y = y0 + k * ACCOUNT_ROW_H
-        gfx.box(0, y, 160, ACCOUNT_ROW_H, (0, 0, 0))
         grey = stale or a["u"] in ("old", "none")
-        ink = (130, 130, 130) if grey else ACCOUNT_INKS[k % len(ACCOUNT_INKS)]
-        gfx.text(a["l"][:6], 3, y - 2, ink, font.sins)
-        cd = short_cd(st.left_of(a["r"]))
-        gfx.text(cd, 72 - gfx.width(cd, font.sins), y - 2, (130, 130, 130) if grey else (230, 230, 230), font.sins)
         units = a["h"]
         if not grey and units is not None and a["e"] is not None and a["e"] < units and t % BURN_MS >= BURN_MS - BURN_OFF_MS:
             units = a["e"]
-        hs = account_hearts(-1 if grey else k)
-        gfx.draw_hearts(hs, units, 76, y, blink=not grey and a["h"] is not None and a["h"] <= 4 and blink(t, 300),
-                        unknown=hs[2])
+        us = st.left_of(a["r"])
+        out.append({"l": a["l"], "units": units, "h": a["h"], "low": not grey and a["h"] is not None and a["h"] <= 4,
+                    "grey": grey, "us": us, "cd": short_cd(us), "k": k})
+    return out
+
+
+def name_and_clock(m, y, x0, x1, ink, clock_ink, fnt):
+    """A row's name at x0 and its countdown ending at x1, in fnt (the narrow one fits both)."""
+    cd = m["cd"]
+    cw = gfx.width(cd, fnt)
+    gfx.text(gfx.fit(m["l"], x1 - cw - 3 - x0, fnt), x0, y, ink, fnt)
+    gfx.text(cd, x1 - cw, y, clock_ink, fnt)
 
 
 def week_stage(st):
@@ -614,9 +632,11 @@ def last_usage(st):
 
 # The weekly pace (the bridge's "pace", bridge/pace.py): is the week on course to reach its limit
 # before it resets? The bridge decides; the badge only draws:
-#   the tick   one pixel on every weekly meter where an even pace would leave it now: a bar longer
-#              than the tick is under pace. White when calm, yellow on watch, orange on heads-up.
-#   Desktop    the line under WEEK takes turns between the reset and what the pace says.
+#   the tick   one pixel on the themes' weekly meters where an even pace would leave it now: a bar
+#              longer than the tick is under pace. White when calm, yellow on watch, orange on heads-up.
+#   Desktop    no tick: each weekly meter is solid up to where the week likely ends and striped for
+#              what this pace likely uses before then (views.forecast_meter); the line under WEEK
+#              takes turns between the reset and what the pace says.
 #   caption    the theme's own words, two lines in turn, for the 30 s the bridge says one is up:
 #              watch and heads-up now and then while agents work, "pace eased" once when it
 #              drops back, and (opt-in) room left in the week's last 12 hours.

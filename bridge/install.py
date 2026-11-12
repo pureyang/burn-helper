@@ -535,6 +535,39 @@ def account_name(name):
     return name
 
 
+def name_account(which, name, dry_run=False):
+    """--name-account: what the badge calls an account, set on the bridge computer. `which` is how
+    the badge shows it now (its label or name), or main; an empty name clears it."""
+    new = portable.clean_name(name) if name else None
+    if name and not new:
+        sys.exit("A name is up to %d letters, digits, dashes, dots or underscores, like: "
+                 "--name-account WORK Acme" % portable.NAME_MAX)
+    try:
+        with open(os.path.join(STATE_DIR, "state.json")) as f:
+            st = json.load(f)
+    except (OSError, ValueError):
+        st = {}
+    names = portable.account_names(STATE_DIR)
+    main = st.get("main_acct") or "main"
+    known = [(main, st.get("main_label") or "", True)] + [
+        (a["acct"], a.get("label") or "", False) for a in st.get("accounts") or [] if a.get("acct")]
+    w = which.strip().lower()
+    hits = [k for k, label, is_main in known
+            if w in (label.lower(), (names.get(k) or "").lower(), k) or (is_main and w == "main")]
+    if not hits:
+        shown = ", ".join("%s%s" % (names.get(k) or label or "?", " (main)" if m else "") for k, label, m in known)
+        sys.exit("This bridge has no account called %s. Its accounts: %s. Run this on the bridge computer, "
+                 "once the account has reported." % (which, shown))
+    was = names.get(hits[0]) or dict((k, label) for k, label, _ in known)[hits[0]] or which
+    if dry_run:
+        print("Would name %s %s." % (was, new) if new else "Would clear the name of %s." % was)
+        return 0
+    portable.set_name(STATE_DIR, hits[0], new)
+    print("The badge now calls %s %s." % (was, new) if new else
+          "%s goes back to the label its status line reports." % was)
+    return 0
+
+
 def alias_line(name, windows=None):
     """The shell line that runs Claude Code as the account in ~/.claude-<name>."""
     if WINDOWS if windows is None else windows:
@@ -605,6 +638,11 @@ def main():
                     help="set up another Claude account to run side by side: the config folder ~/.claude-NAME "
                          "with the hooks and status line, and the alias claude-NAME. With --uninstall, take "
                          "ours out of that folder again")
+    ap.add_argument("--name-account", nargs=2, metavar=("ACCOUNT", "NAME"),
+                    help="what the badge calls an account, in the case you type it (up to %d characters): "
+                         "ACCOUNT is how the badge shows it now, or main. It wins over the label every "
+                         "computer on that account reports. An empty NAME clears it. Set on the bridge "
+                         "computer" % portable.NAME_MAX)
     ap.add_argument("--force-statusline", action="store_true",
                     help="replace a status line you already have with the hearts one (settings.json is backed "
                          "up first). A computer joined to a bridge stays joined, so this needs no --bridge there")
@@ -614,6 +652,8 @@ def main():
     if args.join_help:
         print("\n".join(join_lines(*this_computer(), key=portable.bridge_key(STATE_DIR))))
         return 0
+    if args.name_account:
+        return name_account(*args.name_account, dry_run=args.dry_run)
     if args.find_bridge:
         url = find_bridge()
         if url:

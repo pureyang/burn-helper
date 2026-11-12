@@ -189,7 +189,11 @@ uses the connection the computer already has. If that computer isn't on Tailscal
 [Tailscale on each computer](#tailscale-on-each-computer).
 
 A Claude account counts once however many computers it runs on, whether it runs there with
-`--add-account` or is the one signed in to that computer's `~/.claude`.
+`--add-account` or is the one signed in to that computer's `~/.claude`. Each computer reports a
+label for it (its email's domain unless you set one), so name it once on the bridge computer
+instead, and that name wins:
+
+    python3 bridge/install.py --name-account WORK Acme
 
 ## Limits
 

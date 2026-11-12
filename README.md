@@ -175,7 +175,8 @@ every theme and level, and [all 15 levels](docs/img/tiers_hero.png) side by side
 modes pause the animation to save battery. Usage is always shown as what is **left**.
 
 - **Animation**: the theme. A/C switch themes here, and only here.
-- **Desktop mode**: usage left on the 5-hour and weekly limits, the sessions waiting for you,
+- **Desktop mode**: usage left on the 5-hour and weekly limits (each Claude account by name, when
+  you use more than one), the sessions waiting for you,
   longest wait first, and the badge's battery (with the time left unplugged, once the badge has
   learnt its drain from a run on battery). A/C step through those sessions one at a time: what each needs
   (permission for a tool, or your reply), its folder, and how long it has waited and run.
