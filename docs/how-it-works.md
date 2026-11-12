@@ -223,7 +223,8 @@ account's week is a thin line under its icons. A row goes grey when its numbers 
 or more. There is room for five accounts; one with no report for two weeks drops off. Desktop mode names every account, main
 account first. With two, each gets a block: its label and limit, the percent left, a meter, and
 its reset. On a weekly limit the meter is striped for what that account's pace likely uses before
-its reset, so the solid part is where its week likely ends. The main account's line also takes turns with its other limit and the weekly pace. With
+its reset, so the solid part is where its week likely ends. Small marks cut every meter at 25%, 50% and 75%,
+to read the percent at a glance. The main account's line also takes turns with its other limit and the weekly pace. With
 three to five, each gets one line with the percent left and the countdown. To run a second account side by side with
 the first, run `python3 bridge/install.py --add-account work`. It makes the config folder
 `~/.claude-work` with the hooks, the status line and the label WORK, and the alias `claude-work`

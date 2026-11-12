@@ -73,20 +73,24 @@ def pace_turns(st, striped):
 def forecast_meter(x, y, w, h, p, end, colour):
     """A meter of p percent left. With end, the percent likely left at the reset at this pace, the
     part this pace likely uses before then is striped: solid is what is likely still there at the
-    reset, stripes what goes before it, grey what is used. Pattern as well as colour."""
+    reset, stripes what goes before it, grey what is used. Pattern as well as colour. Hash marks
+    at 25, 50 and 75% (a gap through the bar and a pixel over it) help read off where it ends."""
     gfx.box(x, y, w, h, MUTED)
-    if p is None:
-        return
-    nw = (w * max(0, min(100, p)) + 50) // 100
-    ew = nw if end is None else min(nw, (w * max(0, min(100, end)) + 50) // 100)
-    if ew:
-        gfx.box(x, y, ew, h, colour)
-    for r in range(h):
-        # 2 pixels on, 2 off, one further along on each row down: diagonal stripes
-        for c in range(ew - (ew + r) % 4, nw, 4):
-            a, b = max(c, ew), min(c + 2, nw)
-            if b > a:
-                gfx.box(x + a, y + r, b - a, 1, colour)
+    if p is not None:
+        nw = (w * max(0, min(100, p)) + 50) // 100
+        ew = nw if end is None else min(nw, (w * max(0, min(100, end)) + 50) // 100)
+        if ew:
+            gfx.box(x, y, ew, h, colour)
+        for r in range(h):
+            # 2 pixels on, 2 off, one further along on each row down: diagonal stripes
+            for c in range(ew - (ew + r) % 4, nw, 4):
+                a, b = max(c, ew), min(c + 2, nw)
+                if b > a:
+                    gfx.box(x + a, y + r, b - a, 1, colour)
+    for q in (25, 50, 75):
+        hx = x + (w * q + 50) // 100
+        gfx.box(hx, y, 1, h, BG)
+        gfx.box(hx, y - 1, 1, 1, DIM)
 
 
 def pct_colour(p):

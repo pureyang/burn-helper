@@ -225,8 +225,15 @@ def desktop_meter(d, y, online=True):
     c.source = "net"
     views.draw(views.DESKTOP, 0, c, 0 if online else 400000)
     out = []
+    marks = [4 + (152 * q + 50) // 100 for q in (25, 50, 75)]
     for x in range(4, 156):
-        lit = [(scr.get(x, y + r).r, scr.get(x, y + r).g, scr.get(x, y + r).b) != views.MUTED for r in range(3)]
+        px = [(scr.get(x, y + r).r, scr.get(x, y + r).g, scr.get(x, y + r).b) for r in range(-1, 3)]
+        if x in marks:
+            # a hash mark at each quarter: a gap through the bar and a pixel over it
+            assert px[1:] == [views.BG] * 3 and px[0] == views.DIM, "hash mark at x=%d: %r" % (x, px)
+            out.append(out[-1])
+            continue
+        lit = [c != views.MUTED for c in px[1:]]
         out.append("solid" if all(lit) else ("stripes" if any(lit) else "grey"))
     return out
 
@@ -269,7 +276,7 @@ assert "PACE: ~84% LEFT AT RESET" in lines, "a meter showing the 5-hour limit ha
 st = S.Status()
 st.update(dict(base, accounts=[dict(lex, q=80), dict(lex, l="ACME", q=-3), dict(lex, l="OLD", p=None, q=20)]))
 assert [a["q"] for a in st.accounts] == [58, 0, None], "q is clamped to what is left now (%r)" % st.accounts
-print("PASS Desktop meters: the part likely used before the reset striped; older bridge, 5-hour, lost")
+print("PASS Desktop meters: the part likely used before the reset striped, hash marks at each quarter; older bridge, 5-hour, lost")
 
 # ---------------------------------------------------------------- each theme's panel
 import preview_lost as PL  # noqa: E402
